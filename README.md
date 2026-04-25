@@ -39,6 +39,26 @@ python wiki.py ingest raw/my-article.md
 
 `wiki.py` calls Bedrock, writes all wiki pages (source summary, entities, concepts, index, overview, log), and commits.
 
+#### Pulling notes from an Obsidian vault
+
+If the `obsidian` CLI is on your `PATH` and `OBSIDIAN_VAULT` points at a vault, ingest can read notes directly:
+
+```bash
+OBSIDIAN_VAULT=~/Vault python wiki.py ingest "My Note"           # by name
+OBSIDIAN_VAULT=~/Vault python wiki.py ingest --search "topic"    # interactive pick
+```
+
+Vault notes are cached into `raw/` so each ingest is reproducible. Use `--client {auto,obsidian,file}` to force a specific client (default `auto`).
+
+#### Mock mode (no AWS credentials)
+
+```bash
+python wiki.py --mock ingest raw/sample.md     # or: WIKI_MOCK=1
+python wiki.py --mock lint
+```
+
+Stubs the Bedrock call with a deterministic placeholder response. Useful for end-to-end smoke tests without AWS. Pages produced this way are prefixed `MOCK` so they're easy to spot in git history.
+
 ### Lint the wiki
 
 ```bash
