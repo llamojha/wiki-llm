@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """wiki.py — Bedrock-powered ingest and lint for wiki-llm."""
 
+from __future__ import annotations
+
 import argparse
 import os
 import re
@@ -59,7 +61,10 @@ class ObsidianClient:
                 capture_output=True,
                 text=True,
                 check=True,
+                timeout=60,
             )
+        except subprocess.TimeoutExpired as e:
+            raise RuntimeError(f"obsidian {' '.join(args)} timed out after 60s") from e
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"obsidian {' '.join(args)} failed: {e.stderr.strip()}") from e
         return result.stdout
@@ -144,8 +149,8 @@ def _mock_invoke(system: str, user: str) -> str:
             f'<file path="wiki/log.md">\n{new_log}</file>'
         )
 
-    src_match = re.search(r"Source file: raw/([^\s]+)", user)
-    src_name = src_match.group(1) if src_match else "unknown.md"
+    src_match = re.search(r"Source file: raw/([^\n]+)", user)
+    src_name = src_match.group(1).strip() if src_match else "unknown.md"
     slug = _slugify(src_name)
 
     index_match = re.search(r"Current wiki/index\.md:\n(.*?)\n\nCurrent wiki/log\.md:", user, re.DOTALL)
@@ -157,9 +162,19 @@ def _mock_invoke(system: str, user: str) -> str:
             "| Page | Summary | Date | Raw File |\n|------|---------|------|----------|\n"
         )
     if f"sources/{slug}" not in index_body:
-        index_body = index_body.rstrip() + (
-            f"\n| [[sources/{slug}]] | MOCK summary | {today} | {src_name} |\n"
+        new_row = f"| [[sources/{slug}]] | MOCK summary | {today} | {src_name} |"
+        sources_idx = index_body.find("## Sources")
+        next_section = (
+            index_body.find("\n## ", sources_idx + len("## Sources"))
+            if sources_idx != -1
+            else -1
         )
+        if next_section != -1:
+            prefix = index_body[:next_section].rstrip()
+            suffix = index_body[next_section:]
+            index_body = f"{prefix}\n{new_row}\n{suffix}"
+        else:
+            index_body = index_body.rstrip() + f"\n{new_row}\n"
 
     log_match = re.search(r"Current wiki/log\.md:\n(.*?)\n\nCurrent wiki/overview\.md:", user, re.DOTALL)
     log_body = (log_match.group(1).strip() if log_match else "# Log\n").strip()
