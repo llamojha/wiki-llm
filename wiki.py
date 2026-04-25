@@ -49,27 +49,37 @@ class ObsidianClient:
     def available(self) -> bool:
         return self.vault is not None and self.vault.is_dir()
 
+    def _inside_vault(self, candidate: Path) -> bool:
+        assert self.vault is not None
+        try:
+            candidate.resolve().relative_to(self.vault.resolve())
+            return True
+        except ValueError:
+            return False
+
     def _resolve(self, name: str) -> Path:
         if self.vault is None:
             raise RuntimeError("OBSIDIAN_VAULT not set")
         direct = self.vault / name
-        if direct.is_file():
+        if direct.is_file() and self._inside_vault(direct):
             return direct
         if direct.suffix == "":
             direct_md = direct.with_suffix(".md")
-            if direct_md.is_file():
+            if direct_md.is_file() and self._inside_vault(direct_md):
                 return direct_md
         target_name = name if name.endswith(".md") else f"{name}.md"
         target_stem = Path(name).stem
         for path in self.vault.rglob("*.md"):
             if any(part.startswith(".") for part in path.relative_to(self.vault).parts):
                 continue
+            if not self._inside_vault(path):
+                continue
             if path.name == target_name or path.stem == target_stem:
                 return path
         raise FileNotFoundError(f"note not found in vault: {name}")
 
     def read(self, name: str) -> str:
-        return self._resolve(name).read_text()
+        return self._resolve(name).read_text(encoding="utf-8")
 
     def search(self, query: str) -> list[str]:
         if self.vault is None or not self.vault.is_dir():
@@ -80,7 +90,9 @@ class ObsidianClient:
             rel = path.relative_to(self.vault)
             if any(part.startswith(".") for part in rel.parts):
                 continue
-            head = path.read_text(errors="ignore")[:200].lower()
+            if not self._inside_vault(path):
+                continue
+            head = path.read_text(encoding="utf-8", errors="ignore")[:200].lower()
             if q in rel.name.lower() or q in head:
                 hits.append(str(rel))
         return hits
@@ -103,7 +115,7 @@ class FileClient:
         return candidate
 
     def read(self, name: str) -> str:
-        return self._resolve(name).read_text()
+        return self._resolve(name).read_text(encoding="utf-8")
 
     def search(self, query: str) -> list[str]:
         if not RAW.exists():
@@ -111,7 +123,7 @@ class FileClient:
         q = query.lower()
         hits: list[str] = []
         for path in sorted(RAW.glob("*.md")):
-            head = path.read_text()[:200].lower()
+            head = path.read_text(encoding="utf-8", errors="ignore")[:200].lower()
             if q in path.name.lower() or q in head:
                 hits.append(path.name)
         return hits
