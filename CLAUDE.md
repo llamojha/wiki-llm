@@ -45,24 +45,17 @@ updated: YYYY-MM-DD
 
 ## Operations
 
-### Ingest (`/ingest`)
+### Ingest (`python wiki.py ingest <file>`)
 
-When the human drops a new source into `raw/` and asks you to process it:
+Run via Bedrock — not handled interactively by the agent.
 
-1. Read the source file(s).
-2. Discuss key takeaways with the human — what's notable, surprising, or contradictory.
-3. Write `wiki/sources/<slug>.md` — a structured summary with frontmatter.
-4. Update `wiki/index.md` — add the new page to the catalog.
-5. Update or create entity pages in `wiki/entities/` for people, orgs, products mentioned.
-6. Update or create concept pages in `wiki/concepts/` for ideas and frameworks.
-7. Update `wiki/overview.md` to reflect what changed in the overall picture.
-8. Append an entry to `wiki/log.md`:
-   ```
-   ## [YYYY-MM-DD] ingest | <Source Title>
-   Brief note: what was ingested, what pages were touched, any key tensions with existing knowledge.
-   ```
+```bash
+python wiki.py ingest raw/my-source.md
+```
 
-### Query (`/query`)
+`wiki.py` reads the source, writes all wiki pages, and commits. No agent involvement needed.
+
+### Query (`/query` or `prompts/query.md`)
 
 When the human asks a question:
 
@@ -76,21 +69,17 @@ When the human asks a question:
    Brief note: what was asked, what pages were consulted, what was filed.
    ```
 
-### Lint (`/lint`)
+The query prompt lives at `prompts/query.md` and works with any agent (Claude Code, Codex, Kiro, etc.). Claude Code users can also use `/query` as a slash command.
 
-Periodically health-check the wiki:
+### Lint (`python wiki.py lint`)
 
-1. Scan all pages for contradictions with newer information.
-2. Find orphan pages (no inbound links from other wiki pages).
-3. Find concepts mentioned frequently but lacking their own page.
-4. Find stale claims that newer sources have superseded.
-5. Identify data gaps that a web search could fill.
-6. Produce a lint report and propose fixes. Apply fixes after human approval.
-7. Append to `wiki/log.md`:
-   ```
-   ## [YYYY-MM-DD] lint
-   Brief note: issues found, fixes applied.
-   ```
+Run via Bedrock — not handled interactively by the agent.
+
+```bash
+python wiki.py lint
+```
+
+`wiki.py` scans all wiki pages, prints a lint report, and applies approved fixes.
 
 ## Index Format (`wiki/index.md`)
 
@@ -133,7 +122,7 @@ Parse with: `grep "^## \[" wiki/log.md | tail -10`
 - **Always update `wiki/index.md` and `wiki/log.md`** after any ingest, query (if filing), or lint.
 - Prefer updating existing pages over creating new ones for the same concept.
 - Flag contradictions explicitly rather than silently overwriting old claims.
-- Keep pages focused — if a page grows beyond ~500 lines, split it.
+- Keep pages focused — split if a page becomes hard to navigate.
 - The wiki is a git repo — commit after meaningful units of work so history is useful.
 
 ## Evolving This Schema
