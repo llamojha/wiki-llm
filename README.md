@@ -25,7 +25,42 @@ Heavy operations (ingest, lint) run via Amazon Bedrock. Queries are handled inte
 pip install -r requirements.txt
 ```
 
-AWS credentials must be configured (`~/.aws/credentials`, environment variables, or IAM role). The model defaults to `amazon.nova-lite-v2:0` and region to `us-east-1` — override with `WIKI_MODEL` and `AWS_REGION` env vars.
+### AWS credentials & Bedrock model access
+
+`wiki.py` calls Amazon Bedrock through `boto3`. To use the live path you need three things:
+
+1. **Credentials.** Standard `boto3` resolution: `aws configure`, `AWS_PROFILE`, or `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` env vars (and `AWS_SESSION_TOKEN` if temporary). Verify with `aws sts get-caller-identity`.
+2. **Model access.** Bedrock requires per-region opt-in for each model family. AWS console → **Bedrock → Model access → Manage model access**, request access to **Amazon → Nova Lite**, wait for it to flip to *Access granted*. Repeat per region.
+3. **IAM permission.** Your principal needs `bedrock:InvokeModel` on the model ARN. Minimal policy:
+
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [{
+       "Effect": "Allow",
+       "Action": "bedrock:InvokeModel",
+       "Resource": "arn:aws:bedrock:*::foundation-model/amazon.nova-lite-v1:0"
+     }]
+   }
+   ```
+
+Defaults: model `amazon.nova-lite-v1:0`, region `us-east-1`. Override with `WIKI_MODEL` and `AWS_REGION` env vars. List what your account can see with:
+
+```bash
+aws bedrock list-foundation-models --region us-east-1 \
+  --query 'modelSummaries[?contains(modelId, `nova-lite`)].modelId'
+```
+
+If a region requires a cross-region inference profile, use the prefixed ID (e.g. `WIKI_MODEL=us.amazon.nova-lite-v1:0`).
+
+#### Common errors
+
+| Symptom | Likely cause |
+|---|---|
+| `AWS credentials not found` | No creds resolvable — run `aws configure` or set env vars, or use `--mock`. |
+| `AccessDeniedException` | Model access not granted in the console, or IAM lacks `bedrock:InvokeModel`. |
+| `ValidationException` | Wrong model ID, or model not offered in `AWS_REGION`. |
+| `ResourceNotFoundException` | Model ID typo — list available IDs with the command above. |
 
 ## Usage
 

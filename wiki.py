@@ -13,8 +13,9 @@ from pathlib import Path
 from typing import Protocol
 
 import boto3
+from botocore.exceptions import BotoCoreError, ClientError, NoCredentialsError
 
-MODEL_ID = os.environ.get("WIKI_MODEL", "amazon.nova-lite-v2:0")
+MODEL_ID = os.environ.get("WIKI_MODEL", "amazon.nova-lite-v1:0")
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 
 ROOT = Path(__file__).parent
@@ -146,13 +147,52 @@ def select_client(choice: str) -> VaultClient:
 def invoke(system: str, user: str) -> str:
     if MOCK:
         return _mock_invoke(system, user)
-    client = boto3.client("bedrock-runtime", region_name=AWS_REGION)
-    resp = client.converse(
-        modelId=MODEL_ID,
-        system=[{"text": system}],
-        messages=[{"role": "user", "content": [{"text": user}]}],
-        inferenceConfig={"maxTokens": 16384},
-    )
+    try:
+        client = boto3.client("bedrock-runtime", region_name=AWS_REGION)
+        resp = client.converse(
+            modelId=MODEL_ID,
+            system=[{"text": system}],
+            messages=[{"role": "user", "content": [{"text": user}]}],
+            inferenceConfig={"maxTokens": 16384},
+        )
+    except NoCredentialsError:
+        sys.exit(
+            "AWS credentials not found.\n"
+            "  Set them via `aws configure`, AWS_PROFILE, or AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY.\n"
+            "  Or run with --mock (or WIKI_MOCK=1) for offline smoke tests."
+        )
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code", "")
+        msg = e.response.get("Error", {}).get("Message", str(e))
+        if code in ("AccessDeniedException", "AccessDenied"):
+            sys.exit(
+                f"Bedrock denied access to {MODEL_ID} in {AWS_REGION}.\n"
+                f"  AWS message: {msg}\n"
+                "  Fix:\n"
+                "    1. AWS console → Bedrock → Model access → request access for the model.\n"
+                "    2. Confirm your IAM principal has bedrock:InvokeModel on the model ARN.\n"
+                "  See README.md for the minimal IAM policy."
+            )
+        if code == "ValidationException":
+            sys.exit(
+                f"Bedrock validation error for model={MODEL_ID} region={AWS_REGION}.\n"
+                f"  AWS message: {msg}\n"
+                "  Common causes: model ID typo, model not offered in this region,\n"
+                "  or inference profile required (try `us.amazon.nova-lite-v1:0`).\n"
+                "  Override with WIKI_MODEL=... and AWS_REGION=...."
+            )
+        if code == "ResourceNotFoundException":
+            sys.exit(
+                f"Bedrock could not find model {MODEL_ID} in {AWS_REGION}.\n"
+                f"  AWS message: {msg}\n"
+                "  List available models: aws bedrock list-foundation-models --region "
+                f"{AWS_REGION}"
+            )
+        if code == "ThrottlingException":
+            sys.exit(f"Bedrock throttled the request: {msg}\n  Retry in a moment.")
+        sys.exit(f"Bedrock call failed ({code}): {msg}")
+    except BotoCoreError as e:
+        sys.exit(f"AWS SDK error: {e}")
     return resp["output"]["message"]["content"][0]["text"]
 
 
