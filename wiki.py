@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """wiki.py — Bedrock-powered ingest and lint for wiki-llm."""
 
+from __future__ import annotations
+
 import argparse
 import os
 import re
+import shutil
 import subprocess
 import sys
 from datetime import date
 from pathlib import Path
+from typing import Protocol
 
 import boto3
 
@@ -18,10 +22,109 @@ ROOT = Path(__file__).parent
 WIKI = ROOT / "wiki"
 RAW = ROOT / "raw"
 
+MOCK = os.environ.get("WIKI_MOCK") == "1"
+
+
+# ── Vault clients ────────────────────────────────────────────────────────────
+
+def _slugify(name: str) -> str:
+    stem = Path(name).stem.lower()
+    return re.sub(r"[^a-z0-9]+", "-", stem).strip("-") or "note"
+
+
+class VaultClient(Protocol):
+    name: str
+
+    def read(self, name: str) -> str: ...
+    def search(self, query: str) -> list[str]: ...
+    def available(self) -> bool: ...
+
+
+class ObsidianClient:
+    name = "obsidian"
+
+    def __init__(self) -> None:
+        self.binary = os.environ.get("OBSIDIAN_BIN") or shutil.which("obsidian")
+        self.vault = os.environ.get("OBSIDIAN_VAULT", "")
+
+    def available(self) -> bool:
+        return bool(self.binary) and bool(self.vault)
+
+    def _run(self, *args: str) -> str:
+        if not self.binary:
+            raise RuntimeError("obsidian binary not found (set OBSIDIAN_BIN or PATH)")
+        if not self.vault:
+            raise RuntimeError("OBSIDIAN_VAULT not set")
+        try:
+            result = subprocess.run(
+                [self.binary, *args],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=60,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise RuntimeError(f"obsidian {' '.join(args)} timed out after 60s") from e
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"obsidian {' '.join(args)} failed: {e.stderr.strip()}") from e
+        return result.stdout
+
+    def read(self, name: str) -> str:
+        return self._run("export", self.vault, name)
+
+    def search(self, query: str) -> list[str]:
+        out = self._run("search", self.vault, query)
+        return [line.strip() for line in out.splitlines() if line.strip()]
+
+
+class FileClient:
+    name = "file"
+
+    def available(self) -> bool:
+        return True
+
+    def _resolve(self, name: str) -> Path:
+        candidate = Path(name)
+        if not candidate.is_absolute() and not candidate.exists():
+            candidate = RAW / name
+        if candidate.suffix == "" and not candidate.exists():
+            candidate = candidate.with_suffix(".md")
+        if not candidate.exists():
+            raise FileNotFoundError(f"note not found: {name}")
+        return candidate
+
+    def read(self, name: str) -> str:
+        return self._resolve(name).read_text()
+
+    def search(self, query: str) -> list[str]:
+        if not RAW.exists():
+            return []
+        q = query.lower()
+        hits: list[str] = []
+        for path in sorted(RAW.glob("*.md")):
+            head = path.read_text()[:200].lower()
+            if q in path.name.lower() or q in head:
+                hits.append(path.name)
+        return hits
+
+
+def select_client(choice: str) -> VaultClient:
+    if choice == "obsidian":
+        client = ObsidianClient()
+        if not client.available():
+            sys.exit("--client obsidian requested but binary or OBSIDIAN_VAULT missing")
+        return client
+    if choice == "file":
+        return FileClient()
+    obs = ObsidianClient()
+    return obs if obs.available() else FileClient()
+
 
 # ── Bedrock ──────────────────────────────────────────────────────────────────
 
 def invoke(system: str, user: str) -> str:
+    if MOCK:
+        return _mock_invoke(system, user)
     client = boto3.client("bedrock-runtime", region_name=AWS_REGION)
     resp = client.converse(
         modelId=MODEL_ID,
@@ -30,6 +133,76 @@ def invoke(system: str, user: str) -> str:
         inferenceConfig={"maxTokens": 16384},
     )
     return resp["output"]["message"]["content"][0]["text"]
+
+
+def _mock_invoke(system: str, user: str) -> str:
+    today = date.today().isoformat()
+    if "Audit all provided wiki pages" in system:
+        log_match = re.search(r"=== wiki/log\.md ===\n(.*?)(?=\n===|\Z)", user, re.DOTALL)
+        log_body = log_match.group(1).rstrip() if log_match else "# Log\n"
+        new_log = (
+            f"{log_body}\n\n## [{today}] lint | MOCK\n"
+            "Mock lint pass — no real audit performed.\n"
+        )
+        return (
+            "1. (mock) low — no real audit performed; install AWS creds for real lint.\n\n"
+            f'<file path="wiki/log.md">\n{new_log}</file>'
+        )
+
+    src_match = re.search(r"Source file: raw/([^\n]+)", user)
+    src_name = src_match.group(1).strip() if src_match else "unknown.md"
+    slug = _slugify(src_name)
+
+    index_match = re.search(r"Current wiki/index\.md:\n(.*?)\n\nCurrent wiki/log\.md:", user, re.DOTALL)
+    index_body = (index_match.group(1).strip() if index_match else "").strip()
+    if not index_body or "(empty)" in index_body:
+        index_body = (
+            "---\ntitle: \"Wiki Index\"\ntype: index\n"
+            f"updated: {today}\n---\n\n# Wiki Index\n\n## Sources\n"
+            "| Page | Summary | Date | Raw File |\n|------|---------|------|----------|\n"
+        )
+    if f"sources/{slug}" not in index_body:
+        new_row = f"| [[sources/{slug}]] | MOCK summary | {today} | {src_name} |"
+        sources_idx = index_body.find("## Sources")
+        next_section = (
+            index_body.find("\n## ", sources_idx + len("## Sources"))
+            if sources_idx != -1
+            else -1
+        )
+        if next_section != -1:
+            prefix = index_body[:next_section].rstrip()
+            suffix = index_body[next_section:]
+            index_body = f"{prefix}\n{new_row}\n{suffix}"
+        else:
+            index_body = index_body.rstrip() + f"\n{new_row}\n"
+
+    log_match = re.search(r"Current wiki/log\.md:\n(.*?)\n\nCurrent wiki/overview\.md:", user, re.DOTALL)
+    log_body = (log_match.group(1).strip() if log_match else "# Log\n").strip()
+    if "(empty)" in log_body:
+        log_body = "# Log\n"
+    new_log = f"{log_body}\n\n## [{today}] ingest | MOCK {src_name}\nMock ingest — no Bedrock call.\n"
+
+    overview = (
+        f"---\ntitle: \"Overview\"\ntype: overview\nupdated: {today}\n---\n\n"
+        "# Overview (MOCK)\n\nMock overview — regenerated on each mock ingest.\n"
+    )
+    source_page = (
+        f"---\ntitle: \"MOCK {src_name}\"\ntype: source\ntags: [mock]\n"
+        f"sources: [{src_name}]\ncreated: {today}\nupdated: {today}\n---\n\n"
+        f"# MOCK {src_name}\n\nStub summary written by mock mode.\n"
+    )
+    entity_page = (
+        f"---\ntitle: \"MOCK Entity\"\ntype: entity\ntags: [mock]\n"
+        f"sources: [{src_name}]\ncreated: {today}\nupdated: {today}\n---\n\n"
+        f"# MOCK Entity\n\nPlaceholder entity from [[sources/{slug}]].\n"
+    )
+    return (
+        f'<file path="wiki/sources/{slug}.md">\n{source_page}</file>\n'
+        f'<file path="wiki/index.md">\n{index_body.rstrip()}\n</file>\n'
+        f'<file path="wiki/overview.md">\n{overview}</file>\n'
+        f'<file path="wiki/log.md">\n{new_log}</file>\n'
+        f'<file path="wiki/entities/mock-entity.md">\n{entity_page}</file>\n'
+    )
 
 
 def parse_files(text: str) -> dict[str, str]:
@@ -83,16 +256,60 @@ Rules:
 """
 
 
-def cmd_ingest(source_file: str) -> None:
-    src = Path(source_file)
-    if not src.exists():
-        src = RAW / source_file
-    if not src.exists():
-        sys.exit(f"File not found: {source_file}")
+def _interactive_pick(matches: list[str]) -> str:
+    if not matches:
+        sys.exit("no matches")
+    for i, name in enumerate(matches, 1):
+        print(f"  {i}. {name}")
+    raw_choice = input(f"Pick #: [1-{len(matches)}] ").strip()
+    try:
+        idx = int(raw_choice)
+    except ValueError:
+        sys.exit(f"invalid selection: {raw_choice}")
+    if not 1 <= idx <= len(matches):
+        sys.exit(f"out of range: {idx}")
+    return matches[idx - 1]
+
+
+def _stage_to_raw(name: str, content: str) -> Path:
+    RAW.mkdir(parents=True, exist_ok=True)
+    cache = RAW / Path(name).name
+    if cache.suffix == "":
+        cache = cache.with_suffix(".md")
+    if cache.exists() and cache.read_text() != content:
+        answer = input(f"  {cache.name} already in raw/ with different content. Overwrite? [y/N] ")
+        if answer.lower() != "y":
+            sys.exit("aborted")
+    cache.write_text(content)
+    print(f"  cached vault note → raw/{cache.name}")
+    return cache
+
+
+def cmd_ingest(source_file: str | None, client: VaultClient, search: str | None) -> None:
+    if search:
+        print(f"Searching {client.name} for '{search}' ...")
+        matches = client.search(search)
+        source_file = _interactive_pick(matches)
+
+    if not source_file:
+        sys.exit("no source provided (pass a file or --search QUERY)")
+
+    print(f"Source: {source_file} (client={client.name})")
+    if MOCK:
+        print("  [mock mode — Bedrock calls stubbed]")
+
+    source_content = client.read(source_file)
+
+    if isinstance(client, ObsidianClient):
+        src = _stage_to_raw(source_file, source_content)
+    else:
+        src = Path(source_file)
+        if not src.is_absolute() and not src.exists():
+            src = RAW / source_file
+        if src.suffix == "" and not src.exists():
+            src = src.with_suffix(".md")
 
     print(f"Ingesting {src.name} ...")
-
-    source_content = src.read_text()
     index = (WIKI / "index.md").read_text() if (WIKI / "index.md").exists() else ""
     log = (WIKI / "log.md").read_text() if (WIKI / "log.md").exists() else ""
     overview = (WIKI / "overview.md").read_text() if (WIKI / "overview.md").exists() else ""
@@ -200,17 +417,40 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="wiki-llm maintenance via Amazon Bedrock Nova Lite"
     )
+    parser.add_argument(
+        "--mock",
+        action="store_true",
+        help="Stub the Bedrock call (also enabled by WIKI_MOCK=1)",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_ingest = sub.add_parser("ingest", help="Process a raw source into the wiki")
-    p_ingest.add_argument("file", help="Filename in raw/ or full path")
+    p_ingest = sub.add_parser("ingest", help="Process a source into the wiki")
+    p_ingest.add_argument("file", nargs="?", help="Filename in raw/, vault note, or full path")
+    p_ingest.add_argument(
+        "--client",
+        choices=["auto", "obsidian", "file"],
+        default="auto",
+        help="Which vault client to use (default: auto-detect)",
+    )
+    p_ingest.add_argument(
+        "--search",
+        metavar="QUERY",
+        help="Search the vault interactively and pick a note to ingest",
+    )
 
     sub.add_parser("lint", help="Audit the wiki for contradictions, orphans, and gaps")
 
     args = parser.parse_args()
 
+    global MOCK
+    if args.mock:
+        MOCK = True
+
     if args.command == "ingest":
-        cmd_ingest(args.file)
+        if args.file and args.search:
+            sys.exit("pass either a file or --search, not both")
+        client = select_client(args.client)
+        cmd_ingest(args.file, client, args.search)
     elif args.command == "lint":
         cmd_lint()
 
