@@ -7,6 +7,9 @@
 - [x] Create wiki/index.md (empty catalog)
 - [x] Create wiki/log.md (initial entry)
 - [x] Create Claude Code slash commands: /ingest, /query, /lint
+- [x] Add .gitignore
+- [x] Add README.md
+- [x] Add .editorconfig
 
 ## First Steps
 - [ ] Drop your first source document into `raw/` and run `/ingest`
