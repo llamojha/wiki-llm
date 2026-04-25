@@ -1,5 +1,11 @@
 # TODO
 
+## Roadmap
+- [x] **M1 — Bootstrap.** Schema, directory structure, wiki.py, Bedrock ingest/lint, agent-neutral query prompt.
+- [x] **M2 — VaultClient + Mock Mode.** Filesystem-based ObsidianClient, FileClient fallback, `--mock` flag for offline testing.
+- [ ] **M3 — Bedrock.** Swap mock for real boto3 calls. Needs AWS credentials and Nova Lite model ID confirmed.
+- [ ] **M4 — First Content.** End-to-end: live Obsidian vault → Bedrock → wiki pages written. First lint pass.
+
 ## Bootstrap
 - [x] Create CLAUDE.md schema
 - [x] Create AGENTS.md (multi-agent compatibility)
