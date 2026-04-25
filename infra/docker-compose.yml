@@ -1,0 +1,29 @@
+# Vaultmark — local container run.
+#
+# Next.js-only architecture: no Postgres (search is in-memory). The web image
+# is built from the repo root (pnpm workspace), so the build context is `..`.
+#
+#   cp infra/.env.example infra/.env   # then fill in vault + AWS values
+#   docker compose -f infra/docker-compose.yml up --build
+#
+# NOTE: the app has no authentication. Only expose port 3000 on trusted
+# networks; put a reverse proxy with auth in front before public exposure.
+
+services:
+  web:
+    build:
+      # Repo root context — the pnpm workspace lockfile lives there
+      context: ..
+      dockerfile: web/Dockerfile
+    ports:
+      - "3000:3000"
+    # Vault config + feature flags. The code already defaults to
+    # agent-on / processing-off, so flags are optional here.
+    env_file: .env
+    # AWS credentials for S3 + Bedrock. Prefer env vars in .env, or mount a
+    # read-only profile instead (uncomment below and remove the keys in .env):
+    # volumes:
+    #   - ~/.aws:/home/node/.aws:ro
+    # environment:
+    #   AWS_PROFILE: default
+    restart: unless-stopped

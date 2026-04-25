@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vaultmark-config
+  namespace: vaultmark
+data:
+  # Vault — see docs/configuration.md
+  VAULT_BUCKET: "my-vault-bucket"
+  VAULT_PREFIX: ""
+  VAULT_REGION: "us-east-1"
+  VAULT_ID: "default"
+
+  # Bedrock — only needed when FEATURE_AGENT / FEATURE_CURATE are on
+  BEDROCK_MODEL: "us.amazon.nova-2-lite-v1:0"
+  BEDROCK_REGION: "us-east-1"
+
+  # Curate Lambda — leave FEATURE_CURATE off if not deployed
+  # CURATE_LAMBDA_ARN: "arn:aws:lambda:<region>:<account-id>:function:vaultmark-curate"
+  # CURATE_LAMBDA_REGION: "us-east-1"
+
+  # Feature flags — everything is ON by default; uncomment to disable.
+  # See docs/feature-flags.md
+  # FEATURE_AGENT: "off"
+  # FEATURE_UPLOAD: "off"
+  FEATURE_CURATE: "off"
+  # FEATURE_REINDEX: "off"
+  # FEATURE_EDITOR: "off"
+  # FEATURE_SEARCH: "off"
+  # FEATURE_STAR: "off"
+  # FEATURE_PUBLISHING: "off"

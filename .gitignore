@@ -1,0 +1,75 @@
+# OS & editor
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Obsidian workspace state (keep .obsidian/plugins tracked if you want, but not workspace/cache)
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/cache
+
+# Python tooling (e.g. qmd, scripts)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+.pytest_cache/
+
+# Node tooling
+node_modules/
+.npm/
+.pnpm-store/
+
+# Lambda build output
+infra/lambda/curate/dist/
+infra/lambda/curate/node_modules/
+
+# Next.js
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Visual parity artifacts
+parity-visual/
+
+# Playwright e2e artifacts
+test-results/
+playwright-report/
+.playwright/
+
+# Logs and temp
+*.log
+*.tmp
+*.bak
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+
+# Per-machine Claude Code settings
+.claude/settings.local.json
+
+# Deployment infra (kept out of repo for open source)
+infra-cdk/
+
+# Private working notes (never publish)
+.memory/
+
+# Theme plugins are local config, not codebase (keep README + .example tracked)
+web/themes/*.css

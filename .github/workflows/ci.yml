@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  web:
+    name: web — typecheck / build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm version comes from package.json `packageManager` (pnpm@10.5.0).
+      # Do NOT add a `version:` input here — having both is an error in v4.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          # Workspace lockfile lives at the repo root
+          cache-dependency-path: pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm build
+        env:
+          # Placeholder — route modules require a bucket at import time during
+          # `next build`. Real deployments set this at runtime.
+          VAULT_BUCKET: build-placeholder
+
+  api:
+    name: api — lint / typecheck / test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - run: uv sync --group dev
+
+      - run: uv run ruff check app/ tests/
+
+      - run: uv run pyright app/
+
+      - run: uv run pytest tests/ -v
+        env:
+          VAULT_BUCKET: test-bucket
+          VAULT_PREFIX: vault
+          VAULT_REGION: us-east-1
+          DATABASE_URL: postgresql+asyncpg://x:x@localhost/x
+          AWS_ACCESS_KEY_ID: testing
+          AWS_SECRET_ACCESS_KEY: testing

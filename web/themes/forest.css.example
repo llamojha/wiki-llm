@@ -1,0 +1,25 @@
+/*
+ * Vaultmark theme plugin — rename this file to `forest.css` to activate it.
+ *
+ * @name Forest
+ * @base dark
+ *
+ * `@base dark` means every variable you don't set here falls back to the
+ * built-in dark palette, so a theme can be as small as a new accent hue.
+ * Full variable reference: docs/theming.md
+ */
+
+--accent-h: 152;
+--accent: oklch(68% 0.14 var(--accent-h));
+--accent-soft: oklch(68% 0.14 var(--accent-h) / 0.18);
+
+--bg: oklch(17% 0.018 165);
+--bg-1: oklch(19% 0.02 165);
+--bg-2: oklch(22% 0.022 165);
+--bg-3: oklch(25% 0.024 165);
+--panel: oklch(20% 0.02 165);
+--line: oklch(29% 0.022 165);
+--line-2: oklch(34% 0.024 165);
+--hover: oklch(25% 0.022 165);
+--code-bg: oklch(23% 0.02 165);
+--code-border: oklch(31% 0.022 165);

@@ -1,0 +1,201 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { type ApiTreeNode } from '@/lib/api';
+import { ICONS } from '@/lib/icons';
+import { type Scope, type TreeNode as TreeNodeType } from '@/lib/types';
+import type { FeatureFlags } from '@/lib/flags';
+import { TreeNode } from './tree-node';
+
+const CURATE_SPACE = 'wiki';
+
+function relativeTime(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (Number.isNaN(ms) || ms < 0) return 'just now';
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  const mo = Math.floor(d / 30);
+  if (mo < 12) return `${mo}mo ago`;
+  return `${Math.floor(mo / 12)}y ago`;
+}
+
+type CurateStatus = {
+  count: number;
+  lastProcessedAt: string | null;
+};
+
+function useCurateStatus(scope: Scope): CurateStatus | null {
+  const [status, setStatus] = useState<CurateStatus | null>(null);
+  useEffect(() => {
+    const ctrl = new AbortController();
+    const scopeQuery = scope === 'user' ? '&scope=user' : '&scope=shared';
+    fetch(`/api/raw?space=${CURATE_SPACE}${scopeQuery}`, { signal: ctrl.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data) return;
+        setStatus({
+          count: typeof data.count === 'number' ? data.count : 0,
+          lastProcessedAt: data.lastProcessedAt ?? null,
+        });
+      })
+      .catch(() => { /* aborted or offline — leave status as-is */ });
+    return () => ctrl.abort();
+  }, [scope]);
+  return status;
+}
+
+type SidebarProps = {
+  scope: Scope;
+  setScope: (s: Scope) => void;
+  activeId: string | null;
+  onOpen: (id: string) => void;
+  onNewPage: () => void;
+  onUpload: () => void;
+  onProcessPending: () => void;
+  onReindex: () => void;
+  apiTree?: ApiTreeNode[];
+  flags: FeatureFlags;
+};
+
+const DEFAULT_OPEN_FOLDERS = new Set([
+  'platform',
+  'platform/runbooks',
+  'engineering',
+  'engineering/services',
+  'me/notes',
+  'me/learning',
+]);
+
+function apiTreeToLocal(nodes: ApiTreeNode[]): TreeNodeType[] {
+  return nodes.map((n) => {
+    if (n.type === 'folder') {
+      return { id: n.id, type: 'folder' as const, name: n.name, children: apiTreeToLocal(n.children) };
+    }
+    return { id: n.id, type: 'doc' as const, name: n.name };
+  });
+}
+
+function countDocs(nodes: TreeNodeType[]): number {
+  let count = 0;
+  for (const n of nodes) {
+    if (n.type === 'doc') count++;
+    else if (n.type === 'folder') count += countDocs(n.children);
+  }
+  return count;
+}
+
+function filterByScope(nodes: TreeNodeType[], scope: Scope): TreeNodeType[] {
+  if (scope === 'user') {
+    const user = nodes.find(
+      (n): n is TreeNodeType & { type: 'folder' } =>
+        n.type === 'folder' && n.id === 'folder:__user',
+    );
+    return user?.children ?? [];
+  }
+  return nodes.filter((n) => !(n.type === 'folder' && n.id === 'folder:__user'));
+}
+
+export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, onUpload, onProcessPending, onReindex, apiTree, flags }: SidebarProps) {
+  const fullTree = apiTree && apiTree.length > 0 ? apiTreeToLocal(apiTree) : [];
+  const tree = filterByScope(fullTree, scope);
+  const [openFolders, setOpenFolders] = useState<Set<string>>(DEFAULT_OPEN_FOLDERS);
+  const curateStatus = useCurateStatus(scope);
+  const toggleFolder = (id: string) => {
+    setOpenFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  return (
+    <aside className="sidebar">
+      <div className="scope-switch">
+        <button className={scope === 'shared' ? 'on' : ''} onClick={() => setScope('shared')}>
+          {ICONS.globe} Shared
+        </button>
+        <button className={scope === 'user' ? 'on' : ''} onClick={() => setScope('user')}>
+          {ICONS.lock} My wiki
+        </button>
+      </div>
+
+      <button className={'nav-row' + (activeId === '__home' ? ' active' : '')} onClick={() => onOpen('__home')}>
+        <span className="nav-icon">{ICONS.home}</span>
+        <span className="nav-label">Home</span>
+      </button>
+      <button className={'nav-row' + (activeId === '__recent' ? ' active' : '')} onClick={() => onOpen('__recent')}>
+        <span className="nav-icon">{ICONS.recent}</span>
+        <span className="nav-label">Recent</span>
+      </button>
+      <button className={'nav-row' + (activeId === '__starred' ? ' active' : '')} onClick={() => onOpen('__starred')}>
+        <span className="nav-icon">{ICONS.star}</span>
+        <span className="nav-label">Starred</span>
+      </button>
+
+      <div className="nav-section">
+        <span>{scope === 'shared' ? 'Shared spaces' : 'My library'}</span>
+        <div style={{ display: 'flex', gap: 2 }}>
+          {flags.upload && <button onClick={onUpload} title="Upload Markdown files">{ICONS.upload}</button>}
+          {flags.editor && <button onClick={onNewPage} title="New page">{ICONS.plus}</button>}
+        </div>
+      </div>
+
+      {tree.map((n) => (
+        <TreeNode key={n.id} node={n} depth={0}
+                  activeId={activeId} onOpen={onOpen}
+                  openFolders={openFolders} toggleFolder={toggleFolder}/>
+      ))}
+
+      <div className="index-card">
+        <div className="index-card-row">
+          <span className="pulse"></span>
+          <div style={{ flex: 1, lineHeight: 1.3 }}>
+            <div style={{ color: 'var(--fg-1)', fontWeight: 500 }}>Indexer healthy</div>
+            <div style={{ fontSize: 10.5, fontFamily: 'var(--font-mono)', color: 'var(--fg-2)' }}>
+              {countDocs(fullTree)} indexed
+            </div>
+          </div>
+        </div>
+        {flags.curate && curateStatus && (
+          <div
+            style={{
+              fontSize: 10.5,
+              fontFamily: 'var(--font-mono)',
+              color: 'var(--fg-2)',
+              padding: '4px 0 2px',
+              borderTop: '1px solid var(--border)',
+              marginTop: 6,
+            }}
+            title="Curate status for the wiki space"
+          >
+            {curateStatus.lastProcessedAt
+              ? `Last curated ${relativeTime(curateStatus.lastProcessedAt)}`
+              : 'Never curated'}
+            {' · '}
+            <span style={{ color: curateStatus.count > 0 ? 'var(--accent)' : 'var(--fg-2)' }}>
+              {curateStatus.count} pending
+            </span>
+          </div>
+        )}
+        <div className="index-card-actions">
+          {flags.curate && (
+            <button className="index-card-btn" onClick={onProcessPending} title="Curate raw files in S3">
+              {ICONS.spark} Process pending
+            </button>
+          )}
+          {flags.reindex && (
+            <button className="index-card-btn" onClick={onReindex} title="Re-index everything">
+              {ICONS.recent} Re-index
+            </button>
+          )}
+        </div>
+      </div>
+    </aside>
+  );
+}
