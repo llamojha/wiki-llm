@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import os
 import re
-import shutil
 import subprocess
 import sys
 from datetime import date
@@ -44,37 +43,59 @@ class ObsidianClient:
     name = "obsidian"
 
     def __init__(self) -> None:
-        self.binary = os.environ.get("OBSIDIAN_BIN") or shutil.which("obsidian")
-        self.vault = os.environ.get("OBSIDIAN_VAULT", "")
+        vault_env = os.environ.get("OBSIDIAN_VAULT", "")
+        self.vault = Path(vault_env).expanduser() if vault_env else None
 
     def available(self) -> bool:
-        return bool(self.binary) and bool(self.vault)
+        return self.vault is not None and self.vault.is_dir()
 
-    def _run(self, *args: str) -> str:
-        if not self.binary:
-            raise RuntimeError("obsidian binary not found (set OBSIDIAN_BIN or PATH)")
-        if not self.vault:
-            raise RuntimeError("OBSIDIAN_VAULT not set")
+    def _inside_vault(self, candidate: Path) -> bool:
+        assert self.vault is not None
         try:
-            result = subprocess.run(
-                [self.binary, *args],
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=60,
-            )
-        except subprocess.TimeoutExpired as e:
-            raise RuntimeError(f"obsidian {' '.join(args)} timed out after 60s") from e
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"obsidian {' '.join(args)} failed: {e.stderr.strip()}") from e
-        return result.stdout
+            candidate.resolve().relative_to(self.vault.resolve())
+            return True
+        except ValueError:
+            return False
+
+    def _resolve(self, name: str) -> Path:
+        if self.vault is None:
+            raise RuntimeError("OBSIDIAN_VAULT not set")
+        direct = self.vault / name
+        if direct.is_file() and self._inside_vault(direct):
+            return direct
+        if direct.suffix == "":
+            direct_md = direct.with_suffix(".md")
+            if direct_md.is_file() and self._inside_vault(direct_md):
+                return direct_md
+        target_name = name if name.endswith(".md") else f"{name}.md"
+        target_stem = Path(name).stem
+        for path in self.vault.rglob("*.md"):
+            if any(part.startswith(".") for part in path.relative_to(self.vault).parts):
+                continue
+            if not self._inside_vault(path):
+                continue
+            if path.name == target_name or path.stem == target_stem:
+                return path
+        raise FileNotFoundError(f"note not found in vault: {name}")
 
     def read(self, name: str) -> str:
-        return self._run("export", self.vault, name)
+        return self._resolve(name).read_text(encoding="utf-8")
 
     def search(self, query: str) -> list[str]:
-        out = self._run("search", self.vault, query)
-        return [line.strip() for line in out.splitlines() if line.strip()]
+        if self.vault is None or not self.vault.is_dir():
+            return []
+        q = query.lower()
+        hits: list[str] = []
+        for path in sorted(self.vault.rglob("*.md")):
+            rel = path.relative_to(self.vault)
+            if any(part.startswith(".") for part in rel.parts):
+                continue
+            if not self._inside_vault(path):
+                continue
+            head = path.read_text(encoding="utf-8", errors="ignore")[:200].lower()
+            if q in rel.name.lower() or q in head:
+                hits.append(str(rel))
+        return hits
 
 
 class FileClient:
@@ -94,7 +115,7 @@ class FileClient:
         return candidate
 
     def read(self, name: str) -> str:
-        return self._resolve(name).read_text()
+        return self._resolve(name).read_text(encoding="utf-8")
 
     def search(self, query: str) -> list[str]:
         if not RAW.exists():
@@ -102,7 +123,7 @@ class FileClient:
         q = query.lower()
         hits: list[str] = []
         for path in sorted(RAW.glob("*.md")):
-            head = path.read_text()[:200].lower()
+            head = path.read_text(encoding="utf-8", errors="ignore")[:200].lower()
             if q in path.name.lower() or q in head:
                 hits.append(path.name)
         return hits
@@ -112,7 +133,7 @@ def select_client(choice: str) -> VaultClient:
     if choice == "obsidian":
         client = ObsidianClient()
         if not client.available():
-            sys.exit("--client obsidian requested but binary or OBSIDIAN_VAULT missing")
+            sys.exit("--client obsidian requested but OBSIDIAN_VAULT is unset or not a directory")
         return client
     if choice == "file":
         return FileClient()

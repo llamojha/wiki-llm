@@ -41,14 +41,14 @@ python wiki.py ingest raw/my-article.md
 
 #### Pulling notes from an Obsidian vault
 
-If the `obsidian` CLI is on your `PATH` and `OBSIDIAN_VAULT` points at a vault, ingest can read notes directly:
+Point `OBSIDIAN_VAULT` at the root of your vault directory and ingest will read notes directly from disk (an Obsidian vault is just a tree of `.md` files; no Obsidian app needs to be running):
 
 ```bash
-OBSIDIAN_VAULT=~/Vault python wiki.py ingest "My Note"           # by name
+OBSIDIAN_VAULT=~/Vault python wiki.py ingest "My Note"           # by name or relative path
 OBSIDIAN_VAULT=~/Vault python wiki.py ingest --search "topic"    # interactive pick
 ```
 
-Vault notes are cached into `raw/` so each ingest is reproducible. Use `--client {auto,obsidian,file}` to force a specific client (default `auto`).
+Vault notes are cached into `raw/` so each ingest is reproducible. Use `--client {auto,obsidian,file}` to force a specific client (default `auto`); auto-detect uses the vault when `OBSIDIAN_VAULT` is set, otherwise falls back to `raw/`.
 
 #### Mock mode (no AWS credentials)
 
