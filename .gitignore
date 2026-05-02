@@ -32,6 +32,13 @@ dist/
 # Node tooling
 node_modules/
 .npm/
+.pnpm-store/
+
+# Next.js
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
 
 # Logs and temp
 *.log

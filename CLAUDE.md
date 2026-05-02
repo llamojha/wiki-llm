@@ -1,136 +1,111 @@
-# Wiki LLM — Schema & Operating Instructions
+# Vaultmark — Codebase Guide
 
-This is a persistent, LLM-maintained knowledge base. You are the wiki maintainer.
-You read and write the wiki; the human curates sources and asks questions.
+This repo builds **Vaultmark**, an S3-backed Markdown knowledge portal for individuals and engineering teams.
 
-## Directory Layout
+- Product spec: [`prd_vaultmark_markdown_llm_wiki.md`](prd_vaultmark_markdown_llm_wiki.md) — goals, scope, data model
+- Engineering plan: [`ROADMAP.md`](ROADMAP.md) — phases, decisions log, sequencing
+- This file: codebase operating guide
+
+## Current state (May 2026)
+
+The repo is mid-pivot from `wiki-llm` (a CLI + Bedrock wiki maintainer) to Vaultmark (a portal product).
+
+| Path | Status |
+|---|---|
+| `prd_vaultmark_markdown_llm_wiki.md` | Authoritative product spec |
+| `portal/` | Babel-in-browser React prototype — design reference for the Next.js port. Do not extend; port instead |
+| `legacy/` | Archived `wiki-llm` (Bedrock CLI + curated `wiki/` tree). Frozen reference. See [`legacy/README.md`](legacy/README.md). Earmarked for revival as the `generated/` ingest pipeline (PRD §11) |
+| `web/`, `api/`, `infra/` | Not yet created. Target layout below |
+| `README.md` | Still describes wiki-llm; pending Vaultmark rewrite |
+
+## Target architecture
 
 ```
-wiki-llm/
-├── CLAUDE.md          ← this file (schema + instructions)
-├── AGENTS.md          ← same schema, for non-Claude agents
-├── TODO.md            ← task tracking
-├── raw/               ← immutable source documents (you read, never modify)
-│   └── assets/        ← locally downloaded images
-└── wiki/              ← LLM-generated markdown (you own this entirely)
-    ├── index.md       ← content catalog, updated on every ingest
-    ├── log.md         ← append-only chronological record
-    ├── overview.md    ← high-level synthesis of the whole wiki
-    ├── sources/       ← one summary page per raw source
-    ├── entities/      ← people, organisations, projects, products
-    ├── concepts/      ← ideas, terms, frameworks, methods
-    └── analyses/      ← comparisons, deep-dives, query answers worth keeping
+wiki-llm/                  (repo root; product name is Vaultmark)
+├── web/                   Next.js portal (frontend)
+├── api/                   FastAPI backend
+├── infra/
+│   ├── docker-compose.yml Local dev stack (Postgres, MinIO, api, web)
+│   └── eks/               Optional Kubernetes manifests
+├── legacy/                Archived wiki.py + Bedrock pipeline (frozen reference)
+└── prd_vaultmark_markdown_llm_wiki.md
 ```
 
-## Page Frontmatter (YAML)
+## Stack (pinned to 2026)
 
-Every wiki page should begin with YAML frontmatter:
+**Frontend (`web/`)**
+- Next.js **16.2** (App Router, Turbopack, React Server Components)
+- React **19**
+- TypeScript **5.7+**, `strict: true`
+- Plain CSS — port `portal/styles.css` as-is for pixel parity. No Tailwind, no UI lib
+- `next/font` for IBM Plex Sans/Serif and JetBrains Mono (replace the prototype's Google Fonts CDN link)
+- Package manager: pnpm
 
-```yaml
----
-title: "Page Title"
-type: source | entity | concept | analysis | overview
-tags: [tag1, tag2]
-sources: [filename1.md, filename2.pdf]   # raw sources this page draws from
-created: YYYY-MM-DD
-updated: YYYY-MM-DD
----
-```
+**Backend (`api/`)**
+- Python **3.13** (free-threaded build acceptable; see FastAPI 0.136 GIL notes)
+- FastAPI **0.136+**
+- Pydantic **2.x**
+- SQLAlchemy 2.x + Alembic for migrations
+- `boto3` for S3 and Bedrock (or `aioboto3` if we go async on storage)
+- Ruff for lint+format, Pyright for typecheck
+- Package manager: uv
 
-## Linking Conventions
+**LLM**
+- **Amazon Bedrock — Nova 2 Lite** (`amazon.nova-2-lite-v1:0`) for the ask-wiki agent
+- Use `us.amazon.nova-2-lite-v1:0` cross-region inference profile when the home region requires it
+- 1M token context — keep `index.md` and the active scope in the prompt; reach for full-doc reads via the agent's tools rather than dumping the vault
+- Out of scope: Claude API, vector retrieval, multi-agent orchestration
 
-- Link liberally between pages: `[[Page Title]]` (Obsidian-style wikilinks).
-- Every entity or concept that appears in a page and has its own page should be linked on first mention.
-- Orphan pages (no inbound links) are a wiki smell — fix them during lint.
+**Data**
+- Postgres **17** for metadata + full-text search (MVP 1)
+- SQLite acceptable for single-user local mode
+- S3 (or MinIO/R2 — open question per PRD §16) for Markdown blobs
+- Search: Postgres FTS first; OpenSearch/Meilisearch only when SaaS scope demands it
 
-## Operations
+**Runtime**
+- Local dev: Docker Compose (Postgres + MinIO + api + web)
+- Future SaaS: EKS
 
-### Ingest (`python wiki.py ingest <file>`)
+## Development
 
-Run via Bedrock — not handled interactively by the agent.
+Commands below are the **target** shape. Most don't exist yet — flag if you reach for one and it's missing.
 
 ```bash
-python wiki.py ingest raw/my-source.md
+# Frontend
+pnpm --filter web dev          # Next.js dev server on :3000
+pnpm --filter web build
+pnpm --filter web lint
+pnpm --filter web typecheck
+
+# Backend
+uv run --project api fastapi dev   # FastAPI on :8000
+uv run --project api pytest
+uv run --project api ruff check
+uv run --project api pyright
+
+# Full stack
+docker compose -f infra/docker-compose.yml up
 ```
 
-`wiki.py` reads the source, writes all wiki pages, and commits. No agent involvement needed.
+## Conventions
 
-### Query (`/query` or `prompts/query.md`)
+- **Pixel parity with the prototype.** While porting `portal/` to `web/`, keep visual output identical. The prototype is the design source of truth until the port is signed off; only deviate where a Next.js idiom forces it (e.g. `<Link>` over `<a>`, `next/image` over raw `<img>`).
+- **Markdown is the source of truth.** Document content lives in S3 as `.md` files. Postgres stores metadata + search index only — never authoritative content.
+- **Sanitize all rendered Markdown.** Use a vetted pipeline (e.g. `remark` + `rehype-sanitize`) on the server. Never `dangerouslySetInnerHTML` raw user content.
+- **Server Components by default.** Use Client Components only where interactivity demands it (sidebar tree, search palette, editor, chat panel).
+- **One vault, one bucket, one prefix.** The `vault_id → (bucket, prefix)` mapping is the boundary between user content and infra. Code should never assume a global bucket.
+- **No mock fallbacks in production paths.** Mock data belongs under `web/lib/mock/` and is only imported in dev/storybook contexts.
+- **Frontmatter is canonical metadata.** When a doc's frontmatter and the DB row disagree, frontmatter wins; reindex.
 
-When the human asks a question:
+## Vault content vs codebase
 
-1. Read `wiki/index.md` to find relevant pages.
-2. Read the relevant pages. Follow cross-references if needed.
-3. Synthesize an answer with citations (link to wiki pages and/or raw sources).
-4. Offer to file the answer as a new `wiki/analyses/` page if it's non-trivial.
-5. Append to `wiki/log.md`:
-   ```
-   ## [YYYY-MM-DD] query | <Short Question Label>
-   Brief note: what was asked, what pages were consulted, what was filed.
-   ```
+PRD §12 lists `AGENTS.md`, `WIKI_RULES.md`, `INDEX.md`, `LOG.md`, `SOURCES.md`, `TASKS.md` — **these live inside a user's vault** (S3), not in this repo. They are content the portal renders and that future agents read. Do not put them at the repo root.
 
-The query prompt lives at `prompts/query.md` and works with any agent (Claude Code, Codex, Kiro, etc.). Claude Code users can also use `/query` as a slash command.
+(The previous root-level `AGENTS.md` was wiki-llm's vault-maintainer schema and now lives under `legacy/`.)
 
-### Lint (`python wiki.py lint`)
+## Operating notes for Claude
 
-Run via Bedrock — not handled interactively by the agent.
-
-```bash
-python wiki.py lint
-```
-
-`wiki.py` scans all wiki pages, prints a lint report, and applies approved fixes.
-
-## Index Format (`wiki/index.md`)
-
-```markdown
-# Wiki Index
-
-## Sources
-| Page | Summary | Date | Sources |
-|------|---------|------|---------|
-| [[sources/slug]] | One-line summary | YYYY-MM-DD | filename.md |
-
-## Entities
-| Page | Type | Summary |
-|------|------|---------|
-| [[entities/name]] | person/org/product | One-liner |
-
-## Concepts
-| Page | Summary |
-|------|---------|
-| [[concepts/name]] | One-liner |
-
-## Analyses
-| Page | Question | Date |
-|------|----------|------|
-| [[analyses/slug]] | What was asked | YYYY-MM-DD |
-```
-
-## Log Format (`wiki/log.md`)
-
-Append-only. Most recent entry at the bottom. Header format:
-`## [YYYY-MM-DD] <type> | <label>`
-
-Types: `ingest`, `query`, `lint`, `setup`.
-
-Parse with: `grep "^## \[" wiki/log.md | tail -10`
-
-## Quality Rules
-
-- **Never modify files under `raw/`.**
-- **Always update `wiki/index.md` and `wiki/log.md`** after any ingest, query (if filing), or lint.
-- Prefer updating existing pages over creating new ones for the same concept.
-- Flag contradictions explicitly rather than silently overwriting old claims.
-- Keep pages focused — split if a page becomes hard to navigate.
-- The wiki is a git repo — commit after meaningful units of work so history is useful.
-
-## Evolving This Schema
-
-This file is co-owned by you and the human. As the domain becomes clearer, update it:
-- Add domain-specific page types.
-- Add tagging taxonomies.
-- Add conventions for output formats (Marp slides, Dataview tables, matplotlib charts).
-- Document any custom CLI tools added (e.g. search via qmd).
-
-Update the version comment at the top of this file when you make schema changes.
+- Confirm before large structural moves (creating `web/`, `api/`, archiving `legacy/`, deleting the prototype). Reversible local edits are fine without confirmation.
+- Don't revive the Bedrock pipeline unprompted. `legacy/` is frozen reference; reach into it only when explicitly porting code out, and prefer rewriting against the new architecture over importing from it.
+- When a PRD open question (§16) blocks a decision, surface it rather than guessing.
+- Prefer editing existing files over creating new ones. The prototype already encodes most product decisions — read it before re-deriving.
