@@ -40,6 +40,9 @@ out/
 *.tsbuildinfo
 next-env.d.ts
 
+# Visual parity artifacts
+parity-visual/
+
 # Logs and temp
 *.log
 *.tmp
