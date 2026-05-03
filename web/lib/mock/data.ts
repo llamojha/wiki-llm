@@ -57,7 +57,31 @@ export type GeneratedDoc = {
   cites: Cite[];
 };
 
-export type Doc = AuthoredDoc | GeneratedDoc;
+export type Doc = AuthoredDoc | GeneratedDoc | LiveDoc;
+
+/**
+ * A document fetched from the API and rendered client-side.
+ * _html is always the output of renderMarkdown() — never raw user input.
+ */
+export type LiveDoc = {
+  generated: false;
+  kind: 'live';
+  title: string;
+  path: string;
+  s3: string;
+  source: SourceType;
+  updated: string;
+  author: string;
+  tags: string[];
+  checksum: string;
+  _html: SanitizedHtml;
+};
+
+/**
+ * Branded type — only assignable via renderMarkdown(), never from raw strings.
+ * Enforces at compile time that dangerouslySetInnerHTML only receives sanitized output.
+ */
+export type SanitizedHtml = string & { readonly __brand: 'SanitizedHtml' };
 
 export type SearchHit = {
   id: string;

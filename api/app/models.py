@@ -31,3 +31,26 @@ class FolderNode(BaseModel):
 TreeNode = Annotated[DocLeaf | FolderNode, Field(discriminator="type")]
 
 FolderNode.model_rebuild()
+
+
+# --- Document response ---
+
+class DocResponse(BaseModel):
+    id: str           # S3 key relative to prefix
+    title: str
+    path: str         # human-readable breadcrumb, e.g. "wiki / ops / runbook"
+    s3_key: str       # full S3 key including prefix
+    source_type: str  # "authored" | "generated" | "uploaded"
+    updated: str
+    author: str
+    tags: list[str]
+    checksum: str
+    raw_markdown: str
+
+
+class SearchResult(BaseModel):
+    id: str
+    title: str
+    path: str
+    snippet: str
+    rank: float

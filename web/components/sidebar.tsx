@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { type ApiTreeNode } from '@/lib/api';
 import { ICONS } from '@/lib/icons';
 import { PERSONAL_TREE, SHARED_TREE, type Scope } from '@/lib/mock/data';
 import { TreeNode } from './tree-node';
@@ -11,6 +12,7 @@ type SidebarProps = {
   activeId: string | null;
   onOpen: (id: string) => void;
   onNewPage: () => void;
+  apiTree?: ApiTreeNode[];
 };
 
 const DEFAULT_OPEN_FOLDERS = new Set([
@@ -22,8 +24,18 @@ const DEFAULT_OPEN_FOLDERS = new Set([
   'me/learning',
 ]);
 
-export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage }: SidebarProps) {
-  const tree = scope === 'shared' ? SHARED_TREE : PERSONAL_TREE;
+function apiTreeToMock(nodes: ApiTreeNode[]): import('@/lib/mock/data').TreeNode[] {
+  return nodes.map((n) => {
+    if (n.type === 'folder') {
+      return { id: n.id, type: 'folder' as const, name: n.name, children: apiTreeToMock(n.children) };
+    }
+    return { id: n.id, type: 'doc' as const, name: n.name };
+  });
+}
+
+export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, apiTree }: SidebarProps) {
+  const mockTree = scope === 'shared' ? SHARED_TREE : PERSONAL_TREE;
+  const tree = apiTree && apiTree.length > 0 ? apiTreeToMock(apiTree) : mockTree;
   const [openFolders, setOpenFolders] = useState<Set<string>>(DEFAULT_OPEN_FOLDERS);
   const toggleFolder = (id: string) => {
     setOpenFolders((prev) => {

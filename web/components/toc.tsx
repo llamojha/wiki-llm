@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { AuthoredDoc, BodyKey } from '@/lib/mock/data';
+import type { BodyKey, Doc } from '@/lib/mock/data';
 
 type TocItem = { id: string; label: string; h3?: boolean };
 
@@ -34,10 +34,10 @@ const TOC_BY_BODY: Record<BodyKey, TocItem[]> = {
   ],
 };
 
-type TocProps = { doc: AuthoredDoc };
+type TocProps = { doc: Doc };
 
 export function TOC({ doc }: TocProps) {
-  const items = TOC_BY_BODY[doc.body] || [];
+  const items = (!doc.generated && 'body' in doc) ? (TOC_BY_BODY[doc.body] || []) : [];
   const [active, setActive] = useState<string | undefined>(items[0]?.id);
   return (
     <aside className="toc">

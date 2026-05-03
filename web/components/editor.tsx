@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { ICONS } from '@/lib/icons';
-import { RenderedMarkdown } from '@/lib/markdown';
+import { RenderedMarkdown } from '@/lib/markdown-preview';
 import type { Doc } from '@/lib/mock/data';
 
 type EditorProps = {

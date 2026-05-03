@@ -1,8 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { getDoc, type ApiDoc, type ApiTreeNode } from '@/lib/api';
 import { ICONS } from '@/lib/icons';
-import { DOCS, type Doc, type GeneratedDoc, type Scope } from '@/lib/mock/data';
+import { renderMarkdown } from '@/lib/markdown';
+import { type Doc, type GeneratedDoc, type LiveDoc, type SanitizedHtml, type Scope } from '@/lib/mock/data';
 import { DEFAULT_THEME, THEME_STORAGE_KEY, type Theme } from '@/lib/theme';
 import { ChatFab } from './chat-fab';
 import { ChatPanel } from './chat-panel';
@@ -65,9 +67,30 @@ function buildGeneratedDocFromPrompt(prompt: string): { id: string; doc: Generat
   return { id, doc };
 }
 
-export function AppShell() {
+/** Convert an API doc response into a LiveDoc for DocReader. */
+function apiDocToDoc(api: ApiDoc, html: SanitizedHtml): LiveDoc {
+  return {
+    generated: false,
+    kind: 'live',
+    title: api.title,
+    path: api.path,
+    s3: api.s3_key,
+    source: api.source_type === 'generated' ? 'generated' : 'shared',
+    updated: api.updated || 'unknown',
+    author: api.author || 'unknown',
+    tags: api.tags,
+    checksum: api.checksum,
+    _html: html,
+  };
+}
+
+type AppShellProps = {
+  initialTree: ApiTreeNode[];
+};
+
+export function AppShell({ initialTree }: AppShellProps) {
   const [scope, setScope] = useState<Scope>('shared');
-  const [activeId, setActiveId] = useState<string>('doc-prod-incident');
+  const [activeId, setActiveId] = useState<string>('__home');
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -75,6 +98,9 @@ export function AppShell() {
   const [theme, setThemeState] = useState<Theme>(DEFAULT_THEME);
   const [prompts, setPrompts] = useState<string[]>(DEFAULT_PROMPTS);
   const [generatedDocs, setGeneratedDocs] = useState<Record<string, GeneratedDoc>>({});
+  // Live docs fetched from API
+  const [liveDoc, setLiveDoc] = useState<LiveDoc | null>(null);
+  const [docLoading, setDocLoading] = useState(false);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -104,17 +130,36 @@ export function AppShell() {
     };
   }, []);
 
-  const openDoc = useCallback((id: string) => {
-    if (id.startsWith('__')) {
+  const openDoc = useCallback(
+    (id: string) => {
+      if (id.startsWith('__')) {
+        setActiveId(id);
+        setLiveDoc(null);
+        setEditing(false);
+        return;
+      }
+      // Generated docs stay local
+      if (generatedDocs[id]) {
+        setActiveId(id);
+        setLiveDoc(null);
+        setEditing(false);
+        return;
+      }
+      // Real doc — fetch from API
       setActiveId(id);
       setEditing(false);
-      return;
-    }
-    if (id.startsWith('doc-me-')) setScope('personal');
-    else setScope('shared');
-    setActiveId(id);
-    setEditing(false);
-  }, []);
+      setDocLoading(true);
+      setLiveDoc(null);
+      getDoc(id)
+        .then(async (api) => {
+          const html = await renderMarkdown(api.raw_markdown);
+          setLiveDoc(apiDocToDoc(api, html));
+        })
+        .catch(() => showToast('Failed to load document'))
+        .finally(() => setDocLoading(false));
+    },
+    [generatedDocs, showToast],
+  );
 
   const onNewPage = () => {
     setScope('personal');
@@ -122,7 +167,6 @@ export function AppShell() {
     setEditing(true);
   };
 
-  // Cmd+K / Cmd+Shift+A / Esc
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -141,7 +185,9 @@ export function AppShell() {
     return () => window.removeEventListener('keydown', onKey);
   }, [paletteOpen]);
 
-  const doc: Doc | undefined = DOCS[activeId] || generatedDocs[activeId];
+  const generatedDoc = generatedDocs[activeId];
+  // doc for Editor/Chat context: prefer live API doc, fall back to generated
+  const doc: Doc | undefined = liveDoc ?? generatedDoc;
 
   const generateFromPrompt = (prompt: string): string => {
     const { id, doc: gen } = buildGeneratedDocFromPrompt(prompt);
@@ -191,6 +237,7 @@ export function AppShell() {
         activeId={activeId}
         onOpen={openDoc}
         onNewPage={onNewPage}
+        apiTree={initialTree}
       />
       <main className="main">
         {editing ? (
@@ -207,6 +254,13 @@ export function AppShell() {
             setPrompts={setPrompts}
             onAskPrompt={handleAskPrompt}
           />
+        ) : docLoading ? (
+          <div className="empty-state">
+            <div className="es-inner">
+              <div style={{ color: 'var(--fg-3)' }}>{ICONS.doc}</div>
+              <p>Loading…</p>
+            </div>
+          </div>
         ) : doc ? (
           <DocReader
             doc={doc}
