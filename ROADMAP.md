@@ -39,6 +39,10 @@ s3://<bucket>/<vault-prefix>/
 | MVP 2 | Phase 4 + 5 | Full personal wiki CRUD + ask-wiki agent |
 | SaaS | Phase 6 | Multi-tenant hosted product |
 
+## Architecture note (post-Phase 2 pivot)
+
+As of Phase 2 completion, the backend was migrated from Python/FastAPI to Next.js Route Handlers. The entire app is now a single Next.js project deployable to Vercel (free tier) or Docker. No Python, no Postgres, no separate backend service. In-memory search (Fuse.js) replaces Postgres FTS. The ingest pipeline (Phase 3) is a standalone TypeScript CLI in the same monorepo.
+
 ## Phases
 
 ### Phase 0 — Skeleton ✓
@@ -113,45 +117,45 @@ Backend joins. Real S3 read, real search. Editor and Chat stay mock-backed.
 
 ### Phase 3 — Ingest Pipeline (MVP 1)
 
-Revive `legacy/wiki.py` as a containerized worker. Builds the S3 write infrastructure.
+TypeScript CLI that transforms raw docs into structured wiki pages via Bedrock.
 
-- [ ] Port `wiki.py` core out of `legacy/` into a `worker/` (or `api/workers/`) container
+- [ ] `ingest/` package in the pnpm workspace (TypeScript, shared `@aws-sdk` deps)
+- [ ] CLI entrypoint: `pnpm ingest <s3-key-or-glob>` and `pnpm ingest --lint`
 - [ ] S3 write layer: PutObject for `generated/` prefix; `source_type = generated`
-- [ ] Hierarchical `index.md` (root + per-folder), regenerated once per ingest run
+- [ ] Bedrock invoke via `@aws-sdk/client-bedrock-runtime`; model pinned to `amazon.nova-2-lite-v1:0`
+- [ ] `index.md` regeneration (flat list of all navigable docs) after each ingest run
+- [ ] `log.md` append on every ingest run; auto-rotate at size threshold
 - [ ] AI context files on vault init: `AGENTS.md`, `WIKI_RULES.md`, `SOURCES.md`, `TASKS.md`
-- [ ] `log.md` as app logger (all writes, ingest runs, index rebuilds); auto-rotate at size threshold
-- [ ] Bedrock model pinned to `amazon.nova-2-lite-v1:0`; configurable per env
-- [ ] CLI entrypoint: `vaultmark ingest <s3-key>` and `vaultmark lint`
-- [ ] Dockerfile + Compose service entry
+- [ ] End-to-end: place file in `raw/`, run ingest, verify pages in `generated/` are searchable in portal
 
 **Acceptance:** see `specs/phase-3-ingest-pipeline.md`
 
 ### Phase 4 — Personal Wiki CRUD (MVP 2)
 
-User-facing write path on top of Phase 3's infrastructure.
+User-facing write path via Next.js Route Handlers.
 
-- [ ] Personal wiki CRUD: create / edit / delete via Editor
-- [ ] S3 write with optimistic concurrency (checksum-based) — 409 on conflict
-- [ ] Frontmatter as canonical metadata; mismatch triggers reindex
+- [ ] Route Handlers: `POST /api/docs`, `PUT /api/docs/:id`, `DELETE /api/docs/:id`
+- [ ] S3 PutObject with checksum-based optimistic concurrency — 409 on conflict
+- [ ] Frontmatter as canonical metadata; `source_type = authored`
 - [ ] Immediate `index.md` regen on every user write/delete
 - [ ] `log.md` append on every create/edit/delete
-- [ ] Postgres search index refresh on every write
+- [ ] In-memory search index invalidation on write (rebuild on next search)
+- [ ] Wire Editor component to real write endpoints (replace mock)
 - [ ] Sanitization audit, document allowed tags
-- [ ] Markdown rendering: headings, links, images, fenced code, tables, frontmatter, heading anchors
 - [ ] No tags — search indexing handles discoverability
 
 **Acceptance:** see `specs/phase-4-personal-wiki-crud.md`
 
 ### Phase 5 — Ask-Wiki Agent (MVP 2)
 
-Bedrock Nova 2 Lite agent in the chat panel.
+Bedrock Nova 2 Lite agent in the chat panel, served from Next.js.
 
-- [ ] FastAPI `/chat` endpoint; streaming (SSE or chunked)
-- [ ] Bedrock client (boto3) targeting `amazon.nova-2-lite-v1:0`
+- [ ] Route Handler: `POST /api/chat` with streaming (ReadableStream)
+- [ ] Bedrock converse API via `@aws-sdk/client-bedrock-runtime`
 - [ ] Agent loop: read `index.md` → tool calls → answer with citations
-- [ ] Tools:
-  - [ ] `search_vault(query, scope)` — Postgres FTS with scope (all / folder / page)
-  - [ ] `read_document(doc_id)` — full Markdown from S3
+- [ ] Tools (direct function calls to existing lib modules):
+  - [ ] `search_vault(query, scope)` — Fuse.js search with scope (all / folder / page)
+  - [ ] `read_document(doc_id)` — S3 GetObject via `lib/s3.ts`
   - [ ] `propose_page(slug, title, body)` — preview + user-confirmed write only
 - [ ] Scoped search (agent-only; UI search stays global)
 - [ ] Agent proposes new pages only, on explicit user request
@@ -184,4 +188,6 @@ Only after MVP 2 has been used in anger.
 
 ## Where the legacy fits
 
-`legacy/wiki.py` is earmarked as the seed for Phase 4. Until then, treat `legacy/` as frozen reference. Don't import from it; port out of it.
+`legacy/wiki.py` is the reference implementation for the ingest pipeline (Phase 3). The logic will be ported to TypeScript in the `ingest/` package. Until then, treat `legacy/` as frozen reference. Don't import from it; port out of it.
+
+`api/` (Python/FastAPI) is archived — replaced by Next.js Route Handlers in `web/app/api/`. Kept as reference for the SaaS phase (Phase 6) if a standalone backend is ever needed again.

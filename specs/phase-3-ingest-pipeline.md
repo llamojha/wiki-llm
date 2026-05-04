@@ -4,34 +4,51 @@
 
 ## Goal
 
-Revive the legacy `wiki.py` as a containerized worker that transforms raw source documents into structured, indexed pages in the vault. This phase also builds the S3 write infrastructure that Phase 4 will extend.
+A TypeScript CLI that transforms raw source documents into structured, indexed wiki pages via Bedrock. Builds the S3 write infrastructure that Phase 4 extends.
 
 ## Vision
 
-Drop a Markdown file into `raw/`, run the ingest command, and see polished structured pages appear in `generated/` — indexed and browsable in the portal alongside any existing content.
+Drop a Markdown file into `raw/`, run `pnpm ingest`, and see polished structured pages appear in `generated/` — indexed and browsable in the portal alongside any existing content.
 
 ## Objective
 
-Port the Bedrock-powered ingest logic from `legacy/wiki.py` into a standalone worker with S3 I/O, build the foundational write layer (S3 PutObject + index regeneration), create the AI context files, and implement `log.md` as the app-level activity logger.
+Port the Bedrock-powered ingest logic from `legacy/wiki.py` into a TypeScript CLI package (`ingest/`) in the pnpm workspace. Implement S3 writes, `index.md` regeneration, `log.md` appending, and AI context file creation.
+
+## Architecture
+
+```
+wiki-llm/
+├── web/           Next.js portal (reads from S3)
+├── ingest/        TypeScript CLI (writes to S3)
+│   ├── src/
+│   │   ├── cli.ts          Entry point
+│   │   ├── transform.ts    Bedrock-powered doc transformation
+│   │   ├── index-gen.ts    index.md regeneration
+│   │   └── log.ts          log.md appending
+│   ├── package.json
+│   └── tsconfig.json
+└── ...
+```
+
+The `ingest/` package shares `@aws-sdk/client-s3` and `@aws-sdk/client-bedrock-runtime` with `web/`. It runs locally or in CI — not as a web service.
 
 ## Key Decisions
 
-- **Write infrastructure lives here** — S3 write (PutObject), `index.md` regeneration, and `log.md` appending are built in this phase. Phase 4 adds optimistic concurrency and the user-facing Editor on top.
+- **TypeScript CLI, not a container** — runs via `pnpm ingest`, no Docker required.
+- **Shared AWS SDK** — same S3 client pattern as `web/lib/s3.ts`.
 - **Batch index regen** — `index.md` regenerates once at the end of each ingest run, not per-page.
-- **Hierarchical `index.md`** — designed from the start as root `index.md` + per-folder `index.md` files to handle vault growth.
-- **AI context files** — `AGENTS.md`, `WIKI_RULES.md`, `SOURCES.md`, `TASKS.md` are created alongside `index.md` and `log.md` as part of vault initialization.
-- **`log.md` is the app logger** — records all writes, ingest runs, agent proposals (accepted/rejected), and index rebuilds. Auto-rotates at a size threshold (e.g., archive to `log-2026-04.md`).
+- **Flat `index.md`** — single root file listing all navigable docs. Per-folder indexes deferred until vault exceeds ~500 docs.
+- **AI context files** — created on vault init if they don't exist.
+- **`log.md` is the app logger** — records all writes and ingest runs. Auto-rotates at size threshold.
 
 ## Acceptance Criteria
 
-1. A `worker/` (or `api/workers/`) container runs the ingest pipeline, invocable via `vaultmark ingest <s3-key>`.
-2. The worker reads source documents from `raw/` in S3 and writes structured output to `generated/` with `source_type = generated` metadata.
-3. All filesystem I/O from `legacy/wiki.py` is replaced with S3 reads/writes against the configured vault.
-4. `index.md` (root + per-folder) is regenerated once at the end of each ingest run.
-5. AI context files (`AGENTS.md`, `WIKI_RULES.md`, `SOURCES.md`, `TASKS.md`) are created on vault initialization if they don't exist.
-6. `log.md` is appended on every ingest run, write operation, and index rebuild. Auto-rotates when it exceeds the size threshold.
-7. The Bedrock model is pinned to `amazon.nova-2-lite-v1:0` with the model ID configurable via environment variable.
-8. `vaultmark lint` validates generated output structure and frontmatter.
-9. A Dockerfile and `docker-compose.yml` service entry exist for the worker.
-10. End-to-end test: place a file in `raw/`, run ingest, verify pages in `generated/` are visible and searchable in the portal.
-11. Time from Markdown added to searchable: under 60 seconds.
+1. `pnpm ingest <s3-key-or-glob>` reads source docs from `raw/` and writes structured output to `generated/` with `source_type = generated` frontmatter.
+2. Bedrock invoke uses `@aws-sdk/client-bedrock-runtime` targeting `amazon.nova-2-lite-v1:0`; model ID configurable via env var.
+3. `index.md` is regenerated (flat list of all `.md` files except itself and `log.md`) after each ingest run.
+4. `log.md` is appended on every ingest run. Auto-rotates when it exceeds 100KB.
+5. `pnpm ingest --init` creates AI context files (`AGENTS.md`, `WIKI_RULES.md`, `SOURCES.md`, `TASKS.md`) if they don't exist.
+6. `pnpm ingest --lint` validates generated output structure and frontmatter.
+7. End-to-end: place a file in `raw/`, run ingest, verify pages in `generated/` are visible and searchable in the portal.
+8. No Docker required — runs with Node.js 22+ and AWS credentials.
+9. Shares env vars with `web/` (`VAULT_BUCKET`, `VAULT_PREFIX`, `VAULT_REGION`).
