@@ -2,70 +2,109 @@
 
 An S3-backed Markdown knowledge portal for individuals and engineering teams.
 
-Markdown in object storage is the durable knowledge layer. The portal renders, searches, and (in MVP 2) lets a Bedrock-powered agent answer questions grounded in your own documents.
+Markdown in object storage is the durable knowledge layer. The portal renders, searches, and lets a Bedrock-powered agent answer questions grounded in your own documents.
 
 > Vaultmark — an S3-backed Markdown vault for people, pipelines, and agents.
 
 ## Status
 
-Pre-alpha. Mid-pivot from `wiki-llm` (a CLI + Bedrock vault maintainer) into a portal product.
+Early development. Phase 2 (real read path) is complete. Phase 3 (ingest pipeline) is next.
 
 - **Product spec:** [`prd_vaultmark_markdown_llm_wiki.md`](prd_vaultmark_markdown_llm_wiki.md)
 - **Engineering plan:** [`ROADMAP.md`](ROADMAP.md)
-- **Codebase guide (for contributors and Claude):** [`CLAUDE.md`](CLAUDE.md)
-- **Design prototype:** [`portal/`](portal/) — the in-browser React mock that's being ported into `web/`
-- **Legacy `wiki-llm`:** [`legacy/`](legacy/) — archived; will be revived as the `generated/` ingest pipeline (Phase 4)
+- **Codebase guide:** [`CLAUDE.md`](CLAUDE.md)
 
 ## What it does
 
-- **Vault:** Markdown stored in an S3 bucket and prefix you own.
-- **Portal:** browse, render, search, and edit your vault from a clean Next.js UI.
-- **Personal wiki:** create and maintain your own pages alongside shared/team content.
-- **Ask-wiki agent (MVP 2):** a Bedrock Nova 2 Lite agent that reads your `index.md`, searches the vault, cites its sources, and refuses when no relevant content exists. Every page write is user-confirmed.
+- **Vault:** Markdown stored in an S3 bucket and prefix you own. Source of truth lives in object storage, not a database.
+- **Portal:** browse, render, and search your vault from a clean Next.js UI.
+- **Personal wiki:** create and maintain your own pages alongside project or team content.
+- **Ask-wiki agent (Phase 5):** a Bedrock Nova 2 Lite agent that reads your vault, cites sources, and proposes new pages — every write is user-confirmed.
 
 ## Stack
 
-- **Frontend:** Next.js 16.2, React 19, TypeScript 5.7+
-- **Backend:** FastAPI 0.136+, Python 3.13
-- **Storage:** AWS S3 (Markdown blobs)
-- **Metadata + search:** Postgres 17 (full-text search)
-- **LLM:** Amazon Bedrock — Nova 2 Lite (`amazon.nova-2-lite-v1:0`)
-- **Local dev:** Docker Compose
-- **SaaS deployment (future):** EKS
-
-See [`CLAUDE.md`](CLAUDE.md) for the full pinned stack and conventions.
+| Layer | Technology |
+|---|---|
+| App | Next.js 16.2, React 19, TypeScript 5.7+ |
+| API | Next.js Route Handlers (server-side) |
+| Storage | AWS S3 (Markdown blobs) |
+| Search | In-memory fuzzy search (Fuse.js) |
+| LLM | Amazon Bedrock — Nova 2 Lite (`amazon.nova-2-lite-v1:0`) |
+| Deploy | Vercel, Docker, or any Node.js host |
 
 ## Repo layout
 
 ```
-wiki-llm/                          (repo; product name is Vaultmark)
-├── prd_vaultmark_markdown_llm_wiki.md   Product spec
-├── ROADMAP.md                           Engineering plan
-├── CLAUDE.md                            Codebase guide
-├── README.md                            This file
-├── portal/                              JSX prototype (design reference)
-├── web/                                 Next.js portal (Phase 0+)
-├── api/                                 FastAPI backend (Phase 2+)
-├── infra/                               Docker Compose, EKS manifests (Phase 2+)
-└── legacy/                              Archived wiki-llm (frozen reference)
+wiki-llm/
+├── web/          Next.js portal (frontend + API route handlers)
+├── api/          FastAPI backend (archived — replaced by Route Handlers)
+├── infra/        Docker Compose for local dev
+├── specs/        Phase acceptance specs
+├── legacy/       Archived wiki-llm CLI (frozen reference)
+├── ROADMAP.md    Engineering plan — phases are the contract
+├── CLAUDE.md     Codebase guide for contributors
+└── prd_vaultmark_markdown_llm_wiki.md   Product spec
 ```
-
-`web/`, `api/`, and `infra/` are created as their phases come online — see the roadmap.
 
 ## Getting started
 
-The Next.js portal is the first thing being built. Once the Phase 0 scaffold is in:
+### Prerequisites
+
+- Node.js 22+ and pnpm
+- AWS credentials with S3 access
+
+### Local dev
 
 ```bash
+# Install dependencies
 pnpm install
+
+# Set env vars
+cp infra/.env.example web/.env.local
+# Edit web/.env.local with your S3 bucket/prefix
+
+# Start the app
 pnpm --filter web dev   # http://localhost:3000
 ```
 
-API and Compose instructions land with Phase 2.
+### Environment variables
+
+Create `web/.env.local`:
+
+```
+VAULT_BUCKET=your-s3-bucket
+VAULT_PREFIX=your-prefix
+VAULT_REGION=us-east-1
+```
+
+AWS credentials are picked up from the standard chain (`~/.aws/credentials`, instance role, env vars). No hardcoding.
+
+## S3 vault layout
+
+```
+s3://<bucket>/<prefix>/
+  raw/          Source documents (immutable inputs)
+  wiki/         User-authored pages
+  generated/    AI-generated pages from the ingest pipeline
+  assets/       Images and binary assets
+  articles/     Published articles (not processed by ingest)
+  index.md      Machine-maintained catalog
+  log.md        Append-only write history
+```
+
+## Deployment
+
+Deployment configuration is intentionally kept out of this repo to support self-hosting and open source use. The app is a standard Next.js application — deploy to any platform that supports it.
+
+**Vercel:** Connect the repo, set env vars in the dashboard, deploy. Zero config.
+
+**Docker:** `docker build -t vaultmark web/` — pass env vars via `--env-file`.
+
+Required environment variables are documented in `infra/.env.example`.
 
 ## Contributing
 
-This is a personal project in active design. The roadmap is the contract; deviations need a conversation. Read the PRD and the roadmap before opening an issue or PR.
+Read the PRD and ROADMAP before opening an issue or PR. The roadmap phases are the contract — deviations need a conversation.
 
 ## License
 

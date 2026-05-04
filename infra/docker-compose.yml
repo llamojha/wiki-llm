@@ -15,29 +15,13 @@ services:
       timeout: 5s
       retries: 10
 
-  api:
-    build:
-      context: ../api
-      dockerfile: Dockerfile
-    ports:
-      - "8000:8000"
-    env_file: .env
-    environment:
-      DATABASE_URL: postgresql+asyncpg://vaultmark:vaultmark@db:5432/vaultmark
-    depends_on:
-      db:
-        condition: service_healthy
-
   web:
     build:
       context: ../web
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
-    environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
-    depends_on:
-      - api
+    env_file: .env
 
 volumes:
   pg_data:

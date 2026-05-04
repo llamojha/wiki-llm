@@ -52,3 +52,6 @@ parity-visual/
 .env
 .env.local
 .env.*.local
+
+# Deployment infra (kept out of repo for open source)
+infra-cdk/

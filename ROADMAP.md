@@ -93,20 +93,21 @@ Decisions made during the port that diverge from the original step plan. Documen
 
 **TweaksPanel — deferred (Step 4).** Dev-only floating preferences panel (425 lines: theme, density, accent hue, reader width, chat toggle) was on the Step 4 list. Skipped: the tokens it controls (`density`, `readerWidth`, accent hue) are not surfaced in the visible product anywhere outside the panel itself; `theme` and `chat` are already wired through `TopBar` and `ChatPanel`. Revisit if/when those tokens become user-facing settings, or before MVP 1 ships if the dev panel is wanted for prototyping.
 
-### Phase 2 — Real Read Path (Demo)
+### Phase 2 — Real Read Path (Demo) ✓
 
 Backend joins. Real S3 read, real search. Editor and Chat stay mock-backed.
 
-- [ ] `api/` — FastAPI 0.136 + Python 3.13 + uv
-- [ ] `infra/docker-compose.yml` — Postgres 17 + api + web
-- [ ] DB schema: `vaults`, `documents`, `search_records` (per PRD §10)
-- [ ] S3 read client (boto3); list + get
-- [ ] Markdown render server-side with sanitization (`remark` + `rehype-sanitize`)
-- [ ] Postgres FTS index, populated from S3 listing
-- [ ] Navigation tree from `index.md` (canonical), folder hierarchy as fallback
-- [ ] FastAPI endpoints: `GET /vaults`, `GET /vaults/{id}/tree`, `GET /docs/{id}`, `GET /search`
-- [ ] Wire `web/` read + search paths to the API; Editor and Chat remain mock-backed
-- [ ] CI: lint + typecheck + build for both packages
+- [x] `api/` — FastAPI 0.136 + Python 3.13 + uv
+- [x] `infra/docker-compose.yml` — Postgres 17 + api + web
+- [x] DB schema: `vaults`, `documents`, `search_records` (per PRD §10)
+- [x] S3 read client (boto3); list + get
+- [x] Markdown render server-side with sanitization (`remark` + `rehype-sanitize`)
+- [x] Postgres FTS index, populated from S3 listing
+- [x] In-memory fuzzy search (rapidfuzz) as primary/fallback — no Postgres required for demo
+- [x] Navigation tree from `index.md` (canonical), folder hierarchy as fallback
+- [x] FastAPI endpoints: `GET /vaults`, `GET /vaults/{id}/tree`, `GET /docs/{id}`, `GET /search`
+- [x] Wire `web/` read + search paths to the API; Editor and Chat remain mock-backed
+- [x] CI: lint + typecheck + build for both packages
 
 **Acceptance:** see `specs/phase-2-real-read-path.md`
 

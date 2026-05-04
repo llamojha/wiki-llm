@@ -1,4 +1,4 @@
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 
 export type ApiTreeNode =
   | { type: 'doc'; id: string; name: string }
@@ -32,10 +32,10 @@ async function get<T>(path: string): Promise<T> {
 }
 
 export const getTree = (vaultId = 'default') =>
-  get<ApiTreeNode[]>(`/vaults/${vaultId}/tree`);
+  get<ApiTreeNode[]>(`/api/vaults/${vaultId}/tree`);
 
 export const getDoc = (docId: string) =>
-  get<ApiDoc>(`/docs/${encodeURIComponent(docId)}`);
+  get<ApiDoc>(`/api/docs/${encodeURIComponent(docId)}`);
 
 export const search = (q: string) =>
-  get<ApiSearchResult[]>(`/search?q=${encodeURIComponent(q)}`);
+  get<ApiSearchResult[]>(`/api/search?q=${encodeURIComponent(q)}`);
