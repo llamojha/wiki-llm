@@ -26,7 +26,20 @@ const mono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: 'Vaultmark',
-  description: 'S3-backed Markdown knowledge portal',
+  description: 'S3-backed Markdown knowledge portal for individuals and engineering teams',
+  icons: { icon: '/favicon.svg' },
+  openGraph: {
+    title: 'Vaultmark',
+    description: 'S3-backed Markdown knowledge portal for individuals and engineering teams',
+    images: [{ url: '/og.svg', width: 1200, height: 630 }],
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Vaultmark',
+    description: 'S3-backed Markdown knowledge portal for individuals and engineering teams',
+    images: ['/og.svg'],
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
