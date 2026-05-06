@@ -15,6 +15,8 @@ export type ApiDoc = {
   tags: string[];
   checksum: string;
   raw_markdown: string;
+  etag: string;
+  starred: boolean;
 };
 
 export type ApiSearchResult = {

@@ -143,6 +143,9 @@ User-facing write path via Next.js Route Handlers.
 - [ ] Wire Editor component to real write endpoints (replace mock)
 - [ ] Sanitization audit, document allowed tags
 - [ ] No tags — search indexing handles discoverability
+- [ ] Per-page URLs: `/[...id]` catch-all route mirroring S3 keys for deep-linking and bookmarking
+- [ ] Starred documents: `starred` frontmatter field, star/unstar UI, filtered view
+- [ ] Mock audit: verify all `web/lib/mock/` usage is replaced by real data paths; remove mock imports from production code
 
 **Acceptance:** see `specs/phase-4-personal-wiki-crud.md`
 
@@ -185,6 +188,20 @@ Only after MVP 2 has been used in anger.
 - Multi-agent orchestration
 - PDF / DOCX ingestion
 - Public publishing workflow
+
+## Mock UI features ahead of current phases
+
+The `portal/` prototype (now ported to `web/`) includes UI for features that don't ship until later phases. These are intentionally mock-only until their phase lands:
+
+| Mock feature | Ships in | Notes |
+|---|---|---|
+| Shared/Personal scope toggle | Phase 6 (SaaS) | Multi-tenant concept; single-user MVP has no scope distinction |
+| Scope-aware sidebar filtering | Phase 6 (SaaS) | Requires tenant + user isolation |
+| Star button (doc toolbar) | Phase 4 | Stored as `starred: true` in frontmatter |
+| Starred docs filter | Phase 4 | Home view + sidebar filtered list |
+| Per-page URLs (deep-linking) | Phase 4 | Currently state-driven SPA; Phase 4 adds `/[...id]` catch-all mirroring S3 keys |
+
+Until their phase ships, these features render in the UI but are non-functional or backed by mock data.
 
 ## Where the legacy fits
 

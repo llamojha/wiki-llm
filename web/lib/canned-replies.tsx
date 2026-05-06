@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { Cite } from '@/lib/mock/data';
+import type { Cite } from '@/lib/types';
 
 export const SUGGESTIONS = [
   "What's the on-call paging procedure?",

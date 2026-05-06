@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { type ApiTreeNode } from '@/lib/api';
 import { ICONS } from '@/lib/icons';
-import { PERSONAL_TREE, SHARED_TREE, type Scope } from '@/lib/mock/data';
+import { type Scope } from '@/lib/types';
 import { TreeNode } from './tree-node';
 
 type SidebarProps = {
@@ -34,8 +34,7 @@ function apiTreeToMock(nodes: ApiTreeNode[]): import('@/lib/mock/data').TreeNode
 }
 
 export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, apiTree }: SidebarProps) {
-  const mockTree = scope === 'shared' ? SHARED_TREE : PERSONAL_TREE;
-  const tree = apiTree && apiTree.length > 0 ? apiTreeToMock(apiTree) : mockTree;
+  const tree = apiTree && apiTree.length > 0 ? apiTreeToMock(apiTree) : [];
   const [openFolders, setOpenFolders] = useState<Set<string>>(DEFAULT_OPEN_FOLDERS);
   const toggleFolder = (id: string) => {
     setOpenFolders((prev) => {

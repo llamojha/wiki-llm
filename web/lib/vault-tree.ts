@@ -57,7 +57,7 @@ export async function getTree(): Promise<TreeNode[]> {
     const raw = await getObject('index.md');
     const { content } = matter(raw);
     for (const line of content.split('\n')) {
-      const m = line.match(/^\s*[-*]\s+(.+\.md)\s*$/);
+      const m = line.match(/^\s*[-*]\s+(.+?\.md)/);
       if (m) {
         const key = m[1].trim();
         if (!SKIP.has(key)) listedKeys.push(key);

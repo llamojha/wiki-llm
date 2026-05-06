@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm';
 import remarkParse from 'remark-parse';
 import remarkRehype from 'remark-rehype';
 import { unified } from 'unified';
-import type { SanitizedHtml } from '@/lib/mock/data';
+import type { SanitizedHtml } from '@/lib/types';
 
 // Use default sanitization schema — safe HTML only, no scripts or event handlers.
 // rehype-sanitize strips unsafe tags/attributes by default.

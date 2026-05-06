@@ -2,7 +2,6 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { ICONS } from '@/lib/icons';
-import { DOCS, type AuthoredDoc } from '@/lib/mock/data';
 
 type HomeViewProps = {
   onOpen: (id: string) => void;
@@ -15,8 +14,7 @@ type HomeViewProps = {
 type Activity = { kind: 'index' | 'gen' | 'edit' | 'share'; text: ReactNode; time: string };
 
 export function HomeView({ onOpen, onAsk, onAskPrompt, prompts, setPrompts }: HomeViewProps) {
-  const recentDocs = (['doc-prod-incident', 'doc-data-pipeline', 'doc-billing-svc', 'doc-me-q2-planning'] as const)
-    .map((id) => ({ id, ...(DOCS[id] as AuthoredDoc) }));
+  const recentDocs: { id: string; title: string; path: string; source: string; updated: string }[] = [];
   const stats = [
     { label: 'Indexed docs', value: '1,284', sub: 'across 3 spaces' },
     { label: 'You authored', value: '47', sub: '12 shared, 35 personal' },

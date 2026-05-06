@@ -7,7 +7,7 @@ export default async function Home() {
   try {
     initialTree = await getTree();
   } catch {
-    // S3 not reachable — AppShell falls back to mock data
+    // S3 not reachable — AppShell renders with empty tree
   }
   return <AppShell initialTree={initialTree} />;
 }

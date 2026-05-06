@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { getDoc, type ApiDoc, type ApiTreeNode } from '@/lib/api';
 import { ICONS } from '@/lib/icons';
 import { renderMarkdown } from '@/lib/markdown';
-import { type Doc, type GeneratedDoc, type LiveDoc, type SanitizedHtml, type Scope } from '@/lib/mock/data';
+import { type Doc, type GeneratedDoc, type LiveDoc, type SanitizedHtml, type Scope } from '@/lib/types';
 import { DEFAULT_THEME, THEME_STORAGE_KEY, type Theme } from '@/lib/theme';
 import { ChatFab } from './chat-fab';
 import { ChatPanel } from './chat-panel';
@@ -81,16 +81,20 @@ function apiDocToDoc(api: ApiDoc, html: SanitizedHtml): LiveDoc {
     tags: api.tags,
     checksum: api.checksum,
     _html: html,
+    etag: api.etag,
+    starred: api.starred,
+    raw_markdown: api.raw_markdown,
   };
 }
 
 type AppShellProps = {
   initialTree: ApiTreeNode[];
+  initialDocId?: string;
 };
 
-export function AppShell({ initialTree }: AppShellProps) {
+export function AppShell({ initialTree, initialDocId }: AppShellProps) {
   const [scope, setScope] = useState<Scope>('shared');
-  const [activeId, setActiveId] = useState<string>('__home');
+  const [activeId, setActiveId] = useState<string>(initialDocId ?? '__home');
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -98,7 +102,6 @@ export function AppShell({ initialTree }: AppShellProps) {
   const [theme, setThemeState] = useState<Theme>(DEFAULT_THEME);
   const [prompts, setPrompts] = useState<string[]>(DEFAULT_PROMPTS);
   const [generatedDocs, setGeneratedDocs] = useState<Record<string, GeneratedDoc>>({});
-  // Live docs fetched from API
   const [liveDoc, setLiveDoc] = useState<LiveDoc | null>(null);
   const [docLoading, setDocLoading] = useState(false);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -107,6 +110,21 @@ export function AppShell({ initialTree }: AppShellProps) {
     const initial = (document.documentElement.dataset.theme as Theme | undefined) ?? DEFAULT_THEME;
     setThemeState(initial);
   }, []);
+
+  // Load the initial doc if navigated to via URL
+  useEffect(() => {
+    if (initialDocId && !HOME_IDS.has(initialDocId) && !initialDocId.startsWith('__')) {
+      setDocLoading(true);
+      getDoc(initialDocId)
+        .then(async (api) => {
+          const html = await renderMarkdown(api.raw_markdown);
+          setLiveDoc(apiDocToDoc(api, html));
+        })
+        .catch(() => showToast('Failed to load document'))
+        .finally(() => setDocLoading(false));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialDocId]);
 
   const setTheme = (t: Theme) => {
     setThemeState(t);
@@ -132,24 +150,32 @@ export function AppShell({ initialTree }: AppShellProps) {
 
   const openDoc = useCallback(
     (id: string) => {
+      if (HOME_IDS.has(id)) {
+        setActiveId(id);
+        setLiveDoc(null);
+        setEditing(false);
+        window.history.pushState(null, '', '/');
+        return;
+      }
       if (id.startsWith('__')) {
         setActiveId(id);
         setLiveDoc(null);
         setEditing(false);
         return;
       }
-      // Generated docs stay local
+      // Generated docs stay local (no URL)
       if (generatedDocs[id]) {
         setActiveId(id);
         setLiveDoc(null);
         setEditing(false);
         return;
       }
-      // Real doc — fetch from API
+      // Real doc — update URL and fetch client-side
       setActiveId(id);
       setEditing(false);
       setDocLoading(true);
       setLiveDoc(null);
+      window.history.pushState(null, '', `/${id}`);
       getDoc(id)
         .then(async (api) => {
           const html = await renderMarkdown(api.raw_markdown);
@@ -186,7 +212,6 @@ export function AppShell({ initialTree }: AppShellProps) {
   }, [paletteOpen]);
 
   const generatedDoc = generatedDocs[activeId];
-  // doc for Editor/Chat context: prefer live API doc, fall back to generated
   const doc: Doc | undefined = liveDoc ?? generatedDoc;
 
   const generateFromPrompt = (prompt: string): string => {
@@ -217,9 +242,12 @@ export function AppShell({ initialTree }: AppShellProps) {
     showToast(`Saved "${page.title}" to your wiki`);
   };
 
-  const handleEditorSave = (title: string) => {
+  const handleEditorSave = (title: string, docId?: string) => {
     setEditing(false);
     showToast(`Saved "${title}" to your wiki`);
+    if (docId) {
+      openDoc(docId);
+    }
   };
 
   return (
@@ -243,8 +271,11 @@ export function AppShell({ initialTree }: AppShellProps) {
         {editing ? (
           <Editor
             doc={doc}
+            docId={activeId !== '__new' ? activeId : undefined}
+            etag={liveDoc?.etag}
             onClose={() => setEditing(false)}
-            onSave={(title) => handleEditorSave(title)}
+            onSave={handleEditorSave}
+            showToast={showToast}
           />
         ) : HOME_IDS.has(activeId) ? (
           <HomeView
@@ -264,6 +295,7 @@ export function AppShell({ initialTree }: AppShellProps) {
         ) : doc ? (
           <DocReader
             doc={doc}
+            docId={activeId}
             onAskInChat={() => setChatOpen(true)}
             onEdit={() => setEditing(true)}
           />

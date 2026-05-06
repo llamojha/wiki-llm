@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ICONS } from '@/lib/icons';
 import { CANNED_REPLIES, DEFAULT_REPLY, SUGGESTIONS } from '@/lib/canned-replies';
-import type { Cite, Doc, GeneratedDoc } from '@/lib/mock/data';
+import type { Cite, Doc, GeneratedDoc } from '@/lib/types';
 
 type Message = {
   role: 'user' | 'assistant';
