@@ -73,7 +73,7 @@ export function ChatPanel({ open, onClose, onOpenDoc, onSavePage, contextDoc }: 
     onSavePage({
       title,
       path: `personal / saved / ${slug}.md`,
-      s3: `s3://wikillm/tenants/acme/users/u-1042/wiki/saved/${slug}.md`,
+      s3: `wiki/saved/${slug}.md`,
       source: 'personal',
       updated: 'just now',
       author: 'you · via assistant',

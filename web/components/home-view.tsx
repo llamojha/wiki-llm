@@ -9,17 +9,19 @@ type HomeViewProps = {
   onAskPrompt: (prompt: string, opts?: { createPage?: boolean }) => void;
   prompts: string[];
   setPrompts: (next: string[]) => void;
+  docCount?: number;
+  wikiCount?: number;
 };
 
 type Activity = { kind: 'index' | 'gen' | 'edit' | 'share'; text: ReactNode; time: string };
 
-export function HomeView({ onOpen, onAsk, onAskPrompt, prompts, setPrompts }: HomeViewProps) {
+export function HomeView({ onOpen, onAsk, onAskPrompt, prompts, setPrompts, docCount = 0, wikiCount = 0 }: HomeViewProps) {
   const recentDocs: { id: string; title: string; path: string; source: string; updated: string }[] = [];
   const stats = [
-    { label: 'Indexed docs', value: '1,284', sub: 'across 3 spaces' },
-    { label: 'You authored', value: '47', sub: '12 shared, 35 personal' },
-    { label: 'Index lag', value: '12s', sub: 'healthy' },
-    { label: 'Searches today', value: '328', sub: '+18% wow' },
+    { label: 'Indexed docs', value: String(docCount), sub: 'in vault' },
+    { label: 'You authored', value: String(wikiCount), sub: 'in wiki/' },
+    { label: 'Storage', value: 'S3', sub: 'source of truth' },
+    { label: 'Search', value: 'Fuse.js', sub: 'in-memory' },
   ];
   const askPrompts = prompts;
   const updatePromptAt = (i: number, val: string) => {
@@ -34,27 +36,22 @@ export function HomeView({ onOpen, onAsk, onAskPrompt, prompts, setPrompts }: Ho
     setToday(new Date().toDateString());
   }, []);
 
-  const activity: Activity[] = [
-    { kind: 'index', text: <>Indexed <strong>3 new docs</strong> from <code>release-notes</code> pipeline</>, time: '12s ago' },
-    { kind: 'gen', text: <><strong>Search outage 04-19</strong> postmortem auto-generated</>, time: '2h ago' },
-    { kind: 'edit', text: <>You edited <strong>q2-planning.md</strong></>, time: '1d ago' },
-    { kind: 'share', text: <><strong>m.chen</strong> shared <code>billing-service.md</code></>, time: '3d ago' },
-  ];
+  const activity: Activity[] = [];
 
   return <>
     <div className="doc-toolbar">
       <div className="crumbs">
         <span className="crumb current">Home</span>
       </div>
-      <span className="tag-chip">tenant: acme</span>
+      <span className="tag-chip">vaultmark</span>
       <span style={{ flex: 1 }}></span>
       <span style={{ color: 'var(--fg-3)', fontSize: 11.5, fontFamily: 'var(--font-mono)' }}>{today}</span>
     </div>
     <div style={{ padding: '32px 28px 60px', maxWidth: 1180, margin: '0 auto', width: '100%' }}>
       <div style={{ marginBottom: 28 }}>
-        <div style={{ fontSize: 12, color: 'var(--fg-2)', marginBottom: 6, fontFamily: 'var(--font-mono)' }}>Wednesday afternoon, you</div>
+        <div style={{ fontSize: 12, color: 'var(--fg-2)', marginBottom: 6, fontFamily: 'var(--font-mono)' }}>{today || '\u00A0'}</div>
         <h1 style={{ fontSize: 30, fontWeight: 600, letterSpacing: '-0.018em', margin: 0, color: 'var(--fg)' }}>Welcome back.</h1>
-        <p style={{ color: 'var(--fg-2)', fontSize: 14, marginTop: 6 }}>1,284 documents are indexed and ready. Three new runbooks landed since yesterday.</p>
+        <p style={{ color: 'var(--fg-2)', fontSize: 14, marginTop: 6 }}>{docCount} documents indexed and ready.</p>
       </div>
 
       {/* Hero ask-the-wiki card */}

@@ -18,6 +18,15 @@ import { TopBar } from './top-bar';
 
 const HOME_IDS = new Set(['__home', '__recent', '__starred']);
 
+function countTreeDocs(nodes: ApiTreeNode[]): number {
+  let count = 0;
+  for (const n of nodes) {
+    if (n.type === 'doc') count++;
+    else if (n.type === 'folder') count += countTreeDocs(n.children);
+  }
+  return count;
+}
+
 const DEFAULT_PROMPTS = [
   "What's the on-call paging procedure?",
   'How does indexing handle S3 events?',
@@ -52,8 +61,8 @@ function buildGeneratedDocFromPrompt(prompt: string): { id: string; doc: Generat
   const answer = `Here's a synthesized overview of **${title.toLowerCase()}**, drawn from the docs your team has indexed.\n\nThis page was generated from a prompt and stitches together the most relevant passages found across the wiki. Edit it freely — your changes won't affect the original sources.`;
   const doc: GeneratedDoc = {
     title,
-    path: `personal / generated / ${slug}.md`,
-    s3: `s3://wikillm/tenants/acme/users/u-1042/wiki/generated/${slug}.md`,
+    path: `generated / ${slug}.md`,
+    s3: `generated/${slug}.md`,
     source: 'personal',
     updated: 'just now',
     author: 'you · via assistant',
@@ -284,6 +293,8 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
             prompts={prompts}
             setPrompts={setPrompts}
             onAskPrompt={handleAskPrompt}
+            docCount={countTreeDocs(initialTree)}
+            wikiCount={countTreeDocs(initialTree.filter(n => n.type === 'folder' && n.name.toLowerCase() === 'wiki'))}
           />
         ) : docLoading ? (
           <div className="empty-state">
