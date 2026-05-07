@@ -38,6 +38,7 @@ s3://<bucket>/<vault-prefix>/
 | MVP 1 | Phase 3 | Feed raw docs through Bedrock ingest, get structured pages |
 | MVP 2 | Phase 4 + 5 | Full personal wiki CRUD + ask-wiki agent |
 | SaaS | Phase 6 | Multi-tenant hosted product |
+| Multimodal | Phase 7 | Voice chat, generated images/infographics, document podcasts |
 
 ## Architecture note (post-Phase 2 pivot)
 
@@ -179,6 +180,22 @@ Only after MVP 2 has been used in anger.
 - Admin dashboard, billing, audit logs, tenant isolation
 
 **Acceptance:** see `specs/phase-6-saas.md`
+
+### Phase 7 — Multimodal & Audio (deferred)
+
+Only after MVP 2 is stable. Exploratory — scope will be refined when Phase 5 ships.
+
+- [ ] STT input for chat: browser Web Speech API or Amazon Transcribe; voice → text before hitting `/api/chat`
+- [ ] TTS output for chat: Amazon Polly neural voices; stream audio response alongside text
+- [ ] Image/infographic generation in ingest pipeline: Bedrock Titan Image Generator; output to `assets/`, embed in generated Markdown
+- [ ] Document-to-podcast: long-form TTS over document content (single or multi-voice); audio stored in `assets/`; playable from doc toolbar
+- [ ] Podcast script generation: LLM rewrites document into conversational script before TTS pass
+
+**Dependencies:** Phase 5 (chat agent) must be complete for STT/TTS. Phase 3 (ingest) must be complete for image generation. Podcast builds on both.
+
+**AWS services:** Amazon Polly (TTS), Amazon Transcribe (STT), Bedrock Titan Image Generator (images).
+
+**Acceptance:** TBD — spec written when this phase is activated.
 
 ## Out of scope (forever, or until reconsidered)
 
