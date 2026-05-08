@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getDoc, type ApiDoc, type ApiTreeNode } from '@/lib/api';
+import { getDoc, getTree, type ApiDoc, type ApiTreeNode } from '@/lib/api';
 import { ICONS } from '@/lib/icons';
 import { renderMarkdown } from '@/lib/markdown';
 import { type Doc, type GeneratedDoc, type LiveDoc, type SanitizedHtml, type Scope } from '@/lib/types';
@@ -113,6 +113,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
   const [generatedDocs, setGeneratedDocs] = useState<Record<string, GeneratedDoc>>({});
   const [liveDoc, setLiveDoc] = useState<LiveDoc | null>(null);
   const [docLoading, setDocLoading] = useState(false);
+  const [tree, setTree] = useState<ApiTreeNode[]>(initialTree);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -254,6 +255,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
   const handleEditorSave = (title: string, docId?: string) => {
     setEditing(false);
     showToast(`Saved "${title}" to your wiki`);
+    getTree().then(setTree).catch(() => showToast('Failed to refresh sidebar'));
     if (docId) {
       openDoc(docId);
     }
@@ -274,7 +276,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
         activeId={activeId}
         onOpen={openDoc}
         onNewPage={onNewPage}
-        apiTree={initialTree}
+        apiTree={tree}
       />
       <main className="main">
         {editing ? (
@@ -293,8 +295,8 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
             prompts={prompts}
             setPrompts={setPrompts}
             onAskPrompt={handleAskPrompt}
-            docCount={countTreeDocs(initialTree)}
-            wikiCount={countTreeDocs(initialTree.filter(n => n.type === 'folder' && n.name.toLowerCase() === 'wiki'))}
+            docCount={countTreeDocs(tree)}
+            wikiCount={countTreeDocs(tree.filter(n => n.type === 'folder' && n.name.toLowerCase() === 'wiki'))}
           />
         ) : docLoading ? (
           <div className="empty-state">
@@ -309,6 +311,9 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
             docId={activeId}
             onAskInChat={() => setChatOpen(true)}
             onEdit={() => setEditing(true)}
+            onStarToggle={(starred, etag) => {
+              if (liveDoc) setLiveDoc({ ...liveDoc, starred, etag });
+            }}
           />
         ) : (
           <div className="empty-state">

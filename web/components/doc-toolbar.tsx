@@ -9,13 +9,14 @@ type DocToolbarProps = {
   docId?: string;
   onAskInChat: () => void;
   onEdit: () => void;
+  onStarToggle?: (starred: boolean, etag: string) => void;
 };
 
 function isLiveDoc(doc: Doc): doc is LiveDoc {
   return !doc.generated && 'kind' in doc;
 }
 
-export function DocToolbar({ doc, docId, onAskInChat, onEdit }: DocToolbarProps) {
+export function DocToolbar({ doc, docId, onAskInChat, onEdit, onStarToggle }: DocToolbarProps) {
   const live = isLiveDoc(doc) ? doc : null;
   const [starred, setStarred] = useState(live?.starred ?? false);
 
@@ -25,6 +26,8 @@ export function DocToolbar({ doc, docId, onAskInChat, onEdit }: DocToolbarProps)
 
   const toggleStar = async () => {
     if (!docId) return;
+    const prev = starred;
+    setStarred(!prev);
     try {
       const res = await fetch(`/api/docs/${encodeURIComponent(docId)}`, {
         method: 'PATCH',
@@ -32,9 +35,12 @@ export function DocToolbar({ doc, docId, onAskInChat, onEdit }: DocToolbarProps)
       if (res.ok) {
         const data = await res.json();
         setStarred(data.starred);
+        if (onStarToggle) onStarToggle(data.starred, data.etag);
+      } else {
+        setStarred(prev);
       }
     } catch {
-      // silently fail
+      setStarred(prev);
     }
   };
 

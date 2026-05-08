@@ -35,11 +35,11 @@ export function Editor({ doc, docId, etag, onClose, onSave, showToast }: EditorP
 
     try {
       if (docId && !docId.startsWith('__')) {
-        // Update existing doc
+        // Update existing doc — server syncs title into frontmatter
         const res = await fetch(`/api/docs/${encodeURIComponent(docId)}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ body, etag }),
+          body: JSON.stringify({ body, title, etag }),
         });
 
         if (res.status === 409) {

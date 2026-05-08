@@ -82,14 +82,14 @@ export async function getObjectWithETag(
   return { content, etag };
 }
 
-/** Write an object to S3. If ifMatch is provided, uses optimistic concurrency. */
+/** Write an object to S3. If ifMatch is provided, uses optimistic concurrency. Returns the new ETag. */
 export async function putObject(
   relKey: string,
   body: string,
   ifMatch?: string,
-): Promise<void> {
+): Promise<string> {
   try {
-    await client().send(
+    const res = await client().send(
       new PutObjectCommand({
         Bucket: bucket,
         Key: fullKey(relKey),
@@ -98,6 +98,8 @@ export async function putObject(
         ...(ifMatch ? { IfMatch: ifMatch } : {}),
       }),
     );
+    if (!res.ETag) throw new Error('S3 PutObject did not return an ETag');
+    return res.ETag;
   } catch (err: unknown) {
     const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
     if (e.name === 'PreconditionFailed' || e.$metadata?.httpStatusCode === 412) {

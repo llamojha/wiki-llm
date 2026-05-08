@@ -63,9 +63,10 @@ export async function GET(_req: Request, { params }: Params) {
 export async function PUT(req: Request, { params }: Params) {
   const { id } = await params;
   const key = decodeURIComponent(id.join('/'));
-  const { body: content, etag } = (await req.json()) as {
+  const { body: content, etag, title } = (await req.json()) as {
     body: string;
     etag?: string;
+    title?: string;
   };
 
   if (!content) {
@@ -77,6 +78,7 @@ export async function PUT(req: Request, { params }: Params) {
 
   // Parse incoming content and ensure frontmatter is preserved with updated timestamp
   const { data: fm, content: mdBody } = matter(content);
+  if (title) fm.title = title;
   fm.updated = new Date().toISOString();
   const assembled = matter.stringify(mdBody, fm);
 
@@ -92,11 +94,11 @@ export async function PUT(req: Request, { params }: Params) {
     throw err;
   }
 
-  const title = (fm.title as string) || keyToTitle(key);
-  await appendLog('edited', key, title);
+  const logTitle = (fm.title as string) || keyToTitle(key);
+  await appendLog('edited', key, logTitle);
   invalidateSearchIndex();
 
-  return NextResponse.json({ id: key, title });
+  return NextResponse.json({ id: key, title: logTitle });
 }
 
 export async function DELETE(_req: Request, { params }: Params) {
@@ -127,8 +129,11 @@ export async function PATCH(req: Request, { params }: Params) {
 
   // Check if this is a star toggle (action=star query param or default PATCH behavior)
   let raw: string;
+  let etag: string;
   try {
-    raw = await getObject(key);
+    const result = await getObjectWithETag(key);
+    raw = result.content;
+    etag = result.etag;
   } catch {
     return NextResponse.json(
       { detail: `Document not found: ${key}` },
@@ -141,7 +146,18 @@ export async function PATCH(req: Request, { params }: Params) {
   fm.starred = starred;
 
   const updated = matter.stringify(content, fm);
-  await putObject(key, updated);
+  let newEtag: string;
+  try {
+    newEtag = await putObject(key, updated, etag);
+  } catch (err) {
+    if (err instanceof ConcurrencyError) {
+      return NextResponse.json(
+        { detail: 'Conflict: document was modified. Retry.' },
+        { status: 409 },
+      );
+    }
+    throw err;
+  }
 
-  return NextResponse.json({ id: key, starred });
+  return NextResponse.json({ id: key, starred, etag: newEtag });
 }

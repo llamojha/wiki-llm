@@ -9,20 +9,21 @@ type DocReaderProps = {
   docId?: string;
   onAskInChat: () => void;
   onEdit: () => void;
+  onStarToggle?: (starred: boolean, etag: string) => void;
 };
 
 function isLiveDoc(doc: Doc): doc is LiveDoc {
   return !doc.generated && 'kind' in doc;
 }
 
-export function DocReader({ doc, docId, onAskInChat, onEdit }: DocReaderProps) {
+export function DocReader({ doc, docId, onAskInChat, onEdit, onStarToggle }: DocReaderProps) {
   if (doc.generated) {
     return <GeneratedDocReader doc={doc} onEdit={onEdit}/>;
   }
   const liveDoc = isLiveDoc(doc) ? doc : null;
 
   return <>
-    <DocToolbar doc={doc} docId={docId} onAskInChat={onAskInChat} onEdit={onEdit}/>
+    <DocToolbar doc={doc} docId={docId} onAskInChat={onAskInChat} onEdit={onEdit} onStarToggle={onStarToggle}/>
     <div className="doc-wrap">
       <article className="doc">
         <div className="doc-meta">
