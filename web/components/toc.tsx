@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { BodyKey, Doc } from '@/lib/mock/data';
+import type { BodyKey, Doc } from '@/lib/types';
 
 type TocItem = { id: string; label: string; h3?: boolean };
 

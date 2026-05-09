@@ -75,6 +75,8 @@ export type LiveDoc = {
   tags: string[];
   checksum: string;
   _html: SanitizedHtml;
+  etag?: string;
+  starred?: boolean;
 };
 
 /**

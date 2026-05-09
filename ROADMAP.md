@@ -38,6 +38,7 @@ s3://<bucket>/<vault-prefix>/
 | MVP 1 | Phase 3 | Feed raw docs through Bedrock ingest, get structured pages |
 | MVP 2 | Phase 4 + 5 | Full personal wiki CRUD + ask-wiki agent |
 | SaaS | Phase 6 | Multi-tenant hosted product |
+| Multimodal | Phase 7 | Voice chat, generated images/infographics, document podcasts |
 
 ## Architecture note (post-Phase 2 pivot)
 
@@ -143,6 +144,9 @@ User-facing write path via Next.js Route Handlers.
 - [ ] Wire Editor component to real write endpoints (replace mock)
 - [ ] Sanitization audit, document allowed tags
 - [ ] No tags — search indexing handles discoverability
+- [ ] Per-page URLs: `/[...id]` catch-all route mirroring S3 keys for deep-linking and bookmarking
+- [ ] Starred documents: `starred` frontmatter field, star/unstar UI, filtered view
+- [ ] Mock audit: verify all `web/lib/mock/` usage is replaced by real data paths; remove mock imports from production code
 
 **Acceptance:** see `specs/phase-4-personal-wiki-crud.md`
 
@@ -177,6 +181,22 @@ Only after MVP 2 has been used in anger.
 
 **Acceptance:** see `specs/phase-6-saas.md`
 
+### Phase 7 — Multimodal & Audio (deferred)
+
+Only after MVP 2 is stable. Exploratory — scope will be refined when Phase 5 ships.
+
+- [ ] STT input for chat: browser Web Speech API or Amazon Transcribe; voice → text before hitting `/api/chat`
+- [ ] TTS output for chat: Amazon Polly neural voices; stream audio response alongside text
+- [ ] Image/infographic generation in ingest pipeline: Bedrock Titan Image Generator; output to `assets/`, embed in generated Markdown
+- [ ] Document-to-podcast: long-form TTS over document content (single or multi-voice); audio stored in `assets/`; playable from doc toolbar
+- [ ] Podcast script generation: LLM rewrites document into conversational script before TTS pass
+
+**Dependencies:** Phase 5 (chat agent) must be complete for STT/TTS. Phase 3 (ingest) must be complete for image generation. Podcast builds on both.
+
+**AWS services:** Amazon Polly (TTS), Amazon Transcribe (STT), Bedrock Titan Image Generator (images).
+
+**Acceptance:** TBD — spec written when this phase is activated.
+
 ## Out of scope (forever, or until reconsidered)
 
 - Real-time collaborative editing
@@ -185,6 +205,20 @@ Only after MVP 2 has been used in anger.
 - Multi-agent orchestration
 - PDF / DOCX ingestion
 - Public publishing workflow
+
+## Mock UI features ahead of current phases
+
+The `portal/` prototype (now ported to `web/`) includes UI for features that don't ship until later phases. These are intentionally mock-only until their phase lands:
+
+| Mock feature | Ships in | Notes |
+|---|---|---|
+| Shared/Personal scope toggle | Phase 6 (SaaS) | Multi-tenant concept; single-user MVP has no scope distinction |
+| Scope-aware sidebar filtering | Phase 6 (SaaS) | Requires tenant + user isolation |
+| Star button (doc toolbar) | Phase 4 | Stored as `starred: true` in frontmatter |
+| Starred docs filter | Phase 4 | Home view + sidebar filtered list |
+| Per-page URLs (deep-linking) | Phase 4 | Currently state-driven SPA; Phase 4 adds `/[...id]` catch-all mirroring S3 keys |
+
+Until their phase ships, these features render in the UI but are non-functional or backed by mock data.
 
 ## Where the legacy fits
 

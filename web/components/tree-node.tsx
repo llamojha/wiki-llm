@@ -1,5 +1,5 @@
 import { ICONS } from '@/lib/icons';
-import type { TreeNode as TreeNodeData } from '@/lib/mock/data';
+import type { TreeNode as TreeNodeData } from '@/lib/types';
 
 type TreeNodeProps = {
   node: TreeNodeData;

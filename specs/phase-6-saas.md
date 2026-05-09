@@ -25,3 +25,5 @@ Add multi-tenancy, authentication (Keycloak/OIDC), tenant-isolated storage, scal
 7. Audit logs capture all write operations and access events per tenant.
 8. Tenant isolation is verified: one tenant cannot read, write, or search another tenant's data.
 9. Zero-downtime deployments for the web and API layers.
+10. Shared/personal scope toggle in the sidebar — users can switch between team-shared content and their personal wiki within the same tenant.
+11. Scope-aware filtering: sidebar tree, search results, and home view respect the active scope selection.

@@ -1,10 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getDoc, type ApiDoc, type ApiTreeNode } from '@/lib/api';
+import { getDoc, getTree, type ApiDoc, type ApiTreeNode } from '@/lib/api';
 import { ICONS } from '@/lib/icons';
 import { renderMarkdown } from '@/lib/markdown';
-import { type Doc, type GeneratedDoc, type LiveDoc, type SanitizedHtml, type Scope } from '@/lib/mock/data';
+import { type Doc, type GeneratedDoc, type LiveDoc, type SanitizedHtml, type Scope } from '@/lib/types';
 import { DEFAULT_THEME, THEME_STORAGE_KEY, type Theme } from '@/lib/theme';
 import { ChatFab } from './chat-fab';
 import { ChatPanel } from './chat-panel';
@@ -17,6 +17,15 @@ import { ToastStack } from './toast-stack';
 import { TopBar } from './top-bar';
 
 const HOME_IDS = new Set(['__home', '__recent', '__starred']);
+
+function countTreeDocs(nodes: ApiTreeNode[]): number {
+  let count = 0;
+  for (const n of nodes) {
+    if (n.type === 'doc') count++;
+    else if (n.type === 'folder') count += countTreeDocs(n.children);
+  }
+  return count;
+}
 
 const DEFAULT_PROMPTS = [
   "What's the on-call paging procedure?",
@@ -52,8 +61,8 @@ function buildGeneratedDocFromPrompt(prompt: string): { id: string; doc: Generat
   const answer = `Here's a synthesized overview of **${title.toLowerCase()}**, drawn from the docs your team has indexed.\n\nThis page was generated from a prompt and stitches together the most relevant passages found across the wiki. Edit it freely — your changes won't affect the original sources.`;
   const doc: GeneratedDoc = {
     title,
-    path: `personal / generated / ${slug}.md`,
-    s3: `s3://wikillm/tenants/acme/users/u-1042/wiki/generated/${slug}.md`,
+    path: `generated / ${slug}.md`,
+    s3: `generated/${slug}.md`,
     source: 'personal',
     updated: 'just now',
     author: 'you · via assistant',
@@ -81,16 +90,20 @@ function apiDocToDoc(api: ApiDoc, html: SanitizedHtml): LiveDoc {
     tags: api.tags,
     checksum: api.checksum,
     _html: html,
+    etag: api.etag,
+    starred: api.starred,
+    raw_markdown: api.raw_markdown,
   };
 }
 
 type AppShellProps = {
   initialTree: ApiTreeNode[];
+  initialDocId?: string;
 };
 
-export function AppShell({ initialTree }: AppShellProps) {
+export function AppShell({ initialTree, initialDocId }: AppShellProps) {
   const [scope, setScope] = useState<Scope>('shared');
-  const [activeId, setActiveId] = useState<string>('__home');
+  const [activeId, setActiveId] = useState<string>(initialDocId ?? '__home');
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -98,15 +111,30 @@ export function AppShell({ initialTree }: AppShellProps) {
   const [theme, setThemeState] = useState<Theme>(DEFAULT_THEME);
   const [prompts, setPrompts] = useState<string[]>(DEFAULT_PROMPTS);
   const [generatedDocs, setGeneratedDocs] = useState<Record<string, GeneratedDoc>>({});
-  // Live docs fetched from API
   const [liveDoc, setLiveDoc] = useState<LiveDoc | null>(null);
   const [docLoading, setDocLoading] = useState(false);
+  const [tree, setTree] = useState<ApiTreeNode[]>(initialTree);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const initial = (document.documentElement.dataset.theme as Theme | undefined) ?? DEFAULT_THEME;
     setThemeState(initial);
   }, []);
+
+  // Load the initial doc if navigated to via URL
+  useEffect(() => {
+    if (initialDocId && !HOME_IDS.has(initialDocId) && !initialDocId.startsWith('__')) {
+      setDocLoading(true);
+      getDoc(initialDocId)
+        .then(async (api) => {
+          const html = await renderMarkdown(api.raw_markdown);
+          setLiveDoc(apiDocToDoc(api, html));
+        })
+        .catch(() => showToast('Failed to load document'))
+        .finally(() => setDocLoading(false));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialDocId]);
 
   const setTheme = (t: Theme) => {
     setThemeState(t);
@@ -130,26 +158,61 @@ export function AppShell({ initialTree }: AppShellProps) {
     };
   }, []);
 
+  // Sync activeId/liveDoc when browser Back/Forward changes the URL
+  useEffect(() => {
+    const onPopState = () => {
+      const path = window.location.pathname.replace(/^\//, '');
+      if (!path) {
+        setActiveId('__home');
+        setLiveDoc(null);
+        setEditing(false);
+        return;
+      }
+      const docId = decodeURIComponent(path);
+      setActiveId(docId);
+      setEditing(false);
+      setDocLoading(true);
+      setLiveDoc(null);
+      getDoc(docId)
+        .then(async (api) => {
+          const html = await renderMarkdown(api.raw_markdown);
+          setLiveDoc(apiDocToDoc(api, html));
+        })
+        .catch(() => showToast('Failed to load document'))
+        .finally(() => setDocLoading(false));
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [showToast]);
+
   const openDoc = useCallback(
     (id: string) => {
+      if (HOME_IDS.has(id)) {
+        setActiveId(id);
+        setLiveDoc(null);
+        setEditing(false);
+        window.history.pushState(null, '', '/');
+        return;
+      }
       if (id.startsWith('__')) {
         setActiveId(id);
         setLiveDoc(null);
         setEditing(false);
         return;
       }
-      // Generated docs stay local
+      // Generated docs stay local (no URL)
       if (generatedDocs[id]) {
         setActiveId(id);
         setLiveDoc(null);
         setEditing(false);
         return;
       }
-      // Real doc — fetch from API
+      // Real doc — update URL and fetch client-side
       setActiveId(id);
       setEditing(false);
       setDocLoading(true);
       setLiveDoc(null);
+      window.history.pushState(null, '', `/${id}`);
       getDoc(id)
         .then(async (api) => {
           const html = await renderMarkdown(api.raw_markdown);
@@ -186,7 +249,6 @@ export function AppShell({ initialTree }: AppShellProps) {
   }, [paletteOpen]);
 
   const generatedDoc = generatedDocs[activeId];
-  // doc for Editor/Chat context: prefer live API doc, fall back to generated
   const doc: Doc | undefined = liveDoc ?? generatedDoc;
 
   const generateFromPrompt = (prompt: string): string => {
@@ -217,9 +279,13 @@ export function AppShell({ initialTree }: AppShellProps) {
     showToast(`Saved "${page.title}" to your wiki`);
   };
 
-  const handleEditorSave = (title: string) => {
+  const handleEditorSave = (title: string, docId?: string) => {
     setEditing(false);
     showToast(`Saved "${title}" to your wiki`);
+    getTree().then(setTree).catch(() => showToast('Failed to refresh sidebar'));
+    if (docId) {
+      openDoc(docId);
+    }
   };
 
   return (
@@ -237,14 +303,17 @@ export function AppShell({ initialTree }: AppShellProps) {
         activeId={activeId}
         onOpen={openDoc}
         onNewPage={onNewPage}
-        apiTree={initialTree}
+        apiTree={tree}
       />
       <main className="main">
         {editing ? (
           <Editor
             doc={doc}
+            docId={activeId !== '__new' ? activeId : undefined}
+            etag={liveDoc?.etag}
             onClose={() => setEditing(false)}
-            onSave={(title) => handleEditorSave(title)}
+            onSave={handleEditorSave}
+            showToast={showToast}
           />
         ) : HOME_IDS.has(activeId) ? (
           <HomeView
@@ -253,6 +322,8 @@ export function AppShell({ initialTree }: AppShellProps) {
             prompts={prompts}
             setPrompts={setPrompts}
             onAskPrompt={handleAskPrompt}
+            docCount={countTreeDocs(tree)}
+            wikiCount={countTreeDocs(tree.filter(n => n.type === 'folder' && n.name.toLowerCase() === 'wiki'))}
           />
         ) : docLoading ? (
           <div className="empty-state">
@@ -264,8 +335,12 @@ export function AppShell({ initialTree }: AppShellProps) {
         ) : doc ? (
           <DocReader
             doc={doc}
+            docId={activeId}
             onAskInChat={() => setChatOpen(true)}
             onEdit={() => setEditing(true)}
+            onStarToggle={(starred, etag) => {
+              if (liveDoc) setLiveDoc({ ...liveDoc, starred, etag });
+            }}
           />
         ) : (
           <div className="empty-state">

@@ -1,6 +1,6 @@
 import { Fragment } from 'react';
 import { ICONS } from '@/lib/icons';
-import type { GeneratedDoc } from '@/lib/mock/data';
+import type { GeneratedDoc } from '@/lib/types';
 
 type GeneratedDocReaderProps = {
   doc: GeneratedDoc;

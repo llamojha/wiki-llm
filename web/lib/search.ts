@@ -78,3 +78,8 @@ export async function search(q: string, limit = 20): Promise<SearchResult[]> {
     .search(q, { limit })
     .map((r) => ({ ...r.item, rank: 1 - (r.score ?? 0) }));
 }
+
+/** Clear the cached search index so it rebuilds on next search request. */
+export function invalidateSearchIndex(): void {
+  _promise = null;
+}

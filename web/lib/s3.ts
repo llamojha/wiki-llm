@@ -1,6 +1,8 @@
 import {
+  DeleteObjectCommand,
   GetObjectCommand,
   ListObjectsV2Command,
+  PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
 
@@ -59,4 +61,57 @@ export async function getObject(relKey: string): Promise<string> {
     new GetObjectCommand({ Bucket: bucket, Key: fullKey(relKey) }),
   );
   return (await res.Body?.transformToString('utf-8')) ?? '';
+}
+
+export class ConcurrencyError extends Error {
+  constructor(message = 'PreconditionFailed') {
+    super(message);
+    this.name = 'ConcurrencyError';
+  }
+}
+
+/** Fetch object content and its ETag for optimistic concurrency. */
+export async function getObjectWithETag(
+  relKey: string,
+): Promise<{ content: string; etag: string }> {
+  const res = await client().send(
+    new GetObjectCommand({ Bucket: bucket, Key: fullKey(relKey) }),
+  );
+  const content = (await res.Body?.transformToString('utf-8')) ?? '';
+  const etag = res.ETag ?? '';
+  return { content, etag };
+}
+
+/** Write an object to S3. If ifMatch is provided, uses optimistic concurrency. Returns the new ETag. */
+export async function putObject(
+  relKey: string,
+  body: string,
+  ifMatch?: string,
+): Promise<string> {
+  try {
+    const res = await client().send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: fullKey(relKey),
+        Body: body,
+        ContentType: 'text/markdown; charset=utf-8',
+        ...(ifMatch ? { IfMatch: ifMatch } : {}),
+      }),
+    );
+    if (!res.ETag) throw new Error('S3 PutObject did not return an ETag');
+    return res.ETag;
+  } catch (err: unknown) {
+    const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
+    if (e.name === 'PreconditionFailed' || e.$metadata?.httpStatusCode === 412) {
+      throw new ConcurrencyError();
+    }
+    throw err;
+  }
+}
+
+/** Delete an object from S3. */
+export async function deleteObject(relKey: string): Promise<void> {
+  await client().send(
+    new DeleteObjectCommand({ Bucket: bucket, Key: fullKey(relKey) }),
+  );
 }

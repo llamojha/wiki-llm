@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ICONS } from '@/lib/icons';
 import { CANNED_REPLIES, DEFAULT_REPLY, SUGGESTIONS } from '@/lib/canned-replies';
-import type { Cite, Doc, GeneratedDoc } from '@/lib/mock/data';
+import type { Cite, Doc, GeneratedDoc } from '@/lib/types';
 
 type Message = {
   role: 'user' | 'assistant';
@@ -73,7 +73,7 @@ export function ChatPanel({ open, onClose, onOpenDoc, onSavePage, contextDoc }: 
     onSavePage({
       title,
       path: `personal / saved / ${slug}.md`,
-      s3: `s3://wikillm/tenants/acme/users/u-1042/wiki/saved/${slug}.md`,
+      s3: `wiki/saved/${slug}.md`,
       source: 'personal',
       updated: 'just now',
       author: 'you · via assistant',

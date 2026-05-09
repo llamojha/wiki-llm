@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { type ApiTreeNode } from '@/lib/api';
 import { ICONS } from '@/lib/icons';
-import { PERSONAL_TREE, SHARED_TREE, type Scope } from '@/lib/mock/data';
+import { type Scope, type TreeNode as TreeNodeType } from '@/lib/types';
 import { TreeNode } from './tree-node';
 
 type SidebarProps = {
@@ -24,18 +24,44 @@ const DEFAULT_OPEN_FOLDERS = new Set([
   'me/learning',
 ]);
 
-function apiTreeToMock(nodes: ApiTreeNode[]): import('@/lib/mock/data').TreeNode[] {
+function apiTreeToLocal(nodes: ApiTreeNode[]): TreeNodeType[] {
   return nodes.map((n) => {
     if (n.type === 'folder') {
-      return { id: n.id, type: 'folder' as const, name: n.name, children: apiTreeToMock(n.children) };
+      return { id: n.id, type: 'folder' as const, name: n.name, children: apiTreeToLocal(n.children) };
     }
     return { id: n.id, type: 'doc' as const, name: n.name };
   });
 }
 
+function countDocs(nodes: TreeNodeType[]): number {
+  let count = 0;
+  for (const n of nodes) {
+    if (n.type === 'doc') count++;
+    else if (n.type === 'folder') count += countDocs(n.children);
+  }
+  return count;
+}
+
+function filterByScope(nodes: TreeNodeType[], scope: Scope): TreeNodeType[] {
+  if (scope === 'personal') {
+    // Show only wiki/ folder contents (user-authored)
+    const wikiFolder = nodes.find(
+      (n) => n.type === 'folder' && (n.name.toLowerCase() === 'wiki' || n.id === 'folder:wiki'),
+    );
+    if (wikiFolder && wikiFolder.type === 'folder') return wikiFolder.children;
+    // If no wiki folder, show docs that start with wiki/
+    return nodes.filter((n) => n.type === 'doc' && n.id.startsWith('wiki/'));
+  }
+  // Shared: show everything except wiki/
+  return nodes.filter(
+    (n) => !(n.type === 'folder' && (n.name.toLowerCase() === 'wiki' || n.id === 'folder:wiki'))
+      && !(n.type === 'doc' && n.id.startsWith('wiki/')),
+  );
+}
+
 export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, apiTree }: SidebarProps) {
-  const mockTree = scope === 'shared' ? SHARED_TREE : PERSONAL_TREE;
-  const tree = apiTree && apiTree.length > 0 ? apiTreeToMock(apiTree) : mockTree;
+  const fullTree = apiTree && apiTree.length > 0 ? apiTreeToLocal(apiTree) : [];
+  const tree = filterByScope(fullTree, scope);
   const [openFolders, setOpenFolders] = useState<Set<string>>(DEFAULT_OPEN_FOLDERS);
   const toggleFolder = (id: string) => {
     setOpenFolders((prev) => {
@@ -67,7 +93,6 @@ export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, apiTree 
       <button className="nav-row" onClick={() => onOpen('__starred')}>
         <span className="nav-icon">{ICONS.star}</span>
         <span className="nav-label">Starred</span>
-        <span className="nav-meta">7</span>
       </button>
 
       <div className="nav-section">
@@ -84,8 +109,8 @@ export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, apiTree 
       <div className="indexing-status">
         <span className="pulse"></span>
         <div style={{ flex: 1, lineHeight: 1.3 }}>
-          <div style={{ color: 'var(--fg-1)', fontWeight: 500 }}>Indexer healthy</div>
-          <div style={{ fontSize: 10.5, fontFamily: 'var(--font-mono)' }}>1,284 docs · synced 12s ago</div>
+          <div style={{ color: 'var(--fg-1)', fontWeight: 500 }}>Vault connected</div>
+          <div style={{ fontSize: 10.5, fontFamily: 'var(--font-mono)' }}>{countDocs(fullTree)} docs · S3-backed</div>
         </div>
       </div>
     </aside>
