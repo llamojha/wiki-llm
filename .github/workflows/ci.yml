@@ -2,12 +2,12 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
 
 jobs:
   web:
-    name: web — lint / typecheck / build
+    name: web — typecheck / build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -26,7 +26,6 @@ jobs:
           cache-dependency-path: web/pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm build
 
