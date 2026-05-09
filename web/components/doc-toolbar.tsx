@@ -29,7 +29,7 @@ export function DocToolbar({ doc, docId, onAskInChat, onEdit, onStarToggle }: Do
     const prev = starred;
     setStarred(!prev);
     try {
-      const res = await fetch(`/api/docs/${encodeURIComponent(docId)}`, {
+      const res = await fetch(`/api/star/${encodeURIComponent(docId)}`, {
         method: 'PATCH',
       });
       if (res.ok) {

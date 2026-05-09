@@ -158,6 +158,33 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
     };
   }, []);
 
+  // Sync activeId/liveDoc when browser Back/Forward changes the URL
+  useEffect(() => {
+    const onPopState = () => {
+      const path = window.location.pathname.replace(/^\//, '');
+      if (!path) {
+        setActiveId('__home');
+        setLiveDoc(null);
+        setEditing(false);
+        return;
+      }
+      const docId = decodeURIComponent(path);
+      setActiveId(docId);
+      setEditing(false);
+      setDocLoading(true);
+      setLiveDoc(null);
+      getDoc(docId)
+        .then(async (api) => {
+          const html = await renderMarkdown(api.raw_markdown);
+          setLiveDoc(apiDocToDoc(api, html));
+        })
+        .catch(() => showToast('Failed to load document'))
+        .finally(() => setDocLoading(false));
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [showToast]);
+
   const openDoc = useCallback(
     (id: string) => {
       if (HOME_IDS.has(id)) {
