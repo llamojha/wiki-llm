@@ -1,6 +1,6 @@
 import matter from 'gray-matter';
 
-import { getObject, listObjects, listSpaces, putObject } from '@/lib/s3';
+import { getObject, listObjects, listSpaces, putObject } from './s3.js';
 
 function toTitleCase(str: string): string {
   return str.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());

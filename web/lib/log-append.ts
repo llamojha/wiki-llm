@@ -8,7 +8,7 @@ import { getObject, putObject } from '@/lib/s3';
  * Future fix: use S3 conditional writes (IfMatch) with retry on conflict.
  */
 export async function appendLog(
-  action: 'created' | 'edited' | 'deleted',
+  action: 'created' | 'edited' | 'deleted' | 'curated',
   path: string,
   title: string,
 ): Promise<void> {

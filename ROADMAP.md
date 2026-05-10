@@ -178,6 +178,10 @@ Only after MVP 2 has been used in anger.
 - Search backend swap to OpenSearch or Meilisearch
 - RDS Postgres, EKS workers / SQS consumers
 - Admin dashboard, billing, audit logs, tenant isolation
+- Personal space access control: `personal/<user-id>/` routing, per-user index isolation, private space visibility enforcement
+- Multi-tenant index isolation: per-space indexes scoped to tenant, master index excludes personal spaces of other users
+- S3 Event Notifications → Lambda/SQS for event-driven ingest (replace inline trigger from Phase 3)
+- Event-driven ingest: S3 PutObject event on `*/raw/` → triggers ingest automatically (Lambda or background worker). Eliminates need for manual CLI runs or portal trigger buttons. Includes retry logic, dead-letter queue, and status reporting back to the portal.
 
 **Acceptance:** see `specs/phase-6-saas.md`
 

@@ -40,7 +40,6 @@ export function TreeNode({ node, depth, activeId, onOpen, openFolders, toggleFol
             style={{ paddingLeft: 22 }}>
       <span className="nav-icon">{ICONS.doc}</span>
       <span className="nav-label">{node.name}</span>
-      {node.tag === 'generated' && <span className="nav-meta" title="auto-generated">AI</span>}
     </button>
   );
 }

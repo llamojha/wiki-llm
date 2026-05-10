@@ -1,7 +1,7 @@
 import matter from 'gray-matter';
 import { NextResponse } from 'next/server';
 
-import { regenerateIndex } from '@/lib/index-gen';
+import { regenerateMasterIndex, regenerateSpaceIndex } from '@/lib/index-gen';
 import { appendLog } from '@/lib/log-append';
 import {
   ConcurrencyError,
@@ -116,7 +116,11 @@ export async function DELETE(_req: Request, { params }: Params) {
   }
 
   await deleteObject(key);
-  await regenerateIndex();
+  if (key.includes('/')) {
+    const space = key.split('/')[0];
+    await regenerateSpaceIndex(space);
+  }
+  await regenerateMasterIndex();
   await appendLog('deleted', key, title);
   invalidateSearchIndex();
 

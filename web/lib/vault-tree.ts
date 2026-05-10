@@ -6,8 +6,6 @@ export type TreeNode =
   | { type: 'doc'; id: string; name: string }
   | { type: 'folder'; id: string; name: string; children: TreeNode[] };
 
-const SKIP = new Set(['index.md', 'log.md']);
-
 function stemToTitle(stem: string): string {
   return stem
     .replace(/[-_]+/g, ' ')
@@ -19,14 +17,23 @@ function keyToName(key: string): string {
   return stemToTitle(stem);
 }
 
+function shouldSkip(key: string): boolean {
+  // Hide raw/ at any level, index.md and log.md at any level
+  if (key.includes('/raw/')) return true;
+  const filename = key.split('/').pop()!;
+  if (filename === 'index.md' || filename === 'log.md') return true;
+  if (filename.match(/^log-.*\.md$/)) return true;
+  if (filename === '.keep') return true;
+  return false;
+}
+
 function insert(root: TreeNode[], parts: string[], key: string, name: string): void {
   if (parts.length === 1) {
     root.push({ type: 'doc', id: key, name });
     return;
   }
-  const depth = key.split('/').length - parts.length;
-  const folderId = 'folder:' + key.split('/').slice(0, depth + 1).join('/');
   const folderName = parts[0];
+  const folderId = 'folder:' + key.split('/').slice(0, key.split('/').length - parts.length + 1).join('/');
 
   let folder = root.find(
     (n): n is TreeNode & { type: 'folder' } => n.type === 'folder' && n.id === folderId,
@@ -60,7 +67,7 @@ export async function getTree(): Promise<TreeNode[]> {
       const m = line.match(/^\s*[-*]\s+(.+?\.md)/);
       if (m) {
         const key = m[1].trim();
-        if (!SKIP.has(key)) listedKeys.push(key);
+        if (!shouldSkip(key)) listedKeys.push(key);
       }
     }
     indexAvailable = true;
@@ -69,11 +76,11 @@ export async function getTree(): Promise<TreeNode[]> {
   }
 
   if (!indexAvailable) {
-    const allKeys = (await listObjects()).filter((k) => !SKIP.has(k));
+    const allKeys = (await listObjects()).filter((k) => !shouldSkip(k));
     return buildTree(allKeys, names);
   }
 
-  const allKeys = (await listObjects()).filter((k) => !SKIP.has(k));
+  const allKeys = (await listObjects()).filter((k) => !shouldSkip(k));
   const listedSet = new Set(listedKeys);
   const unlisted = allKeys.filter((k) => !listedSet.has(k));
 

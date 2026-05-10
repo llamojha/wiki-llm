@@ -1,7 +1,7 @@
 import matter from 'gray-matter';
 import { NextResponse } from 'next/server';
 
-import { regenerateIndex } from '@/lib/index-gen';
+import { regenerateMasterIndex, regenerateSpaceIndex } from '@/lib/index-gen';
 import { appendLog } from '@/lib/log-append';
 import { getObject, putObject } from '@/lib/s3';
 import { invalidateSearchIndex } from '@/lib/search';
@@ -53,7 +53,11 @@ export async function POST(req: Request) {
 
   const markdown = matter.stringify(content, fm);
   await putObject(key, markdown);
-  await regenerateIndex();
+  if (key.includes('/')) {
+    const space = key.split('/')[0];
+    await regenerateSpaceIndex(space);
+  }
+  await regenerateMasterIndex();
   await appendLog('created', key, title);
   invalidateSearchIndex();
 

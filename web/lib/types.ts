@@ -11,7 +11,6 @@ export type DocLeaf = {
   type: 'doc';
   name: string;
   meta?: string;
-  tag?: 'generated';
 };
 
 export type FolderNode = {
