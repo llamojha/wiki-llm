@@ -15,6 +15,7 @@ import { SearchPalette } from './search-palette';
 import { Sidebar } from './sidebar';
 import { ToastStack } from './toast-stack';
 import { TopBar } from './top-bar';
+import { UploadPanel } from './upload-panel';
 
 const HOME_IDS = new Set(['__home', '__recent', '__starred']);
 
@@ -114,6 +115,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
   const [liveDoc, setLiveDoc] = useState<LiveDoc | null>(null);
   const [docLoading, setDocLoading] = useState(false);
   const [tree, setTree] = useState<ApiTreeNode[]>(initialTree);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -303,6 +305,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
         activeId={activeId}
         onOpen={openDoc}
         onNewPage={onNewPage}
+        onUpload={() => setUploadOpen(true)}
         apiTree={tree}
       />
       <main className="main">
@@ -367,6 +370,14 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
         onOpenDoc={openDoc}
+      />
+
+      <UploadPanel
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        spaces={tree.filter((n) => n.type === 'folder').map((n) => n.name)}
+        onComplete={() => getTree().then(setTree).catch(() => showToast('Failed to refresh sidebar'))}
+        showToast={showToast}
       />
 
       <ToastStack message={toast} />

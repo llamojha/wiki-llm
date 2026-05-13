@@ -12,6 +12,7 @@ type SidebarProps = {
   activeId: string | null;
   onOpen: (id: string) => void;
   onNewPage: () => void;
+  onUpload: () => void;
   apiTree?: ApiTreeNode[];
 };
 
@@ -59,7 +60,7 @@ function filterByScope(nodes: TreeNodeType[], scope: Scope): TreeNodeType[] {
   );
 }
 
-export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, apiTree }: SidebarProps) {
+export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, onUpload, apiTree }: SidebarProps) {
   const fullTree = apiTree && apiTree.length > 0 ? apiTreeToLocal(apiTree) : [];
   const tree = filterByScope(fullTree, scope);
   const [openFolders, setOpenFolders] = useState<Set<string>>(DEFAULT_OPEN_FOLDERS);
@@ -97,6 +98,7 @@ export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, apiTree 
 
       <div className="nav-section">
         <span>{scope === 'shared' ? 'Shared spaces' : 'My pages'}</span>
+        <button onClick={onUpload} title="Upload file">{ICONS.attach}</button>
         <button onClick={onNewPage} title="New page">{ICONS.plus}</button>
       </div>
 

@@ -8,7 +8,7 @@ const SPACE_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
-  const { space, key } = body as { space?: string; key?: string };
+  const { space, key, stream } = body as { space?: string; key?: string; stream?: boolean };
 
   if (!space) {
     return NextResponse.json({ detail: 'space is required' }, { status: 400 });
@@ -37,23 +37,64 @@ export async function POST(req: Request) {
     );
   }
 
-  const results = [];
-  for (const rawKey of keys) {
-    try {
-      const result = await runCuration(space, rawKey);
-      results.push({
-        rawKey,
-        pages: result.pages.map((p) => ({ key: p.key, title: p.title })),
-      });
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      results.push({ rawKey, error: message });
+  // Non-streaming mode (backwards compat)
+  if (!stream) {
+    const results = [];
+    for (const rawKey of keys) {
+      try {
+        const result = await runCuration(space, rawKey);
+        results.push({
+          rawKey,
+          pages: result.pages.map((p) => ({ key: p.key, title: p.title })),
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        results.push({ rawKey, error: message });
+      }
     }
+    await regenerateSpaceIndex(space);
+    await regenerateMasterIndex();
+    return NextResponse.json({ space, results });
   }
 
-  // Regen indexes once at the end
-  await regenerateSpaceIndex(space);
-  await regenerateMasterIndex();
+  // Streaming mode: NDJSON progress
+  const encoder = new TextEncoder();
+  const readable = new ReadableStream({
+    async start(controller) {
+      const total = keys.length;
+      controller.enqueue(encoder.encode(JSON.stringify({ type: 'start', total }) + '\n'));
 
-  return NextResponse.json({ space, results });
+      for (let i = 0; i < keys.length; i++) {
+        const rawKey = keys[i];
+        try {
+          const result = await runCuration(space, rawKey);
+          controller.enqueue(encoder.encode(JSON.stringify({
+            type: 'progress',
+            index: i + 1,
+            total,
+            rawKey,
+            pages: result.pages.map((p) => ({ key: p.key, title: p.title })),
+          }) + '\n'));
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : 'Unknown error';
+          controller.enqueue(encoder.encode(JSON.stringify({
+            type: 'progress',
+            index: i + 1,
+            total,
+            rawKey,
+            error: message,
+          }) + '\n'));
+        }
+      }
+
+      await regenerateSpaceIndex(space);
+      await regenerateMasterIndex();
+      controller.enqueue(encoder.encode(JSON.stringify({ type: 'done' }) + '\n'));
+      controller.close();
+    },
+  });
+
+  return new Response(readable, {
+    headers: { 'Content-Type': 'application/x-ndjson', 'Transfer-Encoding': 'chunked' },
+  });
 }
