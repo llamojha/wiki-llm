@@ -13,6 +13,8 @@ type SidebarProps = {
   onOpen: (id: string) => void;
   onNewPage: () => void;
   onUpload: () => void;
+  onProcessPending: () => void;
+  onReindex: () => void;
   apiTree?: ApiTreeNode[];
 };
 
@@ -60,7 +62,7 @@ function filterByScope(nodes: TreeNodeType[], scope: Scope): TreeNodeType[] {
   );
 }
 
-export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, onUpload, apiTree }: SidebarProps) {
+export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, onUpload, onProcessPending, onReindex, apiTree }: SidebarProps) {
   const fullTree = apiTree && apiTree.length > 0 ? apiTreeToLocal(apiTree) : [];
   const tree = filterByScope(fullTree, scope);
   const [openFolders, setOpenFolders] = useState<Set<string>>(DEFAULT_OPEN_FOLDERS);
@@ -98,7 +100,7 @@ export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, onUpload
 
       <div className="nav-section">
         <span>{scope === 'shared' ? 'Shared spaces' : 'My pages'}</span>
-        <button onClick={onUpload} title="Upload file">{ICONS.attach}</button>
+        <button onClick={onUpload} title="Upload Markdown files">{ICONS.upload}</button>
         <button onClick={onNewPage} title="New page">{ICONS.plus}</button>
       </div>
 
@@ -108,11 +110,23 @@ export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, onUpload
                   openFolders={openFolders} toggleFolder={toggleFolder}/>
       ))}
 
-      <div className="indexing-status">
-        <span className="pulse"></span>
-        <div style={{ flex: 1, lineHeight: 1.3 }}>
-          <div style={{ color: 'var(--fg-1)', fontWeight: 500 }}>Vault connected</div>
-          <div style={{ fontSize: 10.5, fontFamily: 'var(--font-mono)' }}>{countDocs(fullTree)} docs · S3-backed</div>
+      <div className="index-card">
+        <div className="index-card-row">
+          <span className="pulse"></span>
+          <div style={{ flex: 1, lineHeight: 1.3 }}>
+            <div style={{ color: 'var(--fg-1)', fontWeight: 500 }}>Indexer healthy</div>
+            <div style={{ fontSize: 10.5, fontFamily: 'var(--font-mono)', color: 'var(--fg-2)' }}>
+              {countDocs(fullTree)} indexed
+            </div>
+          </div>
+        </div>
+        <div className="index-card-actions">
+          <button className="index-card-btn" onClick={onProcessPending} title="Curate raw files in S3">
+            {ICONS.spark} Process pending
+          </button>
+          <button className="index-card-btn" onClick={onReindex} title="Re-index everything">
+            {ICONS.recent} Re-index
+          </button>
         </div>
       </div>
     </aside>

@@ -7,6 +7,7 @@ type HomeViewProps = {
   onOpen: (id: string) => void;
   onAsk: () => void;
   onAskPrompt: (prompt: string, opts?: { createPage?: boolean }) => void;
+  onUpload: () => void;
   prompts: string[];
   setPrompts: (next: string[]) => void;
   docCount?: number;
@@ -15,7 +16,7 @@ type HomeViewProps = {
 
 type Activity = { kind: 'index' | 'gen' | 'edit' | 'share'; text: ReactNode; time: string };
 
-export function HomeView({ onOpen, onAsk, onAskPrompt, prompts, setPrompts, docCount = 0, wikiCount = 0 }: HomeViewProps) {
+export function HomeView({ onOpen, onAsk, onAskPrompt, onUpload, prompts, setPrompts, docCount = 0, wikiCount = 0 }: HomeViewProps) {
   const recentDocs: { id: string; title: string; path: string; source: string; updated: string }[] = [];
   const stats = [
     { label: 'Indexed docs', value: String(docCount), sub: 'in vault' },
@@ -70,6 +71,22 @@ export function HomeView({ onOpen, onAsk, onAskPrompt, prompts, setPrompts, docC
             <span style={{ color: 'var(--fg-3)' }}>Ask anything about runbooks, services, or your notes…</span>
             <span className="kbd" style={{ marginLeft: 'auto' }}>⌘⇧A</span>
           </button>
+          <div className="ask-hero-secondary">
+            <button className="ask-hero-secondary-btn" onClick={onUpload}>
+              {ICONS.upload}
+              <div>
+                <div className="ash-title">Upload Markdown</div>
+                <div className="ash-sub">Drop .md files — indexed in seconds</div>
+              </div>
+            </button>
+            <button className="ask-hero-secondary-btn" onClick={() => onAskPrompt('Create a wiki page about our deployment process', { createPage: true })}>
+              {ICONS.spark}
+              <div>
+                <div className="ash-title">Generate a page</div>
+                <div className="ash-sub">Start from a prompt, edit after</div>
+              </div>
+            </button>
+          </div>
           <div className="ask-hero-prompts">
             {askPrompts.map((p, i) => {
               const isCreate = /^create a wiki page/i.test(p);

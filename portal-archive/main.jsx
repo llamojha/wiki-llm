@@ -2,7 +2,7 @@
 
 const { useState: uS, useEffect: uE, useMemo: uM, useCallback: uC } = React;
 
-function HomeView({ onOpen, onAsk, onAskPrompt, prompts, setPrompts, onUpload }) {
+function HomeView({ onOpen, onAsk, onAskPrompt, prompts, setPrompts }) {
   const recentDocs = ['doc-prod-incident', 'doc-data-pipeline', 'doc-billing-svc', 'doc-me-q2-planning']
     .map(id => ({ id, ...DOCS[id] }));
   const stats = [
@@ -49,22 +49,6 @@ function HomeView({ onOpen, onAsk, onAskPrompt, prompts, setPrompts, onUpload })
             <span style={{ color: 'var(--fg-3)' }}>Ask anything about runbooks, services, or your notes…</span>
             <span className="kbd" style={{ marginLeft: 'auto' }}>⌘⇧A</span>
           </button>
-          <div className="ask-hero-secondary">
-            <button className="ask-hero-secondary-btn" onClick={onUpload}>
-              {ICONS.upload}
-              <div>
-                <div className="ash-title">Upload Markdown</div>
-                <div className="ash-sub">Drop .md files — indexed in seconds</div>
-              </div>
-            </button>
-            <button className="ask-hero-secondary-btn" onClick={() => onAskPrompt('Create a wiki page about our deployment process', { createPage: true })}>
-              {ICONS.spark}
-              <div>
-                <div className="ash-title">Generate a page</div>
-                <div className="ash-sub">Start from a prompt, edit after</div>
-              </div>
-            </button>
-          </div>
           <div className="ask-hero-prompts">
             {askPrompts.map((p, i) => {
               const isCreate = /^create a wiki page/i.test(p);
@@ -179,8 +163,6 @@ function App() {
   const [chatOpen, setChatOpen] = uS(false);
   const [editing, setEditing] = uS(false);
   const [toast, setToast] = uS(null);
-  const [uploadOpen, setUploadOpen] = uS(false);
-  const [uploadTab, setUploadTab] = uS('upload');
   const [prompts, setPrompts] = uS([
     'What\'s the on-call paging procedure?',
     'How does indexing handle S3 events?',
@@ -274,10 +256,7 @@ function App() {
               setTheme={(v) => setTweak('theme', v)}/>
       <Sidebar scope={scope} setScope={setScope}
                activeId={activeId} onOpen={openDoc}
-               onNewPage={onNewPage}
-               onUpload={() => { setUploadTab('upload'); setUploadOpen(true); }}
-               onProcessPending={() => { setUploadTab('pending'); setUploadOpen(true); }}
-               onReindex={() => { setUploadTab('reindex'); setUploadOpen(true); }}/>
+               onNewPage={onNewPage}/>
       <main className="main">
         {editing ? (
           <Editor doc={doc} onClose={() => setEditing(false)}
@@ -285,7 +264,6 @@ function App() {
         ) : activeId === '__home' || activeId === '__recent' || activeId === '__starred' ? (
           <HomeView onOpen={openDoc}
                     onAsk={() => setChatOpen(true)}
-                    onUpload={() => setUploadOpen(true)}
                     prompts={prompts}
                     setPrompts={setPrompts}
                     onAskPrompt={(p, opts) => {
@@ -342,16 +320,6 @@ function App() {
                      onClose={() => setPaletteOpen(false)}
                      onOpenDoc={openDoc}
                      scope={scope}/>
-
-      {React.createElement(window.UploadModal, {
-        open: uploadOpen,
-        initialTab: uploadTab,
-        onClose: () => setUploadOpen(false),
-        onUploaded: (payload) => {
-          const n = payload.files.length;
-          showToast(`Uploaded ${n} file${n > 1 ? 's' : ''} to ${payload.space}/${payload.subpath}`);
-        }
-      })}
 
       {toast && (
         <div className="toast-stack">

@@ -15,7 +15,7 @@ import { SearchPalette } from './search-palette';
 import { Sidebar } from './sidebar';
 import { ToastStack } from './toast-stack';
 import { TopBar } from './top-bar';
-import { UploadPanel } from './upload-panel';
+import { UploadModal, type LibraryTab } from './upload-modal';
 
 const HOME_IDS = new Set(['__home', '__recent', '__starred']);
 
@@ -116,6 +116,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
   const [docLoading, setDocLoading] = useState(false);
   const [tree, setTree] = useState<ApiTreeNode[]>(initialTree);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadTab, setUploadTab] = useState<LibraryTab>('upload');
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -305,7 +306,9 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
         activeId={activeId}
         onOpen={openDoc}
         onNewPage={onNewPage}
-        onUpload={() => setUploadOpen(true)}
+        onUpload={() => { setUploadTab('upload'); setUploadOpen(true); }}
+        onProcessPending={() => { setUploadTab('pending'); setUploadOpen(true); }}
+        onReindex={() => { setUploadTab('reindex'); setUploadOpen(true); }}
         apiTree={tree}
       />
       <main className="main">
@@ -325,6 +328,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
             prompts={prompts}
             setPrompts={setPrompts}
             onAskPrompt={handleAskPrompt}
+            onUpload={() => { setUploadTab('upload'); setUploadOpen(true); }}
             docCount={countTreeDocs(tree)}
             wikiCount={countTreeDocs(tree.filter(n => n.type === 'folder' && n.name.toLowerCase() === 'wiki'))}
           />
@@ -372,11 +376,12 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
         onOpenDoc={openDoc}
       />
 
-      <UploadPanel
+      <UploadModal
         open={uploadOpen}
-        onClose={() => setUploadOpen(false)}
+        initialTab={uploadTab}
         spaces={tree.filter((n) => n.type === 'folder').map((n) => n.name)}
-        onComplete={() => getTree().then(setTree).catch(() => showToast('Failed to refresh sidebar'))}
+        onClose={() => setUploadOpen(false)}
+        onUploaded={() => getTree().then(setTree).catch(() => showToast('Failed to refresh sidebar'))}
         showToast={showToast}
       />
 
