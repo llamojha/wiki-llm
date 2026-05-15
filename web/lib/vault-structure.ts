@@ -45,3 +45,12 @@ export async function getStructure(): Promise<VaultStructure> {
 export async function putStructure(structure: VaultStructure): Promise<void> {
   await putObject(STRUCTURE_KEY, JSON.stringify(structure, null, 2));
 }
+
+/** Ensure a space exists in structure.json. Adds it if missing. */
+export async function ensureSpaceInStructure(space: string): Promise<void> {
+  const structure = await getStructure();
+  if (structure.spaces.some((s) => s.name === space)) return;
+  const label = space.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  structure.spaces.push({ name: space, label, indexed: true });
+  await putStructure(structure);
+}

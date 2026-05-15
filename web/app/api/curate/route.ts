@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { runCuration } from '@/lib/ingest/run';
 import { regenerateMasterIndex, regenerateSpaceIndex } from '@/lib/index-gen';
 import { listObjects } from '@/lib/s3';
-import { getStructure } from '@/lib/vault-structure';
+import { getStructure, ensureSpaceInStructure } from '@/lib/vault-structure';
 
 const SPACE_RE = /^[a-z0-9][a-z0-9-]*$/;
 
@@ -57,6 +57,9 @@ export async function POST(req: Request) {
     );
   }
 
+  // Ensure all target spaces exist in structure.json
+  for (const s of spaces) { if (s) await ensureSpaceInStructure(s); }
+
   // Non-streaming mode (backwards compat)
   if (!stream) {
     const results = [];
@@ -82,41 +85,47 @@ export async function POST(req: Request) {
   const encoder = new TextEncoder();
   const readable = new ReadableStream({
     async start(controller) {
-      const total = keys.length;
-      controller.enqueue(encoder.encode(JSON.stringify({ type: 'start', total }) + '\n'));
+      try {
+        const total = keys.length;
+        controller.enqueue(encoder.encode(JSON.stringify({ type: 'start', total }) + '\n'));
 
-      for (let i = 0; i < keys.length; i++) {
-        const rawKey = keys[i];
-        const keySpace = space === '__all' ? (rawKey.split('/')[0] === 'raw' ? '' : rawKey.split('/')[0]) : space;
-        try {
-          const result = await runCuration(keySpace || space, rawKey);
-          controller.enqueue(encoder.encode(JSON.stringify({
-            type: 'progress',
-            index: i + 1,
-            total,
-            rawKey,
-            pages: result.pages.map((p) => ({ key: p.key, title: p.title })),
-          }) + '\n'));
-        } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : 'Unknown error';
-          controller.enqueue(encoder.encode(JSON.stringify({
-            type: 'progress',
-            index: i + 1,
-            total,
-            rawKey,
-            error: message,
-          }) + '\n'));
+        for (let i = 0; i < keys.length; i++) {
+          const rawKey = keys[i];
+          const keySpace = space === '__all' ? (rawKey.split('/')[0] === 'raw' ? '' : rawKey.split('/')[0]) : space;
+          try {
+            const result = await runCuration(keySpace || space, rawKey);
+            controller.enqueue(encoder.encode(JSON.stringify({
+              type: 'progress',
+              index: i + 1,
+              total,
+              rawKey,
+              pages: result.pages.map((p) => ({ key: p.key, title: p.title })),
+            }) + '\n'));
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Unknown error';
+            controller.enqueue(encoder.encode(JSON.stringify({
+              type: 'progress',
+              index: i + 1,
+              total,
+              rawKey,
+              error: message,
+            }) + '\n'));
+          }
         }
-      }
 
-      for (const s of spaces) { if (s) await regenerateSpaceIndex(s); }
-      await regenerateMasterIndex();
-      controller.enqueue(encoder.encode(JSON.stringify({ type: 'done' }) + '\n'));
-      controller.close();
+        for (const s of spaces) { if (s) await regenerateSpaceIndex(s); }
+        await regenerateMasterIndex();
+        controller.enqueue(encoder.encode(JSON.stringify({ type: 'done' }) + '\n'));
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        controller.enqueue(encoder.encode(JSON.stringify({ type: 'error', detail: message }) + '\n'));
+      } finally {
+        controller.close();
+      }
     },
   });
 
   return new Response(readable, {
-    headers: { 'Content-Type': 'application/x-ndjson', 'Transfer-Encoding': 'chunked' },
+    headers: { 'Content-Type': 'application/x-ndjson' },
   });
 }
