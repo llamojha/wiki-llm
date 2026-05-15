@@ -158,7 +158,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
 
   const finishUpload = () => { onUploaded(); onClose(); const n = files.filter(f => f.status === 'indexed').length; if (n) showToast(`Uploaded ${n} file${n > 1 ? 's' : ''} to ${space}`); };
 
-  // ── Pending tab: process one file at a time ──
+  // ── Pending tab: client-driven agentic curation loop ──
   const startPendingStream = async () => {
     abortRef.current?.abort();
     const ctrl = new AbortController();
@@ -166,35 +166,64 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
 
     setPendingStream([]); setPendingRunning(true); setPendingDone(false);
     try {
-      // Fetch list of pending raw keys
       const listRes = await fetch(`/api/raw?space=${encodeURIComponent(space)}`, { signal: ctrl.signal });
       if (!listRes.ok) { setPendingRunning(false); showToast('No pending files or error'); return; }
       const { keys } = await listRes.json() as { keys: string[] };
       if (!keys?.length) { setPendingRunning(false); showToast('No pending files'); return; }
 
-      // Process each file individually
-      for (const rawKey of keys) {
+      for (let fi = 0; fi < keys.length; fi++) {
+        const rawKey = keys[fi];
         if (ctrl.signal.aborted) break;
         const name = rawKey.split('/').slice(-1)[0] ?? rawKey;
-        const now = new Date();
-        const ts = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+        const ts = () => { const n = new Date(); return `${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}:${String(n.getSeconds()).padStart(2, '0')}`; };
+
         try {
-          const keySpace = space === '__all' ? (rawKey.split('/')[0] === 'raw' ? rawKey.split('/')[0] : rawKey.split('/')[0]) : space;
-          const res = await fetch('/api/curate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ space: keySpace, key: rawKey }),
+          // Step 1: Assign space
+          const knownSpace = rawKey.startsWith('raw/') ? undefined : (space === '__all' ? rawKey.split('/')[0] : space);
+          setPendingStream(curr => [...curr, { name, ts: ts(), status: 'curating' }]);
+          const assignRes = await fetch('/api/curate/assign', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: rawKey, space: knownSpace }),
             signal: ctrl.signal,
           });
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({ detail: 'Failed' }));
-            setPendingStream(curr => [...curr, { name, ts, status: 'error', error: err.detail }]);
-          } else {
-            setPendingStream(curr => [...curr, { name, ts, status: 'indexed' }]);
+          if (!assignRes.ok) throw new Error((await assignRes.json().catch(() => ({}))).detail || 'Assign failed');
+          const { space: assignedSpace } = await assignRes.json() as { space: string };
+
+          // Step 2: Plan pages
+          const planRes = await fetch('/api/curate/plan', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ space: assignedSpace, key: rawKey }),
+            signal: ctrl.signal,
+          });
+          if (!planRes.ok) throw new Error((await planRes.json().catch(() => ({}))).detail || 'Plan failed');
+          const { plan } = await planRes.json() as { plan: { pages: Array<{ path: string; type: string; title: string; description: string; action: string }> } };
+
+          // Step 3: Generate each page
+          for (const page of plan.pages) {
+            if (ctrl.signal.aborted) break;
+            const genRes = await fetch('/api/curate/generate', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ space: assignedSpace, key: rawKey, page }),
+              signal: ctrl.signal,
+            });
+            if (!genRes.ok) throw new Error((await genRes.json().catch(() => ({}))).detail || 'Generate failed');
           }
+
+          // Step 4: Finalize — delete raw, reindex only on last file
+          const isLast = fi === keys.length - 1;
+          const finRes = await fetch('/api/curate/finalize', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ space: assignedSpace, key: rawKey, reindex: isLast }),
+            signal: ctrl.signal,
+          });
+          if (!finRes.ok) throw new Error((await finRes.json().catch(() => ({}))).detail || 'Finalize failed');
+
+          // Mark done
+          setPendingStream(curr => curr.map((e, i) => i === curr.length - 1 && e.name === name ? { ...e, ts: ts(), status: 'indexed' } : e));
         } catch (err: unknown) {
           if (err instanceof Error && err.name === 'AbortError') break;
-          setPendingStream(curr => [...curr, { name, ts, status: 'error', error: 'Network error' }]);
+          const msg = err instanceof Error ? err.message : 'Unknown error';
+          setPendingStream(curr => curr.map((e, i) => i === curr.length - 1 && e.name === name ? { ...e, ts: ts(), status: 'error', error: msg } : e));
         }
       }
       setPendingRunning(false); setPendingDone(true);

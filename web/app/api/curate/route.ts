@@ -41,9 +41,9 @@ export async function POST(req: Request) {
     );
   }
 
-  if (key && !key.startsWith(`${space}/raw/`)) {
+  if (key && !key.startsWith(`${space}/raw/`) && !key.startsWith('raw/')) {
     return NextResponse.json(
-      { detail: `key must start with ${space}/raw/` },
+      { detail: `key must start with ${space}/raw/ or raw/` },
       { status: 400 },
     );
   }
@@ -63,10 +63,12 @@ export async function POST(req: Request) {
   // Non-streaming mode (backwards compat)
   if (!stream) {
     const results = [];
+    const affectedSpaces = new Set<string>();
     for (const rawKey of keys) {
-      const keySpace = space === '__all' ? rawKey.split('/')[0] === 'raw' ? '' : rawKey.split('/')[0] : space;
+      const keySpace = rawKey.startsWith('raw/') ? '' : (space === '__all' ? rawKey.split('/')[0] : space);
       try {
-        const result = await runCuration(keySpace || space, rawKey);
+        const result = await runCuration(keySpace, rawKey);
+        affectedSpaces.add(result.space);
         results.push({
           rawKey,
           pages: result.pages.map((p) => ({ key: p.key, title: p.title })),
@@ -76,7 +78,7 @@ export async function POST(req: Request) {
         results.push({ rawKey, error: message });
       }
     }
-    for (const s of spaces) { if (s) await regenerateSpaceIndex(s); }
+    for (const s of affectedSpaces) { if (s) await regenerateSpaceIndex(s); }
     await regenerateMasterIndex();
     return NextResponse.json({ space, results });
   }
@@ -87,13 +89,15 @@ export async function POST(req: Request) {
     async start(controller) {
       try {
         const total = keys.length;
+        const affectedSpaces = new Set<string>();
         controller.enqueue(encoder.encode(JSON.stringify({ type: 'start', total }) + '\n'));
 
         for (let i = 0; i < keys.length; i++) {
           const rawKey = keys[i];
-          const keySpace = space === '__all' ? (rawKey.split('/')[0] === 'raw' ? '' : rawKey.split('/')[0]) : space;
+          const keySpace = rawKey.startsWith('raw/') ? '' : (space === '__all' ? rawKey.split('/')[0] : space);
           try {
-            const result = await runCuration(keySpace || space, rawKey);
+            const result = await runCuration(keySpace, rawKey);
+            affectedSpaces.add(result.space);
             controller.enqueue(encoder.encode(JSON.stringify({
               type: 'progress',
               index: i + 1,
@@ -113,7 +117,7 @@ export async function POST(req: Request) {
           }
         }
 
-        for (const s of spaces) { if (s) await regenerateSpaceIndex(s); }
+        for (const s of affectedSpaces) { if (s) await regenerateSpaceIndex(s); }
         await regenerateMasterIndex();
         controller.enqueue(encoder.encode(JSON.stringify({ type: 'done' }) + '\n'));
       } catch (err: unknown) {
