@@ -27,7 +27,7 @@ function fmtSize(b: number): string {
 export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, showToast }: UploadModalProps) {
   const [tab, setTab] = useState<LibraryTab>(initialTab ?? 'upload');
   const [space, setSpace] = useState(spaces[0] ?? 'articles');
-  const [subpath, setSubpath] = useState('');
+  const [subpath, setSubpath] = useState<'raw' | 'wiki'>('raw');
   const [files, setFiles] = useState<UploadFile[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [autoIndex, setAutoIndex] = useState(true);
@@ -37,8 +37,10 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
   // Refs for latest values (avoids stale closures in async chains)
   const spaceRef = useRef(space);
   const autoIndexRef = useRef(autoIndex);
+  const subpathRef = useRef(subpath);
   useEffect(() => { spaceRef.current = space; }, [space]);
   useEffect(() => { autoIndexRef.current = autoIndex; }, [autoIndex]);
+  useEffect(() => { subpathRef.current = subpath; }, [subpath]);
 
   // Pending tab
   const [pendingCount, setPendingCount] = useState(0);
@@ -92,11 +94,13 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
   const processFile = useCallback(async (entry: UploadFile) => {
     const currentSpace = spaceRef.current;
     const currentAutoIndex = autoIndexRef.current;
+    const currentSubpath = subpathRef.current;
 
     updateFile(entry.id, { status: 'uploading', progress: 0 });
     const form = new FormData();
     form.append('file', entry.file);
     form.append('space', currentSpace);
+    form.append('path', currentSubpath);
     try {
       const res = await fetch('/api/upload', { method: 'POST', body: form });
       if (!res.ok) {
@@ -258,12 +262,21 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
           {tab === 'upload' && (
             <div className="upload-meta-row">
               <label>Path</label>
-              <input className="upload-input" value={subpath} onChange={e => setSubpath(e.target.value)} placeholder="e.g. runbooks"/>
+              <div className="space-select">
+                <button className={'space-pill' + (subpath === 'raw' ? ' on' : '')} onClick={() => setSubpath('raw')}>
+                  <span>raw/</span>
+                  <span style={{ fontSize: 10, color: 'var(--fg-3)' }}>AI ingest</span>
+                </button>
+                <button className={'space-pill' + (subpath === 'wiki' ? ' on' : '')} onClick={() => setSubpath('wiki')}>
+                  <span>wiki/</span>
+                  <span style={{ fontSize: 10, color: 'var(--fg-3)' }}>direct</span>
+                </button>
+              </div>
             </div>
           )}
           <div className="upload-s3-preview">
             {ICONS.s3}
-            <span>s3://vaultmark/{space}/{subpath ? subpath.replace(/^\/|\/$/g, '') + '/' : ''}</span>
+            <span>s3://vaultmark/{space}/{subpath}/</span>
           </div>
         </div>
 

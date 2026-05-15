@@ -9,6 +9,7 @@ type DocToolbarProps = {
   docId?: string;
   onAskInChat: () => void;
   onEdit: () => void;
+  onUpload: () => void;
   onStarToggle?: (starred: boolean, etag: string) => void;
 };
 
@@ -16,7 +17,7 @@ function isLiveDoc(doc: Doc): doc is LiveDoc {
   return !doc.generated && 'kind' in doc;
 }
 
-export function DocToolbar({ doc, docId, onAskInChat, onEdit, onStarToggle }: DocToolbarProps) {
+export function DocToolbar({ doc, docId, onAskInChat, onEdit, onUpload, onStarToggle }: DocToolbarProps) {
   const live = isLiveDoc(doc) ? doc : null;
   const [starred, setStarred] = useState(live?.starred ?? false);
 
@@ -68,6 +69,7 @@ export function DocToolbar({ doc, docId, onAskInChat, onEdit, onStarToggle }: Do
         style={starred ? { color: 'var(--accent)' } : undefined}
       >{ICONS.star}</button>
       <button className="btn ghost icon-only" title="Share">{ICONS.share}</button>
+      <button className="btn" onClick={onUpload}>{ICONS.upload} Upload</button>
       <button className="btn" onClick={onEdit}>{ICONS.edit} Edit</button>
       <button className="btn primary" onClick={onAskInChat}>{ICONS.spark} Ask</button>
       <button className="btn ghost icon-only" title="More">{ICONS.more}</button>

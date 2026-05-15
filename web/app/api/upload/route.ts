@@ -12,6 +12,7 @@ export async function POST(req: Request) {
   const form = await req.formData();
   const file = form.get('file') as File | null;
   const space = form.get('space') as string | null;
+  const path = (form.get('path') as string | null) ?? 'raw';
 
   if (!file || !space) {
     return NextResponse.json({ detail: 'file and space are required' }, { status: 400 });
@@ -24,12 +25,16 @@ export async function POST(req: Request) {
     );
   }
 
+  if (path !== 'raw' && path !== 'wiki') {
+    return NextResponse.json({ detail: 'path must be raw or wiki' }, { status: 400 });
+  }
+
   if (!file.name.endsWith('.md')) {
     return NextResponse.json({ detail: 'only .md files are accepted' }, { status: 400 });
   }
 
   const filename = sanitizeFilename(file.name);
-  const key = `${space}/raw/${filename}`;
+  const key = `${space}/${path}/${filename}`;
   const content = await file.text();
 
   try {

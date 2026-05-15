@@ -9,6 +9,7 @@ type DocReaderProps = {
   docId?: string;
   onAskInChat: () => void;
   onEdit: () => void;
+  onUpload: () => void;
   onStarToggle?: (starred: boolean, etag: string) => void;
 };
 
@@ -16,14 +17,14 @@ function isLiveDoc(doc: Doc): doc is LiveDoc {
   return !doc.generated && 'kind' in doc;
 }
 
-export function DocReader({ doc, docId, onAskInChat, onEdit, onStarToggle }: DocReaderProps) {
+export function DocReader({ doc, docId, onAskInChat, onEdit, onUpload, onStarToggle }: DocReaderProps) {
   if (doc.generated) {
     return <GeneratedDocReader doc={doc} onEdit={onEdit}/>;
   }
   const liveDoc = isLiveDoc(doc) ? doc : null;
 
   return <>
-    <DocToolbar doc={doc} docId={docId} onAskInChat={onAskInChat} onEdit={onEdit} onStarToggle={onStarToggle}/>
+    <DocToolbar doc={doc} docId={docId} onAskInChat={onAskInChat} onEdit={onEdit} onUpload={onUpload} onStarToggle={onStarToggle}/>
     <div className="doc-wrap">
       <article className="doc">
         <div className="doc-meta">
