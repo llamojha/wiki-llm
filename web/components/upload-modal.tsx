@@ -158,7 +158,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
 
   const finishUpload = () => { onUploaded(); onClose(); const n = files.filter(f => f.status === 'indexed').length; if (n) showToast(`Uploaded ${n} file${n > 1 ? 's' : ''} to ${space}`); };
 
-  // ── Pending tab: stream curate ──
+  // ── Pending tab: process one file at a time ──
   const startPendingStream = async () => {
     abortRef.current?.abort();
     const ctrl = new AbortController();
@@ -166,36 +166,35 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
 
     setPendingStream([]); setPendingRunning(true); setPendingDone(false);
     try {
-      const res = await fetch('/api/curate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ space, stream: true }),
-        signal: ctrl.signal,
-      });
-      if (!res.ok) { setPendingRunning(false); showToast('No pending files or error'); return; }
-      const reader = res.body?.getReader();
-      if (!reader) { setPendingRunning(false); return; }
-      const decoder = new TextDecoder();
-      let buffer = '';
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const msg = JSON.parse(line);
-            if (msg.type === 'progress') {
-              const name = msg.rawKey.split('/').slice(-1)[0] ?? msg.rawKey;
-              const now = new Date();
-              const ts = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-              setPendingStream(curr => [...curr, { name, ts, status: msg.error ? 'error' : 'indexed', error: msg.error }]);
-            } else if (msg.type === 'error') {
-              showToast(msg.detail || 'Processing failed');
-            }
-          } catch { /* skip malformed */ }
+      // Fetch list of pending raw keys
+      const listRes = await fetch(`/api/raw?space=${encodeURIComponent(space)}`, { signal: ctrl.signal });
+      if (!listRes.ok) { setPendingRunning(false); showToast('No pending files or error'); return; }
+      const { keys } = await listRes.json() as { keys: string[] };
+      if (!keys?.length) { setPendingRunning(false); showToast('No pending files'); return; }
+
+      // Process each file individually
+      for (const rawKey of keys) {
+        if (ctrl.signal.aborted) break;
+        const name = rawKey.split('/').slice(-1)[0] ?? rawKey;
+        const now = new Date();
+        const ts = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+        try {
+          const keySpace = space === '__all' ? (rawKey.split('/')[0] === 'raw' ? rawKey.split('/')[0] : rawKey.split('/')[0]) : space;
+          const res = await fetch('/api/curate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ space: keySpace, key: rawKey }),
+            signal: ctrl.signal,
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({ detail: 'Failed' }));
+            setPendingStream(curr => [...curr, { name, ts, status: 'error', error: err.detail }]);
+          } else {
+            setPendingStream(curr => [...curr, { name, ts, status: 'indexed' }]);
+          }
+        } catch (err: unknown) {
+          if (err instanceof Error && err.name === 'AbortError') break;
+          setPendingStream(curr => [...curr, { name, ts, status: 'error', error: 'Network error' }]);
         }
       }
       setPendingRunning(false); setPendingDone(true);
