@@ -7,7 +7,7 @@ import {
   type SystemContentBlock,
 } from '@aws-sdk/client-bedrock-runtime';
 
-const MODEL_ID = process.env.INGEST_MODEL ?? 'amazon.nova-2-lite-v1:0';
+const MODEL_ID = process.env.INGEST_MODEL ?? 'eu.amazon.nova-2-lite-v1:0';
 const region = process.env.VAULT_REGION ?? 'eu-central-1';
 
 let _client: BedrockRuntimeClient | null = null;
