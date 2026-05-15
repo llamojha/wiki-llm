@@ -1627,6 +1627,9 @@ input, textarea { font: inherit; color: inherit; }
 .stream-name { color: var(--fg-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stream-line.indexed .stream-name { color: var(--fg); }
 .stream-line.curating .stream-name { color: var(--fg-2); }
+.stream-line.error .stream-arrow { color: var(--orange, #f59e0b); }
+.stream-line.error .stream-name { color: var(--fg-2); }
+.stream-error { color: var(--orange, #f59e0b); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Re-index tab */
 .reindex-panel { padding: 16px; display: flex; flex-direction: column; gap: 16px; flex: 1; min-height: 0; }

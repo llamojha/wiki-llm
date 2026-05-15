@@ -16,7 +16,7 @@ type UploadModalProps = {
 
 type FileStatus = 'queued' | 'uploading' | 'indexing' | 'indexed' | 'queued-curate' | 'error';
 type UploadFile = { id: string; name: string; size: number; file: File; status: FileStatus; progress: number; error?: string };
-type StreamLine = { name: string; ts: string; status: 'curating' | 'indexed' | 'error' };
+type StreamLine = { name: string; ts: string; status: 'curating' | 'indexed' | 'error'; error?: string };
 
 function fmtSize(b: number): string {
   if (b < 1024) return `${b} B`;
@@ -191,7 +191,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
               const name = msg.rawKey.split('/').slice(-1)[0] ?? msg.rawKey;
               const now = new Date();
               const ts = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-              setPendingStream(curr => [...curr, { name, ts, status: msg.error ? 'error' : 'indexed' }]);
+              setPendingStream(curr => [...curr, { name, ts, status: msg.error ? 'error' : 'indexed', error: msg.error }]);
             } else if (msg.type === 'error') {
               showToast(msg.detail || 'Processing failed');
             }
@@ -414,6 +414,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
                   <span className="stream-arrow">{e.status === 'indexed' ? ICONS.check : e.status === 'error' ? ICONS.warn : '·'}</span>
                   <span className="stream-name">{e.name}</span>
                   {e.status === 'curating' && <span className="spinner"></span>}
+                  {e.error && <span className="stream-error">{e.error}</span>}
                 </div>
               ))}
             </div>
