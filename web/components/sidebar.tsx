@@ -100,8 +100,10 @@ export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, onUpload
 
       <div className="nav-section">
         <span>{scope === 'shared' ? 'Shared spaces' : 'My pages'}</span>
-        <button onClick={onUpload} title="Upload Markdown files">{ICONS.upload}</button>
-        <button onClick={onNewPage} title="New page">{ICONS.plus}</button>
+        <div style={{ display: 'flex', gap: 2 }}>
+          <button onClick={onUpload} title="Upload Markdown files">{ICONS.upload}</button>
+          <button onClick={onNewPage} title="New page">{ICONS.plus}</button>
+        </div>
       </div>
 
       {tree.map((n) => (
