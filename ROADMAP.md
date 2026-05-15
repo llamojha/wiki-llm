@@ -182,6 +182,7 @@ Only after MVP 2 has been used in anger.
 - Multi-tenant index isolation: per-space indexes scoped to tenant, master index excludes personal spaces of other users
 - S3 Event Notifications → Lambda/SQS for event-driven ingest (replace inline trigger from Phase 3)
 - Event-driven ingest: S3 PutObject event on `*/raw/` → triggers ingest automatically (Lambda or background worker). Eliminates need for manual CLI runs or portal trigger buttons. Includes retry logic, dead-letter queue, and status reporting back to the portal.
+- Vault structure schema (`structure.json`) improvements: UI for managing spaces (create/rename/reorder/delete), drag-and-drop file moves between spaces, per-space permissions, schema versioning and migration, validation on upload/write to enforce declared structure
 
 **Acceptance:** see `specs/phase-6-saas.md`
 

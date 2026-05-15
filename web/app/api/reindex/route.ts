@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import matter from 'gray-matter';
 
-import { getObject, listObjects, listSpaces, putObject } from '@/lib/s3';
+import { getObject, listObjects, putObject } from '@/lib/s3';
+import { getStructure } from '@/lib/vault-structure';
 
 const SPACE_RE = /^[a-z0-9][a-z0-9-]*$/;
 
@@ -32,6 +33,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ detail: 'invalid space name' }, { status: 400 });
   }
 
+  const structure = await getStructure();
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -40,21 +43,46 @@ export async function POST(req: Request) {
       };
 
       try {
-        const spaces = space ? [space] : await listSpaces();
-        // Gather all keys across spaces for total count
+        // Determine which spaces to index
+        let targetSpaces: string[];
+        if (space) {
+          targetSpaces = [space];
+        } else if (structure.spaces.length > 0) {
+          // Only index spaces declared in structure.json with indexed: true
+          targetSpaces = structure.spaces.filter((s) => s.indexed).map((s) => s.name);
+        } else {
+          // No structure.json — fall back to listing all top-level prefixes
+          const allKeys = await listObjects();
+          const spaceSet = new Set<string>();
+          for (const k of allKeys) {
+            const first = k.split('/')[0];
+            if (first && first !== 'raw') spaceSet.add(first);
+          }
+          targetSpaces = [...spaceSet];
+        }
+
+        // Gather keys per space
         const spaceKeys: { space: string; keys: string[] }[] = [];
-        for (const s of spaces) {
+        let rawCount = 0;
+        for (const s of targetSpaces) {
           const allKeys = await listObjects(`${s}/`);
           const keys = allKeys.filter(
             (k) => !k.startsWith(`${s}/raw/`) && k !== `${s}/index.md`,
           );
+          rawCount += allKeys.filter((k) => k.startsWith(`${s}/raw/`)).length;
           spaceKeys.push({ space: s, keys });
         }
 
+        // Also count root-level raw/
+        const rootRaw = await listObjects('raw/');
+        rawCount += rootRaw.length;
+
         const total = spaceKeys.reduce((n, sk) => n + sk.keys.length, 0);
         let indexed = 0;
-        send({ type: 'start', total, spaces: spaceKeys.map((sk) => sk.space) });
+        send({ type: 'start', total, rawCount, spaces: targetSpaces });
 
+        // Build per-space index.md
+        const spaceLines: Map<string, string[]> = new Map();
         for (const sk of spaceKeys) {
           const lines: string[] = [];
           for (const key of sk.keys) {
@@ -62,20 +90,19 @@ export async function POST(req: Request) {
             indexed++;
             send({ type: 'progress', space: sk.space, key, indexed, total });
           }
-          const body = `---\ntitle: ${toTitleCase(sk.space)} Index\ntype: nav\nupdated: ${new Date().toISOString()}\n---\n\n${lines.join('\n')}\n`;
-          await putObject(`${sk.space}/index.md`, body);
+          spaceLines.set(sk.space, lines);
+          const indexBody = `---\ntitle: ${toTitleCase(sk.space)} Index\ntype: nav\nupdated: ${new Date().toISOString()}\n---\n\n${lines.join('\n')}\n`;
+          await putObject(`${sk.space}/index.md`, indexBody);
         }
 
-        // Master index
+        // Master index — only include spaces from structure (or all if no structure)
         const masterSpaces = spaceKeys.filter((sk) => sk.space !== 'personal');
         const sections: string[] = [];
         for (const sk of masterSpaces.sort((a, b) => a.space.localeCompare(b.space))) {
-          if (!sk.keys.length) continue;
-          const lines: string[] = [];
-          for (const key of sk.keys) {
-            lines.push(await buildLine(key));
-          }
-          sections.push(`## ${toTitleCase(sk.space)}\n${lines.join('\n')}`);
+          const lines = spaceLines.get(sk.space);
+          if (!lines?.length) continue;
+          const label = structure.spaces.find((s) => s.name === sk.space)?.label ?? toTitleCase(sk.space);
+          sections.push(`## ${label}\n${lines.join('\n')}`);
         }
         const masterBody = `---\ntitle: Index\ntype: nav\nupdated: ${new Date().toISOString()}\n---\n\n${sections.join('\n\n')}\n`;
         await putObject('index.md', masterBody);

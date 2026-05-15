@@ -54,6 +54,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
   const [reindexDone, setReindexDone] = useState(false);
   const [reindexTotal, setReindexTotal] = useState(0);
   const [reindexIndexed, setReindexIndexed] = useState(0);
+  const [reindexRawCount, setReindexRawCount] = useState(0);
 
   // Reset on open
   useEffect(() => {
@@ -66,7 +67,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
     setTab(initialTab ?? 'upload');
     setFiles([]); setDragActive(false);
     setPendingStream([]); setPendingRunning(false); setPendingDone(false);
-    setReindexRunning(false); setReindexDone(false); setReindexTotal(0); setReindexIndexed(0);
+    setReindexRunning(false); setReindexDone(false); setReindexTotal(0); setReindexIndexed(0); setReindexRawCount(0);
     if (spaces.length && !spaces.includes(space)) setSpace(spaces[0]);
   }, [open, initialTab]);
 
@@ -205,7 +206,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
 
   // ── Re-index tab ──
   const startReindex = async () => {
-    setReindexRunning(true); setReindexDone(false); setReindexTotal(0); setReindexIndexed(0);
+    setReindexRunning(true); setReindexDone(false); setReindexTotal(0); setReindexIndexed(0); setReindexRawCount(0);
     try {
       const res = await fetch('/api/reindex', {
         method: 'POST',
@@ -225,7 +226,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
         for (const line of lines) {
           if (!line) continue;
           const msg = JSON.parse(line);
-          if (msg.type === 'start') setReindexTotal(msg.total);
+          if (msg.type === 'start') { setReindexTotal(msg.total); setReindexRawCount(msg.rawCount ?? 0); }
           else if (msg.type === 'progress') setReindexIndexed(msg.indexed);
           else if (msg.type === 'done') { setReindexIndexed(msg.indexed); }
           else if (msg.type === 'error') { showToast(msg.detail); }
@@ -449,6 +450,11 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
                     : <><span className="spinner"></span> Indexing {reindexIndexed} / {reindexTotal}</>
                   }
                 </div>
+                {reindexRawCount > 0 && (
+                  <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 4 }}>
+                    {reindexRawCount} file{reindexRawCount !== 1 ? 's' : ''} in <code>raw/</code> not yet processed
+                  </div>
+                )}
                 <div className="upload-row-bar" style={{ marginTop: 6 }}>
                   <div className="upload-row-bar-fill" style={{ width: (reindexTotal ? (reindexIndexed / reindexTotal) * 100 : 0) + '%' }}></div>
                 </div>

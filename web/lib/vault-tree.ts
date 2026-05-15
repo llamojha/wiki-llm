@@ -1,6 +1,7 @@
 import matter from 'gray-matter';
 
 import { getObject, listObjects } from '@/lib/s3';
+import { getStructure } from '@/lib/vault-structure';
 
 export type TreeNode =
   | { type: 'doc'; id: string; name: string }
@@ -18,7 +19,6 @@ function keyToName(key: string): string {
 }
 
 function shouldSkip(key: string): boolean {
-  // Hide raw/ at any level, index.md and log.md at any level
   if (key.includes('/raw/')) return true;
   const filename = key.split('/').pop()!;
   if (filename === 'index.md' || filename === 'log.md') return true;
@@ -45,19 +45,42 @@ function insert(root: TreeNode[], parts: string[], key: string, name: string): v
   insert(folder.children, parts.slice(1), key, name);
 }
 
-function buildTree(keys: string[], names: Map<string, string>): TreeNode[] {
+function buildTree(keys: string[], stripPrefix?: string): TreeNode[] {
   const root: TreeNode[] = [];
   for (const key of keys) {
-    const parts = key.split('/');
-    const name = names.get(key) ?? keyToName(key);
+    const rel = stripPrefix ? key.slice(stripPrefix.length + 1) : key;
+    const parts = rel.split('/');
+    const name = keyToName(key);
     insert(root, parts, key, name);
   }
   return root;
 }
 
 export async function getTree(): Promise<TreeNode[]> {
+  const structure = await getStructure();
+
+  // If structure.json exists with spaces, use it as the authoritative layout
+  if (structure.spaces.length > 0) {
+    const tree: TreeNode[] = [];
+
+    for (const space of structure.spaces) {
+      const allKeys = await listObjects(`${space.name}/`);
+      const keys = allKeys.filter((k) => !shouldSkip(k));
+
+      const children = buildTree(keys, space.name);
+      tree.push({
+        type: 'folder',
+        id: `folder:${space.name}`,
+        name: space.label,
+        children,
+      });
+    }
+
+    return tree;
+  }
+
+  // Fallback: no structure.json — use index.md or full S3 listing
   let listedKeys: string[] = [];
-  const names = new Map<string, string>();
   let indexAvailable = false;
 
   try {
@@ -72,26 +95,26 @@ export async function getTree(): Promise<TreeNode[]> {
     }
     indexAvailable = true;
   } catch {
-    // index.md not found — fall back to S3 listing
+    // index.md not found
   }
 
   if (!indexAvailable) {
     const allKeys = (await listObjects()).filter((k) => !shouldSkip(k));
-    return buildTree(allKeys, names);
+    return buildTree(allKeys);
   }
 
   const allKeys = (await listObjects()).filter((k) => !shouldSkip(k));
   const listedSet = new Set(listedKeys);
   const unlisted = allKeys.filter((k) => !listedSet.has(k));
 
-  const tree = buildTree(listedKeys, names);
+  const tree = buildTree(listedKeys);
 
   if (unlisted.length > 0) {
     tree.push({
       type: 'folder',
       id: 'folder:__unlisted',
       name: 'Unlisted',
-      children: buildTree(unlisted, names),
+      children: buildTree(unlisted),
     });
   }
 
