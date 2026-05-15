@@ -52,6 +52,8 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
   // Reindex tab
   const [reindexRunning, setReindexRunning] = useState(false);
   const [reindexDone, setReindexDone] = useState(false);
+  const [reindexTotal, setReindexTotal] = useState(0);
+  const [reindexIndexed, setReindexIndexed] = useState(0);
 
   // Reset on open
   useEffect(() => {
@@ -64,7 +66,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
     setTab(initialTab ?? 'upload');
     setFiles([]); setDragActive(false);
     setPendingStream([]); setPendingRunning(false); setPendingDone(false);
-    setReindexRunning(false); setReindexDone(false);
+    setReindexRunning(false); setReindexDone(false); setReindexTotal(0); setReindexIndexed(0);
     if (spaces.length && !spaces.includes(space)) setSpace(spaces[0]);
   }, [open, initialTab]);
 
@@ -203,14 +205,32 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
 
   // ── Re-index tab ──
   const startReindex = async () => {
-    setReindexRunning(true); setReindexDone(false);
+    setReindexRunning(true); setReindexDone(false); setReindexTotal(0); setReindexIndexed(0);
     try {
       const res = await fetch('/api/reindex', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ space }),
       });
-      if (!res.ok) { setReindexRunning(false); showToast('Re-index failed'); return; }
+      if (!res.ok || !res.body) { setReindexRunning(false); showToast('Re-index failed'); return; }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop()!;
+        for (const line of lines) {
+          if (!line) continue;
+          const msg = JSON.parse(line);
+          if (msg.type === 'start') setReindexTotal(msg.total);
+          else if (msg.type === 'progress') setReindexIndexed(msg.indexed);
+          else if (msg.type === 'done') { setReindexIndexed(msg.indexed); }
+          else if (msg.type === 'error') { showToast(msg.detail); }
+        }
+      }
       setReindexRunning(false); setReindexDone(true);
       onUploaded();
       showToast(`Re-indexed ${space}`);
@@ -421,17 +441,16 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
               </div>
             </div>
 
-            <div className="reindex-stats">
-              <div>
-                <div className="reindex-stat-label">Endpoint</div>
-                <code style={{ fontSize: 11 }}>POST /api/reindex</code>
-              </div>
-            </div>
-
-            {reindexDone && (
+            {(reindexRunning || reindexDone) && (
               <div className="reindex-progress">
                 <div className="reindex-progress-text">
-                  <span style={{ color: 'var(--green, #22c55e)' }}>{ICONS.check}</span> Re-index complete
+                  {reindexDone
+                    ? <><span style={{ color: 'var(--green, #22c55e)' }}>{ICONS.check}</span> Re-index complete — {reindexIndexed} files</>
+                    : <><span className="spinner"></span> Indexing {reindexIndexed} / {reindexTotal}</>
+                  }
+                </div>
+                <div className="upload-row-bar" style={{ marginTop: 6 }}>
+                  <div className="upload-row-bar-fill" style={{ width: (reindexTotal ? (reindexIndexed / reindexTotal) * 100 : 0) + '%' }}></div>
                 </div>
               </div>
             )}
