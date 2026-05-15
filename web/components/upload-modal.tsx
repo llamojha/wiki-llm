@@ -211,7 +211,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
       const res = await fetch('/api/reindex', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ space }),
+        body: JSON.stringify(space === '__all' ? {} : { space }),
       });
       if (!res.ok || !res.body) { setReindexRunning(false); showToast('Re-index failed'); return; }
       const reader = res.body.getReader();
@@ -234,7 +234,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
       }
       setReindexRunning(false); setReindexDone(true);
       onUploaded();
-      showToast(`Re-indexed ${space}`);
+      showToast(`Re-indexed ${space === '__all' ? 'all spaces' : space}`);
     } catch { setReindexRunning(false); showToast('Re-index failed'); }
   };
 
@@ -272,6 +272,12 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
           <div className="upload-meta-row">
             <label>Space</label>
             <div className="space-select">
+              {(tab === 'reindex' || tab === 'pending') && (
+                <button className={'space-pill' + (space === '__all' ? ' on' : '')} onClick={() => setSpace('__all')}>
+                  {ICONS.globe}
+                  <span>All</span>
+                </button>
+              )}
               {spaces.map(s => (
                 <button key={s} className={'space-pill' + (space === s ? ' on' : '')} onClick={() => setSpace(s)}>
                   {ICONS.globe}
