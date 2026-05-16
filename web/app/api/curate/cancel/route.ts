@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getObject, putObject } from '@/lib/s3';
+import { systemKey } from '@/lib/vault-paths';
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
@@ -10,11 +11,12 @@ export async function POST(req: Request) {
   }
 
   try {
-    const raw = await getObject(`_jobs/${jobId}.json`);
+    const key = systemKey(`jobs/${jobId}.json`);
+    const raw = await getObject(key);
     const job = JSON.parse(raw);
     job.status = 'cancelled';
     job.completedAt = new Date().toISOString();
-    await putObject(`_jobs/${jobId}.json`, JSON.stringify(job, null, 2));
+    await putObject(key, JSON.stringify(job, null, 2));
     return NextResponse.json({ cancelled: true });
   } catch (err: unknown) {
     if ((err as { name?: string }).name === 'NoSuchKey') {

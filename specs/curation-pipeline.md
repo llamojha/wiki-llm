@@ -10,6 +10,42 @@ Raw files are immutable archives. The wiki is a derived, LLM-maintained artifact
 
 The first implementation was a single-call-per-source pipeline that asked the LLM to emit every affected Markdown file, including `index.md` and `log.md`. That proved too slow and put bookkeeping in the middle of curation. V2 splits curation into extraction, placement, targeted synthesis, and final maintenance.
 
+Generated curation output is controlled by `_system/structure.json` for shared ingestion. Storage roots encode provenance; the UI merges `generated/<space>/` and `authored/<space>/` into one logical shared space, and also supports matching roots under `users/<user-id>/`.
+
+```json
+{
+  "version": 2,
+  "roots": {
+    "raw": "raw/",
+    "generated": "generated/",
+    "authored": "authored/",
+    "users": "users/",
+    "system": "_system/"
+  },
+  "spaces": [
+    { "name": "wiki", "label": "Wiki", "indexed": true, "generated": true, "authored": true },
+    { "name": "articles", "label": "Articles", "indexed": true, "generated": false, "authored": true },
+    { "name": "vaultmark", "label": "Vaultmark", "indexed": true, "generated": true, "authored": true }
+  ],
+  "defaultUser": "amllamojha",
+  "users": [
+    {
+      "id": "amllamojha",
+      "label": "amllamojha",
+      "default": true,
+      "prefix": "users/amllamojha/",
+      "root": "users/amllamojha/",
+      "roots": {
+        "raw": "users/amllamojha/raw/",
+        "generated": "users/amllamojha/generated/",
+        "authored": "users/amllamojha/authored/",
+        "system": "users/amllamojha/_system/"
+      }
+    }
+  ]
+}
+```
+
 - [x] 1. Add timing and reliability instrumentation.
   - Log per-file progress in Lambda.
   - Log source read, placement-hint read, Bedrock extraction, write, and manifest timings.
@@ -17,9 +53,9 @@ The first implementation was a single-call-per-source pipeline that asked the LL
 
 - [x] 2. Split single-source processing into source-card extraction and deterministic writes.
   - Extract a compact JSON source card from each raw file.
-  - Write `_curation/source-cards/<hash>.json`.
+  - Write `_system/source-cards/<hash>.json`.
   - Write the source summary page deterministically from the card.
-  - Update `_processed.json` with the source page and source-card key.
+  - Update `_system/processed.json` with the source page and source-card key.
 
 - [x] 3. Stop asking the LLM to rewrite `index.md` and `log.md` during ingest.
   - The extraction prompt returns JSON only.
@@ -30,7 +66,7 @@ The first implementation was a single-call-per-source pipeline that asked the LL
   - Read pending source cards.
   - Assign each card to an existing user-controlled space.
   - Group cards by affected source/entity/concept/overview page.
-  - Emit synthesis task records under `_curation/tasks/`.
+  - Emit synthesis task records under `_system/tasks/`.
 
 - [ ] 5. Add targeted page synthesis.
   - Run one LLM call per affected page/topic.
@@ -53,7 +89,7 @@ The first implementation was a single-call-per-source pipeline that asked the LL
 
 1. **Raw is immutable.** Source documents stay in `raw/` forever. They are the ground truth.
 2. **The wiki compounds.** Extraction creates durable source cards first; later synthesis enriches existing pages, adds cross-references, and updates the overview.
-3. **LLM maintains, human curates.** The LLM extracts cards and synthesizes targeted generated pages. User-authored `wiki/` pages are indexed but never modified by AI.
+3. **LLM maintains, human curates.** The LLM extracts cards and synthesizes targeted generated pages. User-authored `authored/` pages are indexed but never modified by AI.
 4. **Contradictions are surfaced.** When new sources conflict with existing knowledge, the LLM flags it explicitly rather than silently overwriting.
 5. **Everything is re-derivable.** Since raw is preserved, the entire wiki can be regenerated from scratch if needed.
 6. **Bookkeeping is deterministic.** `index.md`, space indexes, `log.md`, and lint status are produced by the final maintenance pass, not by per-source LLM calls.
@@ -76,38 +112,45 @@ Lambda (5 min timeout)
 
 ```
 s3://<bucket>/<prefix>/
-  raw/                    # Immutable source documents (never deleted by AI)
-  wiki/                   # User-authored pages (indexed, never AI-modified)
-  <space>/                # AI-generated pages organized by space
-    sources/              # Source summaries generated deterministically from source cards
-    entities/             # People, orgs, products from targeted synthesis
-    concepts/             # Ideas, frameworks from targeted synthesis
-    ...                   # LLM may create other folders as needed
-    index.md              # Space catalog (rebuilt during final maintenance)
-  overview.md             # Evolving high-level synthesis (updated during synthesis/final maintenance)
-  index.md                # Master catalog (rebuilt during final maintenance)
-  log.md                  # Append-only history (updated during final maintenance)
-  _curation/
-    source-cards/         # JSON extraction cards, one per raw content hash
-    tasks/                # Placement/synthesis/final-maintenance task records
-  _processed.json         # Manifest of processed raw files
-  _jobs/                  # Job state files
-    {jobId}.json
+  raw/                    # Shared immutable source documents
+  generated/<space>/      # Shared AI-generated pages, grouped by logical space
+  authored/<space>/       # Shared human-authored pages, grouped by logical space
+  _system/
+    structure.json        # Shared vault schema and logical space declarations
+    processed.json        # Shared manifest of processed raw files
+    source-cards/         # Shared JSON extraction cards
+    tasks/                # Shared placement/synthesis/final-maintenance task records
+    jobs/{jobId}.json     # Shared job state files
+    index.md              # Shared master catalog
+    log.md                # Shared append-only history
+  users/<user-id>/
+    raw/                  # User immutable source documents
+    generated/<space>/    # User-scoped AI-generated pages
+    authored/<space>/     # User-authored pages, personal pages use authored/personal/
+    _system/
+      structure.json      # User-scoped schema, when needed
+      processed.json      # User-scoped manifest, when user ingest is enabled
+      source-cards/
+      tasks/
+      jobs/{jobId}.json
+      index.md
+      log.md
+  assets/                 # Images and binary assets
 ```
 
 ## Document Identity & Versioning
 
 Since raw files are immutable and the wiki is re-derivable, re-processing a previously ingested source produces a new version of its output pages. This is intentional:
 
-- `_processed.json` stores the content hash at time of processing
+- `_system/processed.json` stores the content hash at time of processing
 - If a raw file is modified, its hash changes → it shows as pending again
 - Re-processing overwrites the previous generated pages for that source
 - The log records both the original ingest and the re-ingest
 - If the LLM's output differs from the previous version (due to new wiki context, model updates, or source edits), the new version wins — the wiki reflects the latest understanding
 
-**To force re-processing:** remove the file's entry from `_processed.json`. It will appear as pending and get re-ingested with the current wiki context, potentially producing different (better) output since the wiki has grown.
+**To force re-processing:** remove the file's entry from `_system/processed.json`. It will appear as pending and get re-ingested with the current wiki context, potentially producing different output since the wiki has grown.
 
-## Processed Manifest (`_processed.json`)
+## Processed Manifest (`_system/processed.json`)
 
 Tracks which raw files have been ingested and their content hash at time of processing.
 
@@ -117,8 +160,9 @@ Tracks which raw files have been ingested and their content hash at time of proc
     "raw/article1.md": {
       "processedAt": "2026-05-16T12:00:00Z",
       "hash": "sha256:abc123...",
-      "space": "articles",
-      "pages": ["articles/sources/article1.md", "articles/entities/acme-corp.md"]
+      "space": "wiki",
+      "pages": ["generated/wiki/sources/article1.md"],
+      "sourceCard": "_system/source-cards/abc123.json"
     }
   }
 }
@@ -126,21 +170,21 @@ Tracks which raw files have been ingested and their content hash at time of proc
 
 **Pending detection:**
 - List all `.md` files in `raw/`
-- Compare against `_processed.json`
+- Compare against `_system/processed.json`
 - A file is pending if: not in manifest, OR its current hash differs from stored hash
 - Pending count = new + modified files
 
-## Job State (`_jobs/{jobId}.json`)
+## Job State (`_system/jobs/{jobId}.json`)
 
 ```json
 {
   "id": "job-abc123",
   "status": "processing | done | error",
-  "space": "articles",
+  "space": "wiki",
   "total": 5,
   "completed": 3,
   "files": [
-    { "key": "raw/file1.md", "status": "done", "pages": ["articles/sources/file1.md"] },
+    { "key": "raw/file1.md", "status": "done", "pages": ["generated/wiki/sources/file1.md"] },
     { "key": "raw/file2.md", "status": "processing" },
     { "key": "raw/file3.md", "status": "pending" }
   ],
@@ -157,9 +201,9 @@ For each pending raw file, one Lambda task does:
 1. Read the source document from S3.
 2. Read lightweight placement hints: existing page keys plus first-line summaries.
 3. Make one Bedrock call that returns a compact JSON source card.
-4. Write `_curation/source-cards/<hash>.json`.
-5. Render and write `{space}/sources/<slug>-<hash>.md` deterministically from the source card.
-6. Update `_processed.json` with hash, resolved space, source page, and source-card key.
+4. Write `_system/source-cards/<hash>.json`.
+5. Render and write `generated/{space}/sources/<slug>-<hash>.md` deterministically from the source card.
+6. Update `_system/processed.json` with hash, resolved space, source page, and source-card key.
 7. Update job state.
 
 The extraction pass does not update `index.md`, `{space}/index.md`, `overview.md`, `log.md`, entity pages, or concept pages. Those are handled by placement, targeted synthesis, and final maintenance tasks.
@@ -210,11 +254,11 @@ Extract a source card as JSON.
 
 ## Reindex (Lint + Organize)
 
-Reindex is the maintenance pass. It serves the role of Karpathy's "lint" — auditing the wiki for health, coherence, and completeness. It also indexes user-authored `wiki/` pages.
+Reindex is the maintenance pass. It serves the role of Karpathy's "lint" — auditing the wiki for health, coherence, and completeness. It also indexes user-authored `authored/` pages.
 
 **Reindex does:**
-1. Scans ALL pages (AI-generated + user-authored `wiki/`)
-2. Rebuilds `index.md` and `{space}/index.md` from actual files on disk
+1. Scans ALL pages (`generated/<space>/` + `authored/<space>/`)
+2. Rebuilds `_system/index.md` and `_system/indexes/{space}.md` from actual files on disk
 3. Runs a Bedrock "lint" call:
    - Regenerates `overview.md` as a coherent synthesis
    - Finds contradictions between pages
@@ -246,8 +290,8 @@ Also report (as a comment block at the end):
 
 Rules:
 - overview.md should read like an executive briefing — synthesize, don't enumerate
-- index.md must include ALL pages (AI-generated AND user-authored wiki/ pages)
-- Never modify user-authored wiki/ page content — only add them to the index
+- `_system/index.md` must include ALL pages (`generated/` and `authored/`)
+- Never modify `authored/` page content — only add those pages to indexes
 - Use [[Page Title]] wikilinks in overview where relevant
 - Flag issues clearly with > [!warning] or > [!info] callouts
 
@@ -284,7 +328,7 @@ Spaces are user-controlled boundaries. Within a space, the LLM decides all folde
 | `POST /api/curate/start` | POST | `{ space }` → creates job, invokes Lambda, returns `{ jobId }` |
 | `GET /api/curate/status` | GET | `?job=X` → returns job state JSON |
 | `POST /api/curate/cancel` | POST | `{ jobId }` → marks job cancelled |
-| `GET /api/raw` | GET | `?space=X` → returns pending files (raw/ vs _processed.json) |
+| `GET /api/raw` | GET | `?space=X` → returns pending files (raw/ vs `_system/processed.json`) |
 | `POST /api/reindex` | POST | `{ space? }` → triggers reindex (lint + organize) |
 
 ## Lambda Structure
@@ -295,7 +339,7 @@ infra/lambda/curate/
 ├── ingest.ts         # Single-source Karpathy-style ingest (one Bedrock call)
 ├── bedrock.ts        # Bedrock converse client
 ├── s3.ts             # S3 helpers
-├── manifest.ts       # _processed.json read/write/hash
+├── manifest.ts       # _system/processed.json read/write/hash
 ├── job.ts            # Job state management
 ├── parse.ts          # Parse <file> blocks from LLM response
 └── types.ts          # Shared types
@@ -336,7 +380,7 @@ Vercel IAM user (`vaultmark-vercel`):
 
 - **Human-in-the-loop ingest**: Adopt Karpathy's interactive style — process one file at a time, show the LLM's output, let the user guide emphasis, approve/reject pages before they're written. The current batch/parallel approach is a stepping stone; the long-term UX should support conversational ingest where the user stays involved.
 - **Query-back-to-wiki (Phase 5)**: When ask-wiki produces a good answer, offer to file it back into the wiki as a new page. Explorations compound in the knowledge base just like ingested sources do.
-- **Re-ingest**: Remove entry from `_processed.json` → file shows as pending → re-processed with current wiki context (may produce different/better output).
+- **Re-ingest**: Remove entry from `_system/processed.json` → file shows as pending → re-processed with current wiki context.
 - **Bedrock AgentCore**: If tool-use patterns become complex, migrate to managed agent runtime.
 - **Parallel Lambda**: For large batches, fan out to multiple concurrent Lambdas.
 - **Schedule-based reindex**: Periodic lint pass on a cron.
@@ -349,7 +393,7 @@ The initial Lambda implementation moved processing out of Vercel but kept a v1 c
 
 **Still-valid decisions:**
 - Lambda-first (not inline) due to Vercel timeout constraints
-- Raw files immutable, tracked via `_processed.json` manifest (hash-based pending detection)
+- Raw files immutable, tracked via `_system/processed.json` manifest (hash-based pending detection)
 - Existing CDK stack (ECS/RDS/Cognito/ALB) is dead code — replaced entirely with Lambda + IAM only
 
 **Key files:**

@@ -3,6 +3,7 @@ import matter from 'gray-matter';
 
 import { getObject, listObjects, putObject } from '@/lib/s3';
 import { getStructure } from '@/lib/vault-structure';
+import { RAW_PREFIX, authoredPrefix, generatedPrefix, isDocumentKey, systemKey } from '@/lib/vault-paths';
 
 const SPACE_RE = /^[a-z0-9][a-z0-9-]*$/;
 
@@ -43,7 +44,7 @@ export async function POST(req: Request) {
       };
 
       try {
-        // Determine which spaces to index
+        // Determine which logical spaces to index
         let targetSpaces: string[];
         if (space) {
           targetSpaces = [space];
@@ -51,30 +52,22 @@ export async function POST(req: Request) {
           // Only index spaces declared in structure.json with indexed: true
           targetSpaces = structure.spaces.filter((s) => s.indexed).map((s) => s.name);
         } else {
-          // No structure.json — fall back to listing all top-level prefixes
-          const allKeys = await listObjects();
-          const spaceSet = new Set<string>();
-          for (const k of allKeys) {
-            const first = k.split('/')[0];
-            if (first && first !== 'raw') spaceSet.add(first);
-          }
-          targetSpaces = [...spaceSet];
+          targetSpaces = [];
         }
 
         // Gather keys per space
         const spaceKeys: { space: string; keys: string[] }[] = [];
         let rawCount = 0;
         for (const s of targetSpaces) {
-          const allKeys = await listObjects(`${s}/`);
-          const keys = allKeys.filter(
-            (k) => !k.startsWith(`${s}/raw/`) && k !== `${s}/index.md`,
-          );
-          rawCount += allKeys.filter((k) => k.startsWith(`${s}/raw/`)).length;
+          const keys = [
+            ...(await listObjects(generatedPrefix(s))),
+            ...(await listObjects(authoredPrefix(s))),
+          ].filter(isDocumentKey);
           spaceKeys.push({ space: s, keys });
         }
 
-        // Also count root-level raw/
-        const rootRaw = await listObjects('raw/');
+        // Count shared raw inputs that have not yet been processed.
+        const rootRaw = await listObjects(RAW_PREFIX);
         rawCount += rootRaw.length;
 
         const total = spaceKeys.reduce((n, sk) => n + sk.keys.length, 0);
@@ -92,7 +85,7 @@ export async function POST(req: Request) {
           }
           spaceLines.set(sk.space, lines);
           const indexBody = `---\ntitle: ${toTitleCase(sk.space)} Index\ntype: nav\nupdated: ${new Date().toISOString()}\n---\n\n${lines.join('\n')}\n`;
-          await putObject(`${sk.space}/index.md`, indexBody);
+          await putObject(systemKey(`indexes/${sk.space}.md`), indexBody);
         }
 
         // Master index — only include spaces from structure (or all if no structure)
@@ -105,7 +98,7 @@ export async function POST(req: Request) {
           sections.push(`## ${label}\n${lines.join('\n')}`);
         }
         const masterBody = `---\ntitle: Index\ntype: nav\nupdated: ${new Date().toISOString()}\n---\n\n${sections.join('\n\n')}\n`;
-        await putObject('index.md', masterBody);
+        await putObject(systemKey('index.md'), masterBody);
 
         send({ type: 'done', indexed });
       } catch (err) {

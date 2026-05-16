@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { putObject } from '@/lib/s3';
+import { authoredPrefix, RAW_PREFIX } from '@/lib/vault-paths';
 
 const SPACE_RE = /^[a-z0-9][a-z0-9-]*$/;
 
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
   }
 
   const filename = sanitizeFilename(file.name);
-  const key = `${space}/${path}/${filename}`;
+  const key = path === 'raw' ? `${RAW_PREFIX}${filename}` : `${authoredPrefix(space)}${filename}`;
   const content = await file.text();
 
   try {

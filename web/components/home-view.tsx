@@ -20,7 +20,7 @@ export function HomeView({ onOpen, onAsk, onAskPrompt, onUpload, prompts, setPro
   const recentDocs: { id: string; title: string; path: string; source: string; updated: string }[] = [];
   const stats = [
     { label: 'Indexed docs', value: String(docCount), sub: 'in vault' },
-    { label: 'You authored', value: String(wikiCount), sub: 'in wiki/' },
+    { label: 'You authored', value: String(wikiCount), sub: 'in authored/' },
     { label: 'Storage', value: 'S3', sub: 'source of truth' },
     { label: 'Search', value: 'Fuse.js', sub: 'in-memory' },
   ];

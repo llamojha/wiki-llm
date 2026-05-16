@@ -1,15 +1,17 @@
 import { createHash } from 'node:crypto';
 import type { ProcessedManifest, ProcessedFileEntry } from './types.js';
 import { getObjectOrNull, putJson } from './s3.js';
+import { systemKey } from './paths.js';
 
-const MANIFEST_KEY = '_processed.json';
+const MANIFEST_KEY = systemKey('processed.json');
 
 export function computeHash(content: string): string {
   return 'sha256:' + createHash('sha256').update(content).digest('hex');
 }
 
 export async function getManifest(bucket: string, prefix: string): Promise<ProcessedManifest> {
-  const raw = await getObjectOrNull(bucket, prefix, MANIFEST_KEY);
+  const raw = await getObjectOrNull(bucket, prefix, MANIFEST_KEY)
+    ?? await getObjectOrNull(bucket, prefix, '_processed.json');
   if (!raw) return { files: {} };
   return JSON.parse(raw) as ProcessedManifest;
 }

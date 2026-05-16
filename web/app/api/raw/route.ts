@@ -1,17 +1,24 @@
 import { NextResponse } from 'next/server';
 import { getObject, listObjects } from '@/lib/s3';
+import { getIngestPolicy } from '@/lib/ingest-policy';
+import { systemKey } from '@/lib/vault-paths';
 
 const SPACE_RE = /^[a-z0-9][a-z0-9-]*$/;
-const INGEST_SPACE = 'wiki';
-const RAW_PREFIX = 'raw/';
 
 type ProcessedManifest = { files: Record<string, unknown> };
 
 async function getManifest(): Promise<ProcessedManifest> {
   try {
-    const raw = await getObject('_processed.json');
+    const raw = await getObject(systemKey('processed.json'));
     return JSON.parse(raw);
-  } catch { return { files: {} }; }
+  } catch {
+    try {
+      const raw = await getObject('_processed.json');
+      return JSON.parse(raw);
+    } catch {
+      return { files: {} };
+    }
+  }
 }
 
 export async function GET(req: Request) {
@@ -22,8 +29,13 @@ export async function GET(req: Request) {
     return NextResponse.json({ detail: 'space query param required' }, { status: 400 });
   }
 
-  if (space !== INGEST_SPACE) {
-    return NextResponse.json({ space, count: 0, keys: [], total: 0, ingestSpace: INGEST_SPACE });
+  const policy = await getIngestPolicy();
+  if (!policy) {
+    return NextResponse.json({ space, count: 0, keys: [], total: 0, detail: 'structure.json does not declare a generated wiki space' });
+  }
+
+  if (space !== policy.space) {
+    return NextResponse.json({ space, count: 0, keys: [], total: 0, ingestSpace: policy.space });
   }
 
   const manifest = await getManifest();
@@ -32,7 +44,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ detail: 'invalid space name' }, { status: 400 });
   }
 
-  const keys = await listObjects(RAW_PREFIX);
+  const keys = await listObjects(policy.rawPrefix);
   const pending = keys.filter(k => !manifest.files[k]);
-  return NextResponse.json({ space: INGEST_SPACE, count: pending.length, keys: pending, total: keys.length });
+  return NextResponse.json({ space: policy.space, count: pending.length, keys: pending, total: keys.length });
 }

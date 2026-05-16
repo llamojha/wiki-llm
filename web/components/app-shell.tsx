@@ -62,8 +62,8 @@ function buildGeneratedDocFromPrompt(prompt: string): { id: string; doc: Generat
   const answer = `Here's a synthesized overview of **${title.toLowerCase()}**, drawn from the docs your team has indexed.\n\nThis page was generated from a prompt and stitches together the most relevant passages found across the wiki. Edit it freely — your changes won't affect the original sources.`;
   const doc: GeneratedDoc = {
     title,
-    path: `generated / ${slug}.md`,
-    s3: `generated/${slug}.md`,
+    path: `saved / ${slug}.md`,
+    s3: `users/amllamojha/authored/personal/saved/${slug}.md`,
     source: 'personal',
     updated: 'just now',
     author: 'you · via assistant',
@@ -79,13 +79,18 @@ function buildGeneratedDocFromPrompt(prompt: string): { id: string; doc: Generat
 
 /** Convert an API doc response into a LiveDoc for DocReader. */
 function apiDocToDoc(api: ApiDoc, html: SanitizedHtml): LiveDoc {
+  const source = api.source_type === 'generated'
+    ? 'generated'
+    : api.source_type === 'personal'
+      ? 'personal'
+      : 'shared';
   return {
     generated: false,
     kind: 'live',
     title: api.title,
     path: api.path,
     s3: api.s3_key,
-    source: api.source_type === 'generated' ? 'generated' : 'shared',
+    source,
     updated: api.updated || 'unknown',
     author: api.author || 'unknown',
     tags: api.tags,

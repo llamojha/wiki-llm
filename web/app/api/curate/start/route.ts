@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import { LambdaClient, InvokeCommand, InvocationType } from '@aws-sdk/client-lambda';
 import { getObject, listObjects, putObject } from '@/lib/s3';
+import { getIngestPolicy } from '@/lib/ingest-policy';
+import { systemKey } from '@/lib/vault-paths';
 
 const LAMBDA_ARN = process.env.CURATE_LAMBDA_ARN;
 const BUCKET = process.env.VAULT_BUCKET ?? '';
 const PREFIX = process.env.VAULT_PREFIX ?? '';
 const LAMBDA_REGION = process.env.CURATE_LAMBDA_REGION ?? 'eu-central-1';
-const INGEST_SPACE = 'wiki';
-const RAW_PREFIX = 'raw/';
 
 let _lambda: LambdaClient | null = null;
 function lambdaClient(): LambdaClient {
@@ -32,8 +32,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ detail: 'space is required' }, { status: 400 });
   }
 
-  if (space !== INGEST_SPACE) {
-    return NextResponse.json({ detail: 'curation currently only supports the wiki space' }, { status: 400 });
+  const policy = await getIngestPolicy();
+  if (!policy) {
+    return NextResponse.json({ detail: 'structure.json does not declare a generated wiki space' }, { status: 409 });
+  }
+
+  if (space !== policy.space) {
+    return NextResponse.json({ detail: `curation currently only supports the ${policy.space} space` }, { status: 400 });
   }
 
   const batchLimit = typeof limit === 'number' && Number.isInteger(limit)
@@ -43,8 +48,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ detail: 'limit must be a positive integer' }, { status: 400 });
   }
 
-  // Ingestion currently reads from the vault-level raw/ prefix and writes to wiki/.
-  const allKeys = await listObjects(RAW_PREFIX);
+  // Shared ingestion reads from raw/ and writes pages to generated/<space>/.
+  const allKeys = await listObjects(policy.rawPrefix);
 
   if (allKeys.length === 0) {
     return NextResponse.json({ detail: 'no raw files found' }, { status: 404 });
@@ -53,9 +58,14 @@ export async function POST(req: Request) {
   // Read manifest and filter to pending only
   let manifest: ProcessedManifest = { files: {} };
   try {
-    const raw = await getObject('_processed.json');
+    const raw = await getObject(systemKey('processed.json'));
     manifest = JSON.parse(raw);
-  } catch { /* no manifest yet */ }
+  } catch {
+    try {
+      const raw = await getObject('_processed.json');
+      manifest = JSON.parse(raw);
+    } catch { /* no manifest yet */ }
+  }
 
   // For pending detection, we just check if the key exists in manifest
   // (full hash comparison happens in Lambda)
@@ -72,7 +82,7 @@ export async function POST(req: Request) {
   const job = {
     id: jobId,
     status: 'processing',
-    space: INGEST_SPACE,
+    space: policy.space,
     total: selected.length,
     completed: 0,
     files: selected.map(key => ({ key, status: 'pending' })),
@@ -81,10 +91,10 @@ export async function POST(req: Request) {
     error: null,
   };
 
-  await putObject(`_jobs/${jobId}.json`, JSON.stringify(job, null, 2));
+  await putObject(systemKey(`jobs/${jobId}.json`), JSON.stringify(job, null, 2));
 
   // Invoke Lambda async
-  const payload = { jobId, space: INGEST_SPACE, files: selected, bucket: BUCKET, prefix: PREFIX };
+  const payload = { jobId, space: policy.space, files: selected, bucket: BUCKET, prefix: PREFIX };
   await lambdaClient().send(new InvokeCommand({
     FunctionName: LAMBDA_ARN,
     InvocationType: InvocationType.Event, // async

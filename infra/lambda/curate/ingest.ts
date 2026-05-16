@@ -2,13 +2,14 @@ import { getObject, getObjectOrNull, putJson, putObject, listObjects } from './s
 import { converse } from './bedrock.js';
 import { buildExtractionSystemPrompt, buildExtractionUserPrompt } from './prompt.js';
 import { getManifest, saveManifest, addToManifest, computeHash } from './manifest.js';
+import { getGeneratedSpace } from './structure.js';
 import {
   parseSourceCard,
   renderSourcePage,
-  resolveOutputSpace,
   spaceFromRawKey,
   sourceSlug,
 } from './source-card.js';
+import { generatedPrefix, systemKey } from './paths.js';
 
 function nowMs(): number {
   return Date.now();
@@ -20,7 +21,7 @@ function logTiming(jobId: string | undefined, rawKey: string, stage: string, sta
 }
 
 function sourceCardKey(hash: string): string {
-  return `_curation/source-cards/${hash.replace(/^sha256:/, '')}.json`;
+  return systemKey(`source-cards/${hash.replace(/^sha256:/, '')}.json`);
 }
 
 export async function processSource(
@@ -36,12 +37,14 @@ export async function processSource(
   const hash = computeHash(sourceContent);
   logTiming(jobId, rawKey, 'read-source', startedAt);
 
+  const ingestSpace = await getGeneratedSpace(bucket, prefix);
+
   // 2. Get lightweight existing page summaries for placement hints.
   startedAt = nowMs();
-  const hintedSpace = space === '__all' ? (spaceFromRawKey(rawKey) ?? space) : space;
-  const existingKeys = await listObjects(bucket, prefix, `${hintedSpace}/`);
+  const generatedRoot = generatedPrefix(ingestSpace);
+  const existingKeys = await listObjects(bucket, prefix, generatedRoot);
   const summaryReads = existingKeys
-    .filter(key => key.endsWith('.md') && key !== `${space}/index.md`)
+    .filter(key => key.endsWith('.md'))
     .slice(0, 50);
   const summaryContents = await Promise.all(
     summaryReads.map(key => getObjectOrNull(bucket, prefix, key).then(c => ({ key, content: c })))
@@ -63,7 +66,7 @@ export async function processSource(
   // 3. Extract one compact source card. Index/log/global synthesis happen later.
   const system = buildExtractionSystemPrompt();
   const user = buildExtractionUserPrompt({
-    space,
+    space: ingestSpace,
     rawKey,
     sourceContent,
     existingPageSummaries: summaries.join('\n'),
@@ -74,11 +77,13 @@ export async function processSource(
   logTiming(jobId, rawKey, 'bedrock-extract', startedAt);
 
   const card = parseSourceCard(response, rawKey);
-  const outputSpace = space === '__all'
-    ? (spaceFromRawKey(rawKey) ?? resolveOutputSpace(space, card))
-    : space;
+  const sourceSpace = spaceFromRawKey(rawKey);
+  if (sourceSpace && sourceSpace !== ingestSpace) {
+    console.warn(`[${jobId ?? 'curate'}] ${rawKey} is scoped to ${sourceSpace}, but generated output is forced to ${ingestSpace}`);
+  }
+  const outputSpace = ingestSpace;
   const cardKey = sourceCardKey(hash);
-  const pagePath = `${outputSpace}/sources/${sourceSlug(card, rawKey, hash)}.md`;
+  const pagePath = `${generatedPrefix(outputSpace)}sources/${sourceSlug(card, rawKey, hash)}.md`;
   const pageContent = renderSourcePage(card, rawKey, hash);
 
   // 4. Deterministically write the durable card and source page.

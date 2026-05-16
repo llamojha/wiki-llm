@@ -351,7 +351,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
                   <span style={{ fontSize: 10, color: 'var(--fg-3)' }}>AI ingest</span>
                 </button>
                 <button className={'space-pill' + (subpath === 'wiki' ? ' on' : '')} onClick={() => setSubpath('wiki')}>
-                  <span>wiki/</span>
+                  <span>authored/</span>
                   <span style={{ fontSize: 10, color: 'var(--fg-3)' }}>direct</span>
                 </button>
               </div>
@@ -359,7 +359,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
           )}
           <div className="upload-s3-preview">
             {ICONS.s3}
-            <span>s3://vaultmark/{space}/{subpath}/</span>
+            <span>s3://vaultmark/{subpath === 'raw' ? 'raw/' : `authored/${space}/`}</span>
           </div>
         </div>
 
@@ -458,7 +458,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
                   <div className="upload-drop-icon" style={{ margin: '0 auto 12px' }}>{ICONS.spark}</div>
                   <div className="upload-drop-title">Process pending raw files</div>
                   <div className="upload-drop-sub">
-                    {pendingCount} file{pendingCount === 1 ? '' : 's'} in <code>raw/</code> waiting to be curated into <code>wiki/</code>.
+                    {pendingCount} file{pendingCount === 1 ? '' : 's'} in <code>raw/</code> waiting to be curated into <code>generated/wiki/</code>.
                   </div>
                 </div>
               )}

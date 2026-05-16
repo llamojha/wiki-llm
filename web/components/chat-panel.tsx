@@ -72,8 +72,8 @@ export function ChatPanel({ open, onClose, onOpenDoc, onSavePage, contextDoc }: 
     const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     onSavePage({
       title,
-      path: `personal / saved / ${slug}.md`,
-      s3: `wiki/saved/${slug}.md`,
+      path: `saved / ${slug}.md`,
+      s3: `users/amllamojha/authored/personal/saved/${slug}.md`,
       source: 'personal',
       updated: 'just now',
       author: 'you · via assistant',

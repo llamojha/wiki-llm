@@ -1,8 +1,9 @@
 import type { JobState } from './types.js';
 import { getObject, putJson } from './s3.js';
+import { systemKey } from './paths.js';
 
 function jobKey(jobId: string): string {
-  return `_jobs/${jobId}.json`;
+  return systemKey(`jobs/${jobId}.json`);
 }
 
 export async function getJob(bucket: string, prefix: string, jobId: string): Promise<JobState> {

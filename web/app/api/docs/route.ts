@@ -1,10 +1,11 @@
 import matter from 'gray-matter';
 import { NextResponse } from 'next/server';
 
-import { regenerateMasterIndex, regenerateSpaceIndex } from '@/lib/index-gen';
+import { regenerateMasterIndex } from '@/lib/index-gen';
 import { appendLog } from '@/lib/log-append';
 import { getObject, putObject } from '@/lib/s3';
 import { invalidateSearchIndex } from '@/lib/search';
+import { displayPathForKey, personalPrefix } from '@/lib/vault-paths';
 
 function slugify(title: string): string {
   return title
@@ -30,7 +31,7 @@ export async function POST(req: Request) {
   }
 
   const docSlug = slug || slugify(title);
-  const key = `wiki/${docSlug}.md`;
+  const key = `${personalPrefix()}${docSlug}.md`;
 
   // Check if slug already exists
   try {
@@ -45,7 +46,7 @@ export async function POST(req: Request) {
 
   const fm = {
     title,
-    source_type: 'authored',
+    source_type: 'personal',
     author: 'you',
     updated: new Date().toISOString(),
     starred: false,
@@ -53,13 +54,9 @@ export async function POST(req: Request) {
 
   const markdown = matter.stringify(content, fm);
   await putObject(key, markdown);
-  if (key.includes('/')) {
-    const space = key.split('/')[0];
-    await regenerateSpaceIndex(space);
-  }
   await regenerateMasterIndex();
   await appendLog('created', key, title);
   invalidateSearchIndex();
 
-  return NextResponse.json({ id: key, title, path: key }, { status: 201 });
+  return NextResponse.json({ id: key, title, path: displayPathForKey(key) }, { status: 201 });
 }

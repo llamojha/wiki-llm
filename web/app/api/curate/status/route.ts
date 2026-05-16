@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getObject, headObject } from '@/lib/s3';
+import { systemKey } from '@/lib/vault-paths';
 
 const STALE_AFTER_MS = 3 * 60 * 1000;
 
@@ -12,7 +13,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const key = `_jobs/${jobId}.json`;
+    const key = systemKey(`jobs/${jobId}.json`);
     const [raw, meta] = await Promise.all([
       getObject(key),
       headObject(key),

@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 // Kept as a thin redirect for any external callers.
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
-  const { space } = body as { space?: string };
+  const { space, limit } = body as { space?: string; limit?: unknown };
 
   if (!space) {
     return NextResponse.json({ detail: 'space is required' }, { status: 400 });
@@ -15,7 +15,7 @@ export async function POST(req: Request) {
   const fakeReq = new Request(req.url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ space }),
+    body: JSON.stringify({ space, ...(limit ? { limit } : {}) }),
   });
   return startHandler(fakeReq);
 }
