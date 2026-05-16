@@ -6,10 +6,11 @@ const LAMBDA_ARN = process.env.CURATE_LAMBDA_ARN;
 const BUCKET = process.env.VAULT_BUCKET ?? '';
 const PREFIX = process.env.VAULT_PREFIX ?? '';
 const REGION = process.env.VAULT_REGION ?? 'eu-central-1';
+const LAMBDA_REGION = process.env.CURATE_LAMBDA_REGION ?? 'eu-central-1';
 
 let _lambda: LambdaClient | null = null;
 function lambdaClient(): LambdaClient {
-  if (!_lambda) _lambda = new LambdaClient({ region: REGION });
+  if (!_lambda) _lambda = new LambdaClient({ region: LAMBDA_REGION });
   return _lambda;
 }
 
