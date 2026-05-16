@@ -16,7 +16,7 @@ type UploadModalProps = {
 
 type FileStatus = 'queued' | 'uploading' | 'indexing' | 'indexed' | 'queued-curate' | 'error';
 type UploadFile = { id: string; name: string; size: number; file: File; status: FileStatus; progress: number; error?: string };
-type StreamLine = { name: string; ts: string; status: 'curating' | 'indexed' | 'error'; error?: string };
+type StreamLine = { name: string; ts: string; status: 'curating' | 'indexed' | 'error'; error?: string; duration?: string };
 
 function fmtSize(b: number): string {
   if (b < 1024) return `${b} B`;
@@ -48,6 +48,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
   const [pendingRunning, setPendingRunning] = useState(false);
   const [pendingDone, setPendingDone] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const jobIdRef = useRef<string | null>(null);
 
   // Reindex tab
   const [reindexRunning, setReindexRunning] = useState(false);
@@ -158,7 +159,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
 
   const finishUpload = () => { onUploaded(); onClose(); const n = files.filter(f => f.status === 'indexed').length; if (n) showToast(`Uploaded ${n} file${n > 1 ? 's' : ''} to ${space}`); };
 
-  // ── Pending tab: client-driven agentic curation loop ──
+  // ── Pending tab: Lambda-based curation with polling ──
   const startPendingStream = async () => {
     abortRef.current?.abort();
     const ctrl = new AbortController();
@@ -166,72 +167,73 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
 
     setPendingStream([]); setPendingRunning(true); setPendingDone(false);
     try {
-      const listRes = await fetch(`/api/raw?space=${encodeURIComponent(space)}`, { signal: ctrl.signal });
-      if (!listRes.ok) { setPendingRunning(false); showToast('No pending files or error'); return; }
-      const { keys } = await listRes.json() as { keys: string[] };
-      if (!keys?.length) { setPendingRunning(false); showToast('No pending files'); return; }
-
-      for (let fi = 0; fi < keys.length; fi++) {
-        const rawKey = keys[fi];
-        if (ctrl.signal.aborted) break;
-        const name = rawKey.split('/').slice(-1)[0] ?? rawKey;
-        const ts = () => { const n = new Date(); return `${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}:${String(n.getSeconds()).padStart(2, '0')}`; };
-
-        try {
-          // Step 1: Assign space
-          const knownSpace = rawKey.startsWith('raw/') ? undefined : (space === '__all' ? rawKey.split('/')[0] : space);
-          setPendingStream(curr => [...curr, { name, ts: ts(), status: 'curating' }]);
-          const assignRes = await fetch('/api/curate/assign', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ key: rawKey, space: knownSpace }),
-            signal: ctrl.signal,
-          });
-          if (!assignRes.ok) throw new Error((await assignRes.json().catch(() => ({}))).detail || 'Assign failed');
-          const { space: assignedSpace } = await assignRes.json() as { space: string };
-
-          // Step 2: Plan pages
-          const planRes = await fetch('/api/curate/plan', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ space: assignedSpace, key: rawKey }),
-            signal: ctrl.signal,
-          });
-          if (!planRes.ok) throw new Error((await planRes.json().catch(() => ({}))).detail || 'Plan failed');
-          const { plan } = await planRes.json() as { plan: { pages: Array<{ path: string; type: string; title: string; description: string; action: string }> } };
-
-          // Step 3: Generate each page
-          for (const page of plan.pages) {
-            if (ctrl.signal.aborted) break;
-            const genRes = await fetch('/api/curate/generate', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ space: assignedSpace, key: rawKey, page }),
-              signal: ctrl.signal,
-            });
-            if (!genRes.ok) throw new Error((await genRes.json().catch(() => ({}))).detail || 'Generate failed');
-          }
-
-          // Step 4: Finalize — delete raw, reindex only on last file
-          const isLast = fi === keys.length - 1;
-          const finRes = await fetch('/api/curate/finalize', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ space: assignedSpace, key: rawKey, reindex: isLast }),
-            signal: ctrl.signal,
-          });
-          if (!finRes.ok) throw new Error((await finRes.json().catch(() => ({}))).detail || 'Finalize failed');
-
-          // Mark done
-          setPendingStream(curr => curr.map((e, i) => i === curr.length - 1 && e.name === name ? { ...e, ts: ts(), status: 'indexed' } : e));
-        } catch (err: unknown) {
-          if (err instanceof Error && err.name === 'AbortError') break;
-          const msg = err instanceof Error ? err.message : 'Unknown error';
-          setPendingStream(curr => curr.map((e, i) => i === curr.length - 1 && e.name === name ? { ...e, ts: ts(), status: 'error', error: msg } : e));
-        }
+      // Start the Lambda job
+      const startRes = await fetch('/api/curate/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ space }),
+        signal: ctrl.signal,
+      });
+      if (!startRes.ok) {
+        const data = await startRes.json().catch(() => ({}));
+        setPendingRunning(false);
+        showToast(data.detail || 'Failed to start processing');
+        return;
       }
-      setPendingRunning(false); setPendingDone(true);
-      onUploaded();
+      const { jobId, total } = await startRes.json() as { jobId: string; total: number };
+      if (!jobId) { setPendingRunning(false); showToast('No pending files'); return; }
+      jobIdRef.current = jobId;
+
+      // Poll for status
+      const poll = async () => {
+        while (!ctrl.signal.aborted) {
+          await new Promise(r => setTimeout(r, 3000));
+          if (ctrl.signal.aborted) return;
+
+          const statusRes = await fetch(`/api/curate/status?job=${encodeURIComponent(jobId)}`, { signal: ctrl.signal });
+          if (!statusRes.ok) continue;
+          const job = await statusRes.json() as {
+            status: string;
+            files: Array<{ key: string; status: string; pages?: string[]; error?: string }>;
+            completed: number;
+            total: number;
+          };
+
+          // Update stream lines from job state
+          const ts = () => { const n = new Date(); return `${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}:${String(n.getSeconds()).padStart(2, '0')}`; };
+          const lines: StreamLine[] = job.files.map(f => ({
+            name: f.key.split('/').slice(-1)[0] ?? f.key,
+            ts: f.status === 'done' || f.status === 'error' ? ts() : '',
+            status: f.status === 'done' ? 'indexed' : f.status === 'error' ? 'error' : 'curating',
+            error: f.error,
+          }));
+          setPendingStream(lines);
+
+          if (job.status === 'done' || job.status === 'error' || job.status === 'cancelled') {
+            setPendingRunning(false);
+            setPendingDone(true);
+            onUploaded();
+            return;
+          }
+        }
+      };
+      await poll();
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return;
       setPendingRunning(false); showToast('Processing failed');
     }
+  };
+
+  const cancelPending = async () => {
+    if (jobIdRef.current) {
+      fetch('/api/curate/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId: jobIdRef.current }),
+      }).catch(() => {});
+    }
+    abortRef.current?.abort();
+    setPendingRunning(false);
   };
 
   // ── Re-index tab ──
@@ -423,7 +425,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
                 <div className="pending-stat-label">raw files in <code>{space}</code></div>
               </div>
               <span style={{ flex: 1 }}></span>
-              <div className="pending-route"><code>POST /api/curate</code></div>
+              <div className="pending-route"><code>POST /api/curate/start</code></div>
             </div>
 
             <div className="upload-list pending-stream">
@@ -443,6 +445,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
                   <span className="stream-name">{e.name}</span>
                   {e.status === 'curating' && <span className="spinner"></span>}
                   {e.error && <span className="stream-error">{e.error}</span>}
+                  {e.duration && <span className="stream-duration">{e.duration}</span>}
                 </div>
               ))}
             </div>
@@ -460,7 +463,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
                   {ICONS.spark} {pendingDone ? 'Run again' : 'Process all'}
                 </button>
               ) : (
-                <button className="btn" onClick={() => { abortRef.current?.abort(); setPendingRunning(false); }}>
+                <button className="btn" onClick={cancelPending}>
                   Stop
                 </button>
               )}

@@ -34,6 +34,10 @@ node_modules/
 .npm/
 .pnpm-store/
 
+# Lambda build output
+infra/lambda/curate/dist/
+infra/lambda/curate/node_modules/
+
 # Next.js
 .next/
 out/

@@ -1630,6 +1630,7 @@ input, textarea { font: inherit; color: inherit; }
 .stream-line.error .stream-arrow { color: var(--orange, #f59e0b); }
 .stream-line.error .stream-name { color: var(--fg-2); }
 .stream-error { color: var(--orange, #f59e0b); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stream-duration { color: var(--fg-3); font-size: 10px; font-family: var(--font-mono); }
 
 /* Re-index tab */
 .reindex-panel { padding: 16px; display: flex; flex-direction: column; gap: 16px; flex: 1; min-height: 0; }
