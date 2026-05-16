@@ -4,6 +4,7 @@ import {
   renderSourcePage,
   resolveOutputSpace,
   sourceSlug,
+  spaceFromRawKey,
 } from './source-card.js';
 
 describe('source cards', () => {
@@ -77,5 +78,25 @@ describe('source cards', () => {
     expect(resolveOutputSpace('__all', card)).toBe('research');
     expect(resolveOutputSpace('docs', card)).toBe('docs');
   });
-});
 
+  it('does not choose personal for root raw files in all-space mode', () => {
+    const card = parseSourceCard(JSON.stringify({
+      title: 'Shared Source',
+      summary: 'A source that should not default to personal.',
+      claims: [],
+      entities: [],
+      concepts: [],
+      suggestedSpaces: ['personal', 'research'],
+      suggestedPages: [],
+      tags: [],
+    }), 'raw/source.md');
+
+    expect(resolveOutputSpace('__all', card)).toBe('research');
+  });
+
+  it('infers existing space from space-scoped raw keys', () => {
+    expect(spaceFromRawKey('research/raw/source.md')).toBe('research');
+    expect(spaceFromRawKey('personal/raw/source.md')).toBe('personal');
+    expect(spaceFromRawKey('raw/source.md')).toBeNull();
+  });
+});

@@ -24,9 +24,13 @@ function fmtSize(b: number): string {
   return `${(b / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function defaultSpace(spaces: string[]): string {
+  return spaces.includes('wiki') ? 'wiki' : spaces.find((s) => s !== 'personal') ?? spaces[0] ?? 'wiki';
+}
+
 export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, showToast }: UploadModalProps) {
   const [tab, setTab] = useState<LibraryTab>(initialTab ?? 'upload');
-  const [space, setSpace] = useState(spaces[0] ?? 'articles');
+  const [space, setSpace] = useState(defaultSpace(spaces));
   const [subpath, setSubpath] = useState<'raw' | 'wiki'>('raw');
   const [files, setFiles] = useState<UploadFile[]>([]);
   const [dragActive, setDragActive] = useState(false);
@@ -71,19 +75,23 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
     setFiles([]); setDragActive(false);
     setPendingStream([]); setPendingRunning(false); setPendingDone(false); setPendingJobTotal(0);
     setReindexRunning(false); setReindexDone(false); setReindexTotal(0); setReindexIndexed(0); setReindexRawCount(0);
-    if (spaces.length && !spaces.includes(space)) setSpace(spaces[0]);
+    if (spaces.length && !spaces.includes(space)) setSpace(defaultSpace(spaces));
   }, [open, initialTab]);
 
   // Fetch pending count when space changes
   useEffect(() => {
     if (!open) return;
+    if (tab === 'pending' && space !== 'wiki') {
+      setSpace('wiki');
+      return;
+    }
     const ctrl = new AbortController();
     fetch(`/api/raw?space=${encodeURIComponent(space)}`, { signal: ctrl.signal })
       .then(r => r.json())
       .then(d => setPendingCount(d.count ?? 0))
       .catch(() => { if (!ctrl.signal.aborted) setPendingCount(0); });
     return () => ctrl.abort();
-  }, [open, space]);
+  }, [open, space, tab]);
 
   // Escape to close
   useEffect(() => {
@@ -315,13 +323,18 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
           <div className="upload-meta-row">
             <label>Space</label>
             <div className="space-select">
-              {(tab === 'reindex' || tab === 'pending') && (
+              {tab === 'pending' ? (
+                <button className="space-pill on" onClick={() => setSpace('wiki')}>
+                  {ICONS.globe}
+                  <span>wiki</span>
+                </button>
+              ) : (tab === 'reindex') && (
                 <button className={'space-pill' + (space === '__all' ? ' on' : '')} onClick={() => setSpace('__all')}>
                   {ICONS.globe}
                   <span>All</span>
                 </button>
               )}
-              {spaces.map(s => (
+              {tab !== 'pending' && spaces.map(s => (
                 <button key={s} className={'space-pill' + (space === s ? ' on' : '')} onClick={() => setSpace(s)}>
                   {ICONS.globe}
                   <span>{s}</span>
@@ -462,21 +475,20 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
             </div>
 
             <div className="upload-foot">
-              <label className="upload-check">
+              <div className="batch-control" aria-label="Batch size">
                 <span>Batch</span>
-                <select
-                  value={pendingLimit}
-                  disabled={pendingRunning}
-                  onChange={e => setPendingLimit(e.target.value)}
-                  style={{ marginLeft: 6 }}
-                >
-                  <option value="1">1</option>
-                  <option value="5">5</option>
-                  <option value="10">10</option>
-                  <option value="25">25</option>
-                  <option value="all">All</option>
-                </select>
-              </label>
+                {['1', '5', '10', '25', 'all'].map(value => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={'batch-pill' + (pendingLimit === value ? ' on' : '')}
+                    disabled={pendingRunning}
+                    onClick={() => setPendingLimit(value)}
+                  >
+                    {value === 'all' ? 'All' : value}
+                  </button>
+                ))}
+              </div>
               <span className="upload-summary">
                 {!pendingRunning && !pendingDone && (pendingCount === 0 ? 'Nothing pending' : `${pendingCount} file${pendingCount > 1 ? 's' : ''} pending`)}
                 {pendingRunning && `${pendingStream.filter(e => e.status === 'indexed').length} of ${pendingJobTotal || pendingCount} done`}

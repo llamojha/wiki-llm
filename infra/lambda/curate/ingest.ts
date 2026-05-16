@@ -6,6 +6,7 @@ import {
   parseSourceCard,
   renderSourcePage,
   resolveOutputSpace,
+  spaceFromRawKey,
   sourceSlug,
 } from './source-card.js';
 
@@ -37,7 +38,8 @@ export async function processSource(
 
   // 2. Get lightweight existing page summaries for placement hints.
   startedAt = nowMs();
-  const existingKeys = await listObjects(bucket, prefix, `${space}/`);
+  const hintedSpace = space === '__all' ? (spaceFromRawKey(rawKey) ?? space) : space;
+  const existingKeys = await listObjects(bucket, prefix, `${hintedSpace}/`);
   const summaryReads = existingKeys
     .filter(key => key.endsWith('.md') && key !== `${space}/index.md`)
     .slice(0, 50);
@@ -72,7 +74,7 @@ export async function processSource(
   logTiming(jobId, rawKey, 'bedrock-extract', startedAt);
 
   const card = parseSourceCard(response, rawKey);
-  const outputSpace = resolveOutputSpace(space, card);
+  const outputSpace = spaceFromRawKey(rawKey) ?? resolveOutputSpace(space, card);
   const cardKey = sourceCardKey(hash);
   const pagePath = `${outputSpace}/sources/${sourceSlug(card, rawKey, hash)}.md`;
   const pageContent = renderSourcePage(card, rawKey, hash);

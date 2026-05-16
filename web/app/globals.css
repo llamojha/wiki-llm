@@ -1603,6 +1603,44 @@ input, textarea { font: inherit; color: inherit; }
 .space-pill.on > svg { color: var(--accent); }
 .space-pill > svg { color: var(--fg-3); width: 12px; height: 12px; }
 
+/* Compact segmented control used inside modal footers */
+.batch-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--fg-1);
+}
+.batch-control > span {
+  margin-right: 2px;
+}
+.batch-pill {
+  min-width: 28px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 100px;
+  background: var(--panel);
+  color: var(--fg-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.batch-pill:hover:not(:disabled) {
+  border-color: var(--line-2);
+  color: var(--fg);
+}
+.batch-pill.on {
+  background: var(--accent-soft);
+  border-color: color-mix(in oklch, var(--accent) 40%, transparent);
+  color: var(--accent);
+}
+.batch-pill:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
 /* Pending tab */
 .pending-summary {
   display: flex; align-items: center; gap: 18px;

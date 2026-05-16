@@ -141,5 +141,10 @@ ${concepts}
 
 export function resolveOutputSpace(requestedSpace: string, card: SourceCard): string {
   if (requestedSpace !== '__all') return requestedSpace;
-  return card.suggestedSpaces[0] || 'inbox';
+  return card.suggestedSpaces.find((space) => space !== 'personal') || 'inbox';
+}
+
+export function spaceFromRawKey(rawKey: string): string | null {
+  const match = rawKey.match(/^([a-z0-9][a-z0-9-]*)\/raw\/.+/);
+  return match?.[1] ?? null;
 }

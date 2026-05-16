@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getObject, listObjects } from '@/lib/s3';
-import { getStructure } from '@/lib/vault-structure';
 
 const SPACE_RE = /^[a-z0-9][a-z0-9-]*$/;
+const INGEST_SPACE = 'wiki';
 
 type ProcessedManifest = { files: Record<string, unknown> };
 
@@ -21,24 +21,17 @@ export async function GET(req: Request) {
     return NextResponse.json({ detail: 'space query param required' }, { status: 400 });
   }
 
-  const manifest = await getManifest();
-
-  if (space === '__all') {
-    const structure = await getStructure();
-    let allKeys: string[] = [];
-    allKeys.push(...await listObjects('raw/'));
-    for (const s of structure.spaces) {
-      allKeys.push(...await listObjects(`${s.name}/raw/`));
-    }
-    const pending = allKeys.filter(k => !manifest.files[k]);
-    return NextResponse.json({ space: '__all', count: pending.length, keys: pending, total: allKeys.length });
+  if (space !== INGEST_SPACE) {
+    return NextResponse.json({ space, count: 0, keys: [], total: 0, ingestSpace: INGEST_SPACE });
   }
+
+  const manifest = await getManifest();
 
   if (!SPACE_RE.test(space)) {
     return NextResponse.json({ detail: 'invalid space name' }, { status: 400 });
   }
 
-  const keys = await listObjects(`${space}/raw/`);
+  const keys = await listObjects(`${INGEST_SPACE}/raw/`);
   const pending = keys.filter(k => !manifest.files[k]);
-  return NextResponse.json({ space, count: pending.length, keys: pending, total: keys.length });
+  return NextResponse.json({ space: INGEST_SPACE, count: pending.length, keys: pending, total: keys.length });
 }
