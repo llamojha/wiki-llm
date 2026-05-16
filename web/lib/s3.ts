@@ -1,6 +1,7 @@
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
@@ -79,6 +80,14 @@ export async function getObject(relKey: string): Promise<string> {
     new GetObjectCommand({ Bucket: bucket, Key: fullKey(relKey) }),
   );
   return (await res.Body?.transformToString('utf-8')) ?? '';
+}
+
+/** Fetch object metadata by relative key. */
+export async function headObject(relKey: string): Promise<{ lastModified: Date | null }> {
+  const res = await client().send(
+    new HeadObjectCommand({ Bucket: bucket, Key: fullKey(relKey) }),
+  );
+  return { lastModified: res.LastModified ?? null };
 }
 
 export class ConcurrencyError extends Error {

@@ -6,14 +6,57 @@ The curation pipeline transforms raw source documents into a compounding, interl
 
 Raw files are immutable archives. The wiki is a derived, LLM-maintained artifact. Every ingest strengthens cross-references, updates the synthesis, and flags contradictions.
 
+## V2 Implementation Tasks
+
+The first implementation was a single-call-per-source pipeline that asked the LLM to emit every affected Markdown file, including `index.md` and `log.md`. That proved too slow and put bookkeeping in the middle of curation. V2 splits curation into extraction, placement, targeted synthesis, and final maintenance.
+
+- [x] 1. Add timing and reliability instrumentation.
+  - Log per-file progress in Lambda.
+  - Log source read, placement-hint read, Bedrock extraction, write, and manifest timings.
+  - Detect stale processing jobs from S3 `LastModified` in `/api/curate/status`.
+
+- [x] 2. Split single-source processing into source-card extraction and deterministic writes.
+  - Extract a compact JSON source card from each raw file.
+  - Write `_curation/source-cards/<hash>.json`.
+  - Write the source summary page deterministically from the card.
+  - Update `_processed.json` with the source page and source-card key.
+
+- [x] 3. Stop asking the LLM to rewrite `index.md` and `log.md` during ingest.
+  - The extraction prompt returns JSON only.
+  - The Lambda no longer requests XML file blocks for per-source ingest.
+  - `index.md`, space indexes, `log.md`, and lint output are reserved for the final maintenance pass.
+
+- [ ] 4. Add placement planning.
+  - Read pending source cards.
+  - Assign each card to an existing user-controlled space.
+  - Group cards by affected source/entity/concept/overview page.
+  - Emit synthesis task records under `_curation/tasks/`.
+
+- [ ] 5. Add targeted page synthesis.
+  - Run one LLM call per affected page/topic.
+  - Provide current page content plus relevant source cards.
+  - Require citations back to source pages/raw keys.
+  - Write only content pages, never global maintenance files.
+
+- [x] 6. Keep Lambda work retryable and chainable.
+  - Continue large batches by asynchronously invoking the same Lambda before timeout.
+  - Preserve original file indexes when continuing a batch.
+  - Add self-invoke IAM permission in CDK.
+
+- [ ] 7. Add final maintenance and lint pass.
+  - Rebuild `index.md` and space indexes deterministically from Markdown/frontmatter.
+  - Append or rebuild `log.md` from job/task events at the end of the process.
+  - Run lint checks for broken links, duplicate concepts, orphan pages, uncited claims, stale overview content, and contradiction warnings.
+  - Mark the curation job complete only after final maintenance succeeds.
+
 ## Principles
 
 1. **Raw is immutable.** Source documents stay in `raw/` forever. They are the ground truth.
-2. **The wiki compounds.** Each ingest enriches existing pages, adds cross-references, and updates the synthesis — not just appends isolated summaries.
-3. **LLM maintains, human curates.** The LLM writes and updates all generated pages. User-authored `wiki/` pages are indexed but never modified by AI.
+2. **The wiki compounds.** Extraction creates durable source cards first; later synthesis enriches existing pages, adds cross-references, and updates the overview.
+3. **LLM maintains, human curates.** The LLM extracts cards and synthesizes targeted generated pages. User-authored `wiki/` pages are indexed but never modified by AI.
 4. **Contradictions are surfaced.** When new sources conflict with existing knowledge, the LLM flags it explicitly rather than silently overwriting.
 5. **Everything is re-derivable.** Since raw is preserved, the entire wiki can be regenerated from scratch if needed.
-6. **Single atomic call per source.** Each ingest is one LLM call that outputs all affected files — the wiki is always coherent after each source.
+6. **Bookkeeping is deterministic.** `index.md`, space indexes, `log.md`, and lint status are produced by the final maintenance pass, not by per-source LLM calls.
 
 ## Architecture
 
@@ -23,9 +66,10 @@ Browser
   → Vercel GET  /api/curate/status   (polls job state from S3)
 
 Lambda (5 min timeout)
-  → For each pending file: single Bedrock call (Karpathy-style)
-  → Writes ALL output files to S3 per source
-  → Updates manifest, index, overview, log atomically
+  → For each pending file: extract a compact source card
+  → Writes source card + deterministic source summary page
+  → Updates manifest
+  → Later: placement, targeted synthesis, final index/log/lint maintenance
 ```
 
 ## S3 Layout
@@ -35,14 +79,17 @@ s3://<bucket>/<prefix>/
   raw/                    # Immutable source documents (never deleted by AI)
   wiki/                   # User-authored pages (indexed, never AI-modified)
   <space>/                # AI-generated pages organized by space
-    sources/              # Source summaries (LLM decides subfolders within)
-    entities/             # People, orgs, products (LLM decides)
-    concepts/             # Ideas, frameworks (LLM decides)
+    sources/              # Source summaries generated deterministically from source cards
+    entities/             # People, orgs, products from targeted synthesis
+    concepts/             # Ideas, frameworks from targeted synthesis
     ...                   # LLM may create other folders as needed
-    index.md              # Space catalog (updated every ingest)
-  overview.md             # Evolving high-level synthesis (updated every ingest)
-  index.md                # Master catalog (updated every ingest)
-  log.md                  # Append-only history
+    index.md              # Space catalog (rebuilt during final maintenance)
+  overview.md             # Evolving high-level synthesis (updated during synthesis/final maintenance)
+  index.md                # Master catalog (rebuilt during final maintenance)
+  log.md                  # Append-only history (updated during final maintenance)
+  _curation/
+    source-cards/         # JSON extraction cards, one per raw content hash
+    tasks/                # Placement/synthesis/final-maintenance task records
   _processed.json         # Manifest of processed raw files
   _jobs/                  # Job state files
     {jobId}.json
@@ -103,61 +150,48 @@ Tracks which raw files have been ingested and their content hash at time of proc
 }
 ```
 
-## Ingest Flow (Single Call Per Source — Karpathy Style)
+## Extraction Flow
 
-For each pending raw file, one Lambda invocation does:
+For each pending raw file, one Lambda task does:
 
-1. Read the source document from S3
-2. Read current wiki state:
-   - `overview.md` (current synthesis)
-   - `{space}/index.md` (space catalog)
-   - `log.md` (last 20 entries)
-   - All existing page titles + first-line summaries in the space
-3. **Single Bedrock call** — LLM receives source + full wiki context, outputs ALL files
-4. Parse `<file path="...">...</file>` blocks from response
-5. Write all output files to S3 (source page, entities, concepts, updated index, updated overview, appended log)
-6. Update `_processed.json` with hash + output pages
-7. Update job state
+1. Read the source document from S3.
+2. Read lightweight placement hints: existing page keys plus first-line summaries.
+3. Make one Bedrock call that returns a compact JSON source card.
+4. Write `_curation/source-cards/<hash>.json`.
+5. Render and write `{space}/sources/<slug>-<hash>.md` deterministically from the source card.
+6. Update `_processed.json` with hash, resolved space, source page, and source-card key.
+7. Update job state.
 
-**What the LLM outputs per source (all in one response):**
-- `{space}/sources/<slug>.md` — structured summary with frontmatter
-- `{space}/entities/<name>.md` — one per significant person/org/product (create or update)
-- `{space}/concepts/<name>.md` — one per key idea/framework (create or update)
-- `{space}/index.md` — updated space catalog with new entries added
-- `overview.md` — updated high-level synthesis reflecting the new source
-- `log.md` — full log with new entry appended
+The extraction pass does not update `index.md`, `{space}/index.md`, `overview.md`, `log.md`, entity pages, or concept pages. Those are handled by placement, targeted synthesis, and final maintenance tasks.
 
-**The LLM decides folder structure within the space.** Spaces are the user-controlled boundary; everything inside is LLM-organized. It may create `people/`, `tools/`, `comparisons/`, whatever fits the content.
-
-## Ingest Prompt
+## Extraction Prompt
 
 ```
 System:
-You are a wiki maintainer for a personal knowledge base stored as markdown files.
-Process a new source document and integrate it into the existing wiki.
+You extract durable source cards for a Markdown knowledge base.
 
-Output ONLY file contents in XML blocks — one block per file to create or update:
-<file path="space/sources/slug.md">...content...</file>
+Return ONLY valid JSON. Do not wrap it in Markdown fences. Do not output file blocks.
 
-Produce:
-1. {space}/sources/<slug>.md — structured summary with YAML frontmatter
-2. {space}/entities/<name>.md — one per significant person/org/product (create or update)
-3. {space}/concepts/<name>.md — one per key idea/framework (create or update)
-4. {space}/index.md — updated catalog (preserve all existing rows, add new ones)
-5. overview.md — updated high-level synthesis reflecting this new source
-6. log.md — full file with new entry appended at the bottom
+Schema:
+{
+  "title": "short source title",
+  "summary": "one concise paragraph",
+  "claims": [
+    { "text": "atomic factual claim", "evidence": "short quote or location from the source" }
+  ],
+  "entities": ["people, organizations, products, systems"],
+  "concepts": ["important ideas, methods, frameworks"],
+  "suggestedSpaces": ["lowercase-hyphen-space-name"],
+  "suggestedPages": ["page titles that may need synthesis later"],
+  "tags": ["lowercase-tags"]
+}
 
 Rules:
-- Every page needs YAML frontmatter: title, type, tags, sources, created, updated
-- Link between pages using [[Page Title]] wikilinks on first mention
-- Slug = lowercase, hyphens only, no special characters
-- You may create subfolders within the space as you see fit (people/, tools/, etc.)
-- If updating an existing page, include the FULL updated content (not a diff)
-- Flag contradictions with existing content using a > [!warning] callout
-- Preserve ALL existing rows in index.md — only add new rows
-- Preserve ALL existing log entries — only append the new one at the bottom
-- Only create entity/concept pages for things substantive enough to warrant their own page
-- Prefer fewer, higher-quality pages over many thin ones
+- Extract from the source only. Do not invent facts.
+- Keep claims atomic and citation-friendly.
+- Prefer 5-15 high-signal claims over exhaustive notes.
+- suggestedSpaces and suggestedPages are suggestions only; do not create pages.
+- Never update index.md or log.md. Those are final maintenance outputs generated by code later.
 
 User:
 Today's date: {date}
@@ -168,25 +202,10 @@ Source file: {rawKey}
 {sourceContent}
 --- SOURCE END ---
 
-Current overview.md:
---- OVERVIEW ---
-{overviewContent}
---- END OVERVIEW ---
-
-Current {space}/index.md:
---- INDEX ---
-{spaceIndexContent}
---- END INDEX ---
-
-Current log.md (last 20 entries):
---- LOG ---
-{recentLog}
---- END LOG ---
-
-Existing pages in "{space}":
+Existing page summaries in "{space}" for placement hints:
 {existingPageSummaries}
 
-Process this source and output all new/updated wiki files.
+Extract a source card as JSON.
 ```
 
 ## Reindex (Lint + Organize)
@@ -309,8 +328,8 @@ Vercel IAM user (`vaultmark-vercel`):
 
 - Lambda timeout: 5 minutes
 - Bedrock Nova 2 Lite: 1M input tokens, 32K output tokens
-- Expected time per file: 15-45s (single call outputs all pages + index + overview + log)
-- Max batch per invocation: ~10-12 files (to stay within 5 min)
+- Expected time per file: TBD from Lambda timing logs; extraction should be substantially cheaper than v1 full-wiki output
+- Max batch per invocation: bounded by measured extraction time and the 5 minute Lambda limit
 - For larger batches: chain multiple Lambda invocations via job state
 
 ## Future Considerations
@@ -324,51 +343,19 @@ Vercel IAM user (`vaultmark-vercel`):
 
 ---
 
-## Implementation Plan
+## Legacy Implementation Notes
 
-**Problem:** The current inline curation pipeline times out on Vercel (multiple Bedrock calls per source exceed function timeout). Solution: move processing to a Lambda (5 min timeout) invoked asynchronously, with job state in S3.
+The initial Lambda implementation moved processing out of Vercel but kept a v1 curation model where each raw source asked the LLM to emit every affected file. V2 supersedes that model with the task list at the top of this spec.
 
-**Decisions:**
+**Still-valid decisions:**
 - Lambda-first (not inline) due to Vercel timeout constraints
-- Free-form text with `<file path="...">` XML blocks (not tool_use) — better for multi-file markdown generation, avoids JSON-escaping overhead, 65K output token ceiling
 - Raw files immutable, tracked via `_processed.json` manifest (hash-based pending detection)
 - Existing CDK stack (ECS/RDS/Cognito/ALB) is dead code — replaced entirely with Lambda + IAM only
 
-**Sequence:**
-
-```
-Browser → POST /api/curate/start {space}
-  Vercel: list pending files, create _jobs/{id}.json, invoke Lambda async
-  Return: {jobId}
-
-Browser → GET /api/curate/status?job=X (poll every 3s)
-  Vercel: read _jobs/{id}.json from S3
-  Return: {status, completed, total, files[]}
-
-Lambda (async, 5 min timeout):
-  For each pending file:
-    1. Read source + wiki context (overview, space index, log, existing pages)
-    2. Single Bedrock call → free-form response with <file> blocks
-    3. Parse blocks, write all output files to S3
-    4. Update _processed.json and _jobs/{id}.json
-```
-
-**Tasks:**
-
-1. Lambda scaffold — `infra/lambda/curate/` with types, XML parser, handler skeleton
-2. S3 helpers — getObject/putObject/listObjects + manifest + job state management
-3. Bedrock client — free-form Converse call + Karpathy ingest prompt builder
-4. Ingest orchestration — single-source flow wiring (context → Bedrock → parse → write → update)
-5. Lambda handler — batch processing with timeout safety and per-file job state updates
-6. CDK stack — gut existing, replace with Lambda + IAM role only
-7. Vercel routes — start/status/cancel + manifest-based pending detection in /api/raw
-8. UI — polling-based progress in upload modal Pending tab
-9. Deploy — CDK deploy, Vercel env vars, IAM permission for lambda:InvokeFunction
-
 **Key files:**
-- NEW: `infra/lambda/curate/` (Lambda package)
-- REPLACE: `infra-cdk/lib/infra-cdk-stack.ts` (Lambda-only CDK)
+- `infra/lambda/curate/` (Lambda package)
+- `infra-cdk/lib/infra-cdk-stack.ts` (Lambda-only CDK)
 - MODIFY: `web/app/api/curate/` (start/status/cancel routes)
 - MODIFY: `web/app/api/raw/route.ts` (manifest-based pending)
 - MODIFY: `web/components/upload-modal.tsx` (polling UI)
-- REMOVE: `web/lib/ingest/` (replaced by Lambda)
+- FUTURE REMOVE: `web/lib/ingest/` after Lambda curation is confirmed in production

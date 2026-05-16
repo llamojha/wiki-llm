@@ -38,6 +38,7 @@ export function addToManifest(
   hash: string,
   space: string,
   pages: string[],
+  sourceCard?: string,
 ): ProcessedManifest {
   return {
     files: {
@@ -47,6 +48,7 @@ export function addToManifest(
         hash,
         space,
         pages,
+        ...(sourceCard ? { sourceCard } : {}),
       },
     },
   };

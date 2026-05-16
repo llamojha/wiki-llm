@@ -44,6 +44,8 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
 
   // Pending tab
   const [pendingCount, setPendingCount] = useState(0);
+  const [pendingLimit, setPendingLimit] = useState('5');
+  const [pendingJobTotal, setPendingJobTotal] = useState(0);
   const [pendingStream, setPendingStream] = useState<StreamLine[]>([]);
   const [pendingRunning, setPendingRunning] = useState(false);
   const [pendingDone, setPendingDone] = useState(false);
@@ -67,7 +69,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
     }
     setTab(initialTab ?? 'upload');
     setFiles([]); setDragActive(false);
-    setPendingStream([]); setPendingRunning(false); setPendingDone(false);
+    setPendingStream([]); setPendingRunning(false); setPendingDone(false); setPendingJobTotal(0);
     setReindexRunning(false); setReindexDone(false); setReindexTotal(0); setReindexIndexed(0); setReindexRawCount(0);
     if (spaces.length && !spaces.includes(space)) setSpace(spaces[0]);
   }, [open, initialTab]);
@@ -165,13 +167,14 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
-    setPendingStream([]); setPendingRunning(true); setPendingDone(false);
+    setPendingStream([]); setPendingRunning(true); setPendingDone(false); setPendingJobTotal(0);
     try {
+      const limit = pendingLimit === 'all' ? undefined : Number.parseInt(pendingLimit, 10);
       // Start the Lambda job
       const startRes = await fetch('/api/curate/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ space }),
+        body: JSON.stringify({ space, ...(limit ? { limit } : {}) }),
         signal: ctrl.signal,
       });
       if (!startRes.ok) {
@@ -183,6 +186,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
       const { jobId, total } = await startRes.json() as { jobId: string; total: number };
       if (!jobId) { setPendingRunning(false); showToast('No pending files'); return; }
       jobIdRef.current = jobId;
+      setPendingJobTotal(total);
 
       // Poll for status
       const poll = async () => {
@@ -208,6 +212,13 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
             error: f.error,
           }));
           setPendingStream(lines);
+
+          if (job.status === 'stale') {
+            setPendingRunning(false);
+            setPendingDone(false);
+            showToast('Processing appears stale. Retry the pending batch.');
+            return;
+          }
 
           if (job.status === 'done' || job.status === 'error' || job.status === 'cancelled') {
             setPendingRunning(false);
@@ -451,16 +462,31 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
             </div>
 
             <div className="upload-foot">
+              <label className="upload-check">
+                <span>Batch</span>
+                <select
+                  value={pendingLimit}
+                  disabled={pendingRunning}
+                  onChange={e => setPendingLimit(e.target.value)}
+                  style={{ marginLeft: 6 }}
+                >
+                  <option value="1">1</option>
+                  <option value="5">5</option>
+                  <option value="10">10</option>
+                  <option value="25">25</option>
+                  <option value="all">All</option>
+                </select>
+              </label>
               <span className="upload-summary">
                 {!pendingRunning && !pendingDone && (pendingCount === 0 ? 'Nothing pending' : `${pendingCount} file${pendingCount > 1 ? 's' : ''} pending`)}
-                {pendingRunning && `${pendingStream.filter(e => e.status === 'indexed').length} of ${pendingCount} done`}
+                {pendingRunning && `${pendingStream.filter(e => e.status === 'indexed').length} of ${pendingJobTotal || pendingCount} done`}
                 {pendingDone && `${pendingStream.length} curated · searchable now`}
               </span>
               <span style={{ flex: 1 }}></span>
               <button className="btn ghost" onClick={onClose}>Close</button>
               {!pendingRunning ? (
                 <button className="btn primary" disabled={pendingCount === 0} onClick={startPendingStream}>
-                  {ICONS.spark} {pendingDone ? 'Run again' : 'Process all'}
+                  {ICONS.spark} {pendingDone ? 'Run again' : 'Process batch'}
                 </button>
               ) : (
                 <button className="btn" onClick={cancelPending}>

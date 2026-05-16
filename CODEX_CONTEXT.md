@@ -45,6 +45,40 @@ Lambda (5 min timeout) → for each raw file: single Bedrock call → parse <fil
 - The old `web/lib/ingest/` directory still exists (can be removed after confirming Lambda works)
 - Reindex endpoint still uses the old inline approach (not Lambda-based — that's fine per spec)
 
+### Critical next tasks (Lambda reliability)
+
+The pipeline works but has reliability issues with large batches (167 files triggered, Lambda can only do ~10 per 5-min invocation):
+
+1. **Chain Lambda invocations on timeout**: When the Lambda detects it's running low on time (the `TIMEOUT_BUFFER_MS` check in `index.ts`), instead of marking the job as error, it should **re-invoke itself** with the remaining unprocessed files. This turns a single 5-min Lambda into a chain that processes the full batch across multiple invocations.
+
+   ```
+   // In index.ts, when remaining < TIMEOUT_BUFFER_MS:
+   // Instead of marking error, invoke self with remaining files
+   const remaining = files.slice(i);
+   await lambdaClient.send(new InvokeCommand({
+     FunctionName: context.functionName,
+     InvocationType: 'Event',
+     Payload: JSON.stringify({ jobId, space, files: remaining, bucket, prefix }),
+   }));
+   return; // exit cleanly, next invocation continues
+   ```
+
+   Requires adding `lambda:InvokeFunction` on itself to the IAM role in CDK.
+
+2. **Staleness detection in status endpoint**: If the job file's `LastModified` is older than ~3 minutes and status is still `processing`, the Lambda likely crashed. The status endpoint should detect this and return `status: 'stale'` so the frontend can show "Processing may have failed — retry?" instead of spinning forever.
+
+   In `web/app/api/curate/status/route.ts`, use `HeadObject` to get `LastModified`, compare with `now - 3min`.
+
+3. **Add console.log in Lambda**: Currently the Lambda has zero logging. Add logs for:
+   - `console.log(`[${jobId}] Processing file ${i+1}/${files.length}: ${rawKey}`)`
+   - `console.log(`[${jobId}] Bedrock responded: ${blocks.length} file blocks`)`
+   - `console.log(`[${jobId}] Done: ${pages.length} pages written`)`
+   - `console.error(`[${jobId}] Error on ${rawKey}:`, err)`
+
+4. **Space assignment issue**: The LLM is outputting paths like `space/sources/slug.md` and `__all/sources/slug.md` literally — it's using the space name `__all` as a folder name and `space` as a literal string instead of the actual space name. The prompt needs to be clearer that `{space}` is a placeholder, or the `__all` case needs special handling (assign to a real space first, then process).
+
+5. **Prompt quality**: Some outputs only have 1 page (`space/sources/slug.md`) — the LLM isn't generating entity/concept pages or updating index/overview/log. May need prompt tuning or a different model (Nova Pro instead of Lite).
+
 ## Kiro-specific context
 
 ### Steering docs (`.kiro/steering/`)

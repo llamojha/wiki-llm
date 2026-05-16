@@ -5,7 +5,7 @@ import {
   ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 
-const region = process.env.VAULT_REGION ?? 'eu-central-1';
+const region = process.env.S3_REGION ?? process.env.VAULT_REGION ?? 'us-east-1';
 let _client: S3Client | null = null;
 
 function client(): S3Client {

@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import { LambdaClient, InvokeCommand, InvocationType } from '@aws-sdk/client-lambda';
 import { getObject, listObjects, putObject } from '@/lib/s3';
+import { getStructure } from '@/lib/vault-structure';
 
 const LAMBDA_ARN = process.env.CURATE_LAMBDA_ARN;
 const BUCKET = process.env.VAULT_BUCKET ?? '';
 const PREFIX = process.env.VAULT_PREFIX ?? '';
-const REGION = process.env.VAULT_REGION ?? 'eu-central-1';
 const LAMBDA_REGION = process.env.CURATE_LAMBDA_REGION ?? 'eu-central-1';
 
 let _lambda: LambdaClient | null = null;
@@ -25,15 +25,30 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const { space } = body as { space?: string };
+  const { space, limit } = body as { space?: string; limit?: unknown };
 
   if (!space) {
     return NextResponse.json({ detail: 'space is required' }, { status: 400 });
   }
 
+  const batchLimit = typeof limit === 'number' && Number.isInteger(limit)
+    ? limit
+    : undefined;
+  if (batchLimit !== undefined && batchLimit < 1) {
+    return NextResponse.json({ detail: 'limit must be a positive integer' }, { status: 400 });
+  }
+
   // List raw files for this space
-  const rawPrefix = space === '__all' ? 'raw/' : `${space}/raw/`;
-  const allKeys = await listObjects(rawPrefix);
+  let allKeys: string[] = [];
+  if (space === '__all') {
+    const structure = await getStructure();
+    allKeys.push(...await listObjects('raw/'));
+    for (const s of structure.spaces) {
+      allKeys.push(...await listObjects(`${s.name}/raw/`));
+    }
+  } else {
+    allKeys = await listObjects(`${space}/raw/`);
+  }
 
   if (allKeys.length === 0) {
     return NextResponse.json({ detail: 'no raw files found' }, { status: 404 });
@@ -48,11 +63,13 @@ export async function POST(req: Request) {
 
   // For pending detection, we just check if the key exists in manifest
   // (full hash comparison happens in Lambda)
-  const pending = allKeys.filter(k => !manifest.files[k]);
+  const pending = allKeys.filter(k => !manifest.files[k]).sort();
 
   if (pending.length === 0) {
     return NextResponse.json({ detail: 'all files already processed' }, { status: 200 });
   }
+
+  const selected = batchLimit ? pending.slice(0, batchLimit) : pending;
 
   // Create job
   const jobId = `job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -60,9 +77,9 @@ export async function POST(req: Request) {
     id: jobId,
     status: 'processing',
     space,
-    total: pending.length,
+    total: selected.length,
     completed: 0,
-    files: pending.map(key => ({ key, status: 'pending' })),
+    files: selected.map(key => ({ key, status: 'pending' })),
     startedAt: new Date().toISOString(),
     completedAt: null,
     error: null,
@@ -71,12 +88,12 @@ export async function POST(req: Request) {
   await putObject(`_jobs/${jobId}.json`, JSON.stringify(job, null, 2));
 
   // Invoke Lambda async
-  const payload = { jobId, space, files: pending, bucket: BUCKET, prefix: PREFIX };
+  const payload = { jobId, space, files: selected, bucket: BUCKET, prefix: PREFIX };
   await lambdaClient().send(new InvokeCommand({
     FunctionName: LAMBDA_ARN,
     InvocationType: InvocationType.Event, // async
     Payload: new TextEncoder().encode(JSON.stringify(payload)),
   }));
 
-  return NextResponse.json({ jobId, total: pending.length });
+  return NextResponse.json({ jobId, total: selected.length, remaining: pending.length - selected.length });
 }

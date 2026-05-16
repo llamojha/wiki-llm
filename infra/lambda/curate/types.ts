@@ -29,6 +29,7 @@ export type ProcessedFileEntry = {
   hash: string;
   space: string;
   pages: string[];
+  sourceCard?: string;
 };
 
 export type ProcessedManifest = {
@@ -41,4 +42,22 @@ export type CurateEvent = {
   files: string[];
   bucket: string;
   prefix: string;
+  startIndex?: number;
+};
+
+export type SourceCardClaim = {
+  text: string;
+  evidence?: string;
+};
+
+export type SourceCard = {
+  rawKey: string;
+  title: string;
+  summary: string;
+  claims: SourceCardClaim[];
+  entities: string[];
+  concepts: string[];
+  suggestedSpaces: string[];
+  suggestedPages: string[];
+  tags: string[];
 };

@@ -1,25 +1,42 @@
-import { getObject, getObjectOrNull, putObject, listObjects } from './s3.js';
+import { getObject, getObjectOrNull, putJson, putObject, listObjects } from './s3.js';
 import { converse } from './bedrock.js';
-import { buildSystemPrompt, buildUserPrompt } from './prompt.js';
-import { parseFileBlocks } from './parse.js';
+import { buildExtractionSystemPrompt, buildExtractionUserPrompt } from './prompt.js';
 import { getManifest, saveManifest, addToManifest, computeHash } from './manifest.js';
+import {
+  parseSourceCard,
+  renderSourcePage,
+  resolveOutputSpace,
+  sourceSlug,
+} from './source-card.js';
+
+function nowMs(): number {
+  return Date.now();
+}
+
+function logTiming(jobId: string | undefined, rawKey: string, stage: string, startedAt: number): void {
+  const prefix = jobId ? `[${jobId}] ` : '';
+  console.log(`${prefix}${rawKey} ${stage} ${Date.now() - startedAt}ms`);
+}
+
+function sourceCardKey(hash: string): string {
+  return `_curation/source-cards/${hash.replace(/^sha256:/, '')}.json`;
+}
 
 export async function processSource(
   bucket: string,
   prefix: string,
   space: string,
   rawKey: string,
+  jobId?: string,
 ): Promise<string[]> {
   // 1. Read source
+  let startedAt = nowMs();
   const sourceContent = await getObject(bucket, prefix, rawKey);
+  const hash = computeHash(sourceContent);
+  logTiming(jobId, rawKey, 'read-source', startedAt);
 
-  // 2. Read wiki context
-  const overviewContent = await getObjectOrNull(bucket, prefix, 'overview.md') ?? '';
-  const spaceIndexContent = await getObjectOrNull(bucket, prefix, `${space}/index.md`) ?? '';
-  const fullLog = await getObjectOrNull(bucket, prefix, 'log.md') ?? '';
-  const recentLog = fullLog.split('\n').slice(-60).join('\n'); // last ~20 entries
-
-  // 3. Get existing page summaries (title + first line after frontmatter)
+  // 2. Get lightweight existing page summaries for placement hints.
+  startedAt = nowMs();
   const existingKeys = await listObjects(bucket, prefix, `${space}/`);
   const summaryReads = existingKeys
     .filter(key => key.endsWith('.md') && key !== `${space}/index.md`)
@@ -39,39 +56,45 @@ export async function processSource(
     const firstLine = lines.slice(startIdx).find(l => l.trim());
     summaries.push(`- ${key}: ${firstLine?.slice(0, 80) ?? ''}`);
   }
+  logTiming(jobId, rawKey, 'read-placement-hints', startedAt);
 
-  // 4. Single Bedrock call
-  const system = buildSystemPrompt();
-  const user = buildUserPrompt({
+  // 3. Extract one compact source card. Index/log/global synthesis happen later.
+  const system = buildExtractionSystemPrompt();
+  const user = buildExtractionUserPrompt({
     space,
     rawKey,
     sourceContent,
-    overviewContent,
-    spaceIndexContent,
-    recentLog,
     existingPageSummaries: summaries.join('\n'),
   });
 
+  startedAt = nowMs();
   const response = await converse(system, user);
+  logTiming(jobId, rawKey, 'bedrock-extract', startedAt);
 
-  // 5. Parse file blocks
-  const blocks = parseFileBlocks(response);
-  if (blocks.length === 0) {
-    throw new Error('Bedrock returned no file blocks');
-  }
+  const card = parseSourceCard(response, rawKey);
+  const outputSpace = resolveOutputSpace(space, card);
+  const cardKey = sourceCardKey(hash);
+  const pagePath = `${outputSpace}/sources/${sourceSlug(card, rawKey, hash)}.md`;
+  const pageContent = renderSourcePage(card, rawKey, hash);
 
-  // 6. Write all output files
-  const pages: string[] = [];
-  for (const block of blocks) {
-    await putObject(bucket, prefix, block.path, block.content);
-    pages.push(block.path);
-  }
+  // 4. Deterministically write the durable card and source page.
+  startedAt = nowMs();
+  await putJson(bucket, prefix, cardKey, {
+    ...card,
+    hash,
+    space: outputSpace,
+    sourcePage: pagePath,
+    extractedAt: new Date().toISOString(),
+  });
+  await putObject(bucket, prefix, pagePath, pageContent);
+  logTiming(jobId, rawKey, 'write-source-card-and-page', startedAt);
 
-  // 7. Update manifest
+  // 5. Update manifest. Final index/log/lint is a separate maintenance pass.
+  startedAt = nowMs();
   const manifest = await getManifest(bucket, prefix);
-  const hash = computeHash(sourceContent);
-  const updated = addToManifest(manifest, rawKey, hash, space, pages);
+  const updated = addToManifest(manifest, rawKey, hash, outputSpace, [pagePath], cardKey);
   await saveManifest(bucket, prefix, updated);
+  logTiming(jobId, rawKey, 'update-manifest', startedAt);
 
-  return pages;
+  return [pagePath];
 }
