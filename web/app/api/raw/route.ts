@@ -3,6 +3,7 @@ import { getObject, listObjects } from '@/lib/s3';
 
 const SPACE_RE = /^[a-z0-9][a-z0-9-]*$/;
 const INGEST_SPACE = 'wiki';
+const RAW_PREFIX = 'raw/';
 
 type ProcessedManifest = { files: Record<string, unknown> };
 
@@ -31,7 +32,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ detail: 'invalid space name' }, { status: 400 });
   }
 
-  const keys = await listObjects(`${INGEST_SPACE}/raw/`);
+  const keys = await listObjects(RAW_PREFIX);
   const pending = keys.filter(k => !manifest.files[k]);
   return NextResponse.json({ space: INGEST_SPACE, count: pending.length, keys: pending, total: keys.length });
 }

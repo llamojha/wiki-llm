@@ -7,6 +7,7 @@ const BUCKET = process.env.VAULT_BUCKET ?? '';
 const PREFIX = process.env.VAULT_PREFIX ?? '';
 const LAMBDA_REGION = process.env.CURATE_LAMBDA_REGION ?? 'eu-central-1';
 const INGEST_SPACE = 'wiki';
+const RAW_PREFIX = 'raw/';
 
 let _lambda: LambdaClient | null = null;
 function lambdaClient(): LambdaClient {
@@ -42,8 +43,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ detail: 'limit must be a positive integer' }, { status: 400 });
   }
 
-  // Ingestion currently only runs for the logical wiki space.
-  const allKeys = await listObjects(`${INGEST_SPACE}/raw/`);
+  // Ingestion currently reads from the vault-level raw/ prefix and writes to wiki/.
+  const allKeys = await listObjects(RAW_PREFIX);
 
   if (allKeys.length === 0) {
     return NextResponse.json({ detail: 'no raw files found' }, { status: 404 });

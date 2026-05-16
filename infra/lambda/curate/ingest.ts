@@ -74,7 +74,9 @@ export async function processSource(
   logTiming(jobId, rawKey, 'bedrock-extract', startedAt);
 
   const card = parseSourceCard(response, rawKey);
-  const outputSpace = spaceFromRawKey(rawKey) ?? resolveOutputSpace(space, card);
+  const outputSpace = space === '__all'
+    ? (spaceFromRawKey(rawKey) ?? resolveOutputSpace(space, card))
+    : space;
   const cardKey = sourceCardKey(hash);
   const pagePath = `${outputSpace}/sources/${sourceSlug(card, rawKey, hash)}.md`;
   const pageContent = renderSourcePage(card, rawKey, hash);

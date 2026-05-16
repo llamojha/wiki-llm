@@ -458,7 +458,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
                   <div className="upload-drop-icon" style={{ margin: '0 auto 12px' }}>{ICONS.spark}</div>
                   <div className="upload-drop-title">Process pending raw files</div>
                   <div className="upload-drop-sub">
-                    {pendingCount} file{pendingCount === 1 ? '' : 's'} in <code>{space}/raw/</code> waiting to be curated.
+                    {pendingCount} file{pendingCount === 1 ? '' : 's'} in <code>raw/</code> waiting to be curated into <code>wiki/</code>.
                   </div>
                 </div>
               )}
