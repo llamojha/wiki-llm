@@ -2,6 +2,7 @@ import Fuse from 'fuse.js';
 import matter from 'gray-matter';
 
 import { getObject, listObjects } from '@/lib/s3';
+import { displayPathForKey, isDocumentKey } from '@/lib/vault-paths';
 
 export interface SearchEntry {
   id: string;
@@ -33,8 +34,7 @@ function extractSnippet(raw: string, maxChars = 200): string {
 
 async function buildIndex(): Promise<Fuse<SearchEntry>> {
   const keys = await listObjects();
-  const skip = new Set(['index.md', 'log.md']);
-  const filtered = keys.filter((k) => !skip.has(k));
+  const filtered = keys.filter(isDocumentKey);
 
   const entries: SearchEntry[] = [];
   const BATCH = 20;
@@ -46,7 +46,7 @@ async function buildIndex(): Promise<Fuse<SearchEntry>> {
           const raw = await getObject(key);
           const { data } = matter(raw);
           const title = (data.title as string) || keyToTitle(key);
-          const path = key.replace(/\.md$/, '').split('/').join(' / ');
+          const path = displayPathForKey(key);
           entries.push({ id: key, title, path, snippet: extractSnippet(raw) });
         } catch {
           // skip unreadable docs

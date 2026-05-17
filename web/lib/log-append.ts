@@ -1,4 +1,5 @@
 import { getObject, putObject } from '@/lib/s3';
+import { systemKey } from '@/lib/vault-paths';
 
 /**
  * Append a single event line to log.md in S3.
@@ -8,18 +9,19 @@ import { getObject, putObject } from '@/lib/s3';
  * Future fix: use S3 conditional writes (IfMatch) with retry on conflict.
  */
 export async function appendLog(
-  action: 'created' | 'edited' | 'deleted',
+  action: 'created' | 'edited' | 'deleted' | 'curated',
   path: string,
   title: string,
 ): Promise<void> {
   let existing = '';
+  const key = systemKey('log.md');
   try {
-    existing = await getObject('log.md');
+    existing = await getObject(key);
   } catch {
     // log.md doesn't exist yet — start fresh
   }
 
   const line = `- ${new Date().toISOString()} | ${action} | ${path} | "${title}"`;
   const content = existing ? `${existing.trimEnd()}\n${line}\n` : `${line}\n`;
-  await putObject('log.md', content);
+  await putObject(key, content);
 }

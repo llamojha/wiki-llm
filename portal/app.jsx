@@ -47,7 +47,7 @@ function TreeNode({ node, depth, activeId, onOpen, openFolders, toggleFolder }) 
   );
 }
 
-function Sidebar({ scope, setScope, activeId, onOpen, onNewPage }) {
+function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, onUpload, onProcessPending, onReindex }) {
   const tree = scope === 'shared' ? SHARED_TREE : PERSONAL_TREE;
   const [openFolders, setOpenFolders] = useState(new Set([
     'platform', 'platform/runbooks', 'engineering', 'engineering/services',
@@ -87,7 +87,10 @@ function Sidebar({ scope, setScope, activeId, onOpen, onNewPage }) {
 
       <div className="nav-section">
         <span>{scope === 'shared' ? 'Shared spaces' : 'My pages'}</span>
-        <button onClick={onNewPage} title="New page">{ICONS.plus}</button>
+        <div style={{ display: 'flex', gap: 2 }}>
+          <button onClick={onUpload} title="Upload Markdown files">{ICONS.upload}</button>
+          <button onClick={onNewPage} title="New page">{ICONS.plus}</button>
+        </div>
       </div>
 
       {tree.map(n => (
@@ -96,11 +99,25 @@ function Sidebar({ scope, setScope, activeId, onOpen, onNewPage }) {
                   openFolders={openFolders} toggleFolder={toggleFolder}/>
       ))}
 
-      <div className="indexing-status">
-        <span className="pulse"></span>
-        <div style={{ flex: 1, lineHeight: 1.3 }}>
-          <div style={{ color: 'var(--fg-1)', fontWeight: 500 }}>Indexer healthy</div>
-          <div style={{ fontSize: 10.5, fontFamily: 'var(--font-mono)' }}>1,284 docs · synced 12s ago</div>
+      <div className="index-card">
+        <div className="index-card-row">
+          <span className="pulse"></span>
+          <div style={{ flex: 1, lineHeight: 1.3 }}>
+            <div style={{ color: 'var(--fg-1)', fontWeight: 500 }}>Indexer healthy</div>
+            <div style={{ fontSize: 10.5, fontFamily: 'var(--font-mono)', color: 'var(--fg-2)' }}>
+              1,284 indexed
+              <span style={{ color: 'var(--fg-3)', margin: '0 4px' }}>·</span>
+              <span className="pending-pip">47 pending</span>
+            </div>
+          </div>
+        </div>
+        <div className="index-card-actions">
+          <button className="index-card-btn" onClick={onProcessPending} title="Curate raw files in S3">
+            {ICONS.spark} Process pending
+          </button>
+          <button className="index-card-btn" onClick={onReindex} title="Re-index everything">
+            {ICONS.recent} Re-index
+          </button>
         </div>
       </div>
     </aside>

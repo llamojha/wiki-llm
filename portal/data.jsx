@@ -30,6 +30,10 @@ const ICONS = {
   close: <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>,
   settings: <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.3"/><path d="M8 1.5v1.8M8 12.7v1.8M14.5 8h-1.8M3.3 8H1.5M12.6 3.4l-1.3 1.3M4.7 11.3l-1.3 1.3M12.6 12.6l-1.3-1.3M4.7 4.7L3.4 3.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
   tag: <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 2v6l7 7 6-6-7-7H2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><circle cx="5" cy="5" r=".8" fill="currentColor"/></svg>,
+  upload: <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 10.5V2.5M8 2.5L4.5 6M8 2.5L11.5 6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><path d="M2.5 10v2.5c0 .55.45 1 1 1h9c.55 0 1-.45 1-1V10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
+  s3: <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><ellipse cx="8" cy="3.5" rx="5" ry="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M3 3.5v9c0 .83 2.24 1.5 5 1.5s5-.67 5-1.5v-9" stroke="currentColor" strokeWidth="1.3"/><path d="M3 7.5c0 .83 2.24 1.5 5 1.5s5-.67 5-1.5M3 10.5c0 .83 2.24 1.5 5 1.5s5-.67 5-1.5" stroke="currentColor" strokeWidth="1.3"/></svg>,
+  file: <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 2h6.5L13 5.5V14H3V2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M9.5 2v3.5H13" stroke="currentColor" strokeWidth="1.3"/></svg>,
+  trash: <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5c.04.55.5 1 1.05 1h4.5c.55 0 1-.45 1.05-1L12 4M6.5 7v5M9.5 7v5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>,
 };
 
 // Document tree
@@ -138,3 +142,11 @@ const SEARCH_INDEX = [
 ];
 
 window.WIKI_DATA = { ICONS, SHARED_TREE, PERSONAL_TREE, DOCS, SEARCH_INDEX };
+
+// Spaces — top-level groupings mirroring backend's space concept.
+window.WIKI_DATA.SPACES = [
+  { id: 'platform',    label: 'platform',    indexed: 412, pending: 23, kind: 'shared' },
+  { id: 'engineering', label: 'engineering', indexed: 287, pending: 8,  kind: 'shared' },
+  { id: 'incidents',   label: 'incidents',   indexed: 89,  pending: 16, kind: 'shared' },
+  { id: 'personal',    label: 'my wiki',     indexed: 496, pending: 0,  kind: 'personal' },
+];

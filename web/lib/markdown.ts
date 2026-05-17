@@ -1,6 +1,7 @@
 import rehypeSanitize from 'rehype-sanitize';
 import rehypeSlug from 'rehype-slug';
 import rehypeStringify from 'rehype-stringify';
+import remarkFrontmatter from 'remark-frontmatter';
 import remarkGfm from 'remark-gfm';
 import remarkParse from 'remark-parse';
 import remarkRehype from 'remark-rehype';
@@ -10,8 +11,11 @@ import type { SanitizedHtml } from '@/lib/types';
 // Use default sanitization schema — safe HTML only, no scripts or event handlers.
 // rehype-sanitize strips unsafe tags/attributes by default.
 // rehype-slug adds id attributes to headings for anchor links.
+// remark-frontmatter recognizes leading `---\n…\n---` YAML blocks so they
+// don't render as visible text (and aren't mistaken for thematic breaks).
 const processor = unified()
   .use(remarkParse)
+  .use(remarkFrontmatter, ['yaml', 'toml'])
   .use(remarkGfm)
   .use(remarkRehype)
   .use(rehypeSlug)

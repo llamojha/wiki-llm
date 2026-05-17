@@ -11,7 +11,7 @@ Locked decisions on PRD §16 open questions (and related):
 | Storage backend | **AWS S3 only**. No MinIO/R2 abstraction. Standard S3 SDK. |
 | Editing model | **In-browser only** for MVP 1. No local folder sync. |
 | `index.md` mandatory? | **Yes**, machine-maintained. It is the ask-wiki agent's catalog. |
-| Generated vs user-authored | **Single `generated/` prefix** for AI output. User-authored content (typed or uploaded) lives in `wiki/`; provenance tracked via `source_type` metadata (`authored | uploaded | generated`). |
+| Generated vs user-authored | **Shared plus user-scoped provenance-rooted S3 layout**. Shared content uses root-level `raw/`, `generated/<space>/`, `authored/<space>/`, and `_system/`. Each user also owns `users/<user-id>/raw/`, `users/<user-id>/generated/<space>/`, `users/<user-id>/authored/<space>/`, and `users/<user-id>/_system/`. The UI hides these roots and shows logical spaces. |
 | Auth | **Single user** for OSS. Auth (Keycloak/OIDC) only ships with the SaaS phase. |
 | Ask-wiki agent provider | **Amazon Bedrock — Nova 2 Lite** (`amazon.nova-2-lite-v1:0`). 1M token context, multimodal-capable. Cross-region inference profile when needed (`us.amazon.nova-2-lite-v1:0`). |
 | Ask-wiki agent scope | **Tool-using agent** (search / read / propose-page) with citations, refusal, and scope. **Out of scope:** vector search, autonomous writes, multi-agent. |
@@ -20,15 +20,19 @@ Locked decisions on PRD §16 open questions (and related):
 
 ```
 s3://<bucket>/<vault-prefix>/
-  raw/         # source documents, immutable inputs
-  wiki/        # user-authored pages (typed in editor or uploaded)
-  generated/   # AI-generated pages from the ingest pipeline
-  assets/      # images and other binary assets
-  index.md     # machine-maintained catalog (mandatory)
-  log.md       # append-only history (mandatory)
+  raw/                    # shared source documents, immutable inputs
+  generated/<space>/      # shared AI-generated pages grouped by logical space
+  authored/<space>/       # shared human-authored pages grouped by logical space
+  _system/                # shared machine-maintained catalogs, jobs, manifests
+  users/<user-id>/
+    raw/                  # user source documents, immutable inputs
+    generated/<space>/    # user-scoped AI-generated pages
+    authored/<space>/     # user-authored pages; personal pages use authored/personal/
+    _system/              # user-scoped catalogs, jobs, manifests
+  assets/                 # images and other binary assets
 ```
 
-`source_type` on the metadata row distinguishes `authored | uploaded | generated`.
+`source_type` metadata distinguishes `authored | uploaded | generated | personal`.
 
 ## Milestone Mapping
 
@@ -116,20 +120,34 @@ Backend joins. Real S3 read, real search. Editor and Chat stay mock-backed.
 
 **Acceptance:** see `specs/phase-2-real-read-path.md`
 
-### Phase 3 — Ingest Pipeline (MVP 1)
+### Phase 3 — Ingest Pipeline (MVP 1) ✓
 
 TypeScript CLI that transforms raw docs into structured wiki pages via Bedrock.
 
-- [ ] `ingest/` package in the pnpm workspace (TypeScript, shared `@aws-sdk` deps)
-- [ ] CLI entrypoint: `pnpm ingest <s3-key-or-glob>` and `pnpm ingest --lint`
-- [ ] S3 write layer: PutObject for `generated/` prefix; `source_type = generated`
-- [ ] Bedrock invoke via `@aws-sdk/client-bedrock-runtime`; model pinned to `amazon.nova-2-lite-v1:0`
-- [ ] `index.md` regeneration (flat list of all navigable docs) after each ingest run
-- [ ] `log.md` append on every ingest run; auto-rotate at size threshold
-- [ ] AI context files on vault init: `AGENTS.md`, `WIKI_RULES.md`, `SOURCES.md`, `TASKS.md`
-- [ ] End-to-end: place file in `raw/`, run ingest, verify pages in `generated/` are searchable in portal
+- [x] `ingest/` package in the pnpm workspace (TypeScript, shared `@aws-sdk` deps)
+- [x] CLI entrypoint: `pnpm ingest <s3-key-or-glob>` and `pnpm ingest --lint`
+- [x] S3 write layer: PutObject for `generated/` prefix; `source_type = generated`
+- [x] Bedrock invoke via `@aws-sdk/client-bedrock-runtime`; model pinned to `amazon.nova-2-lite-v1:0`
+- [x] `index.md` regeneration (flat list of all navigable docs) after each ingest run
+- [ ] `log.md` append on every ingest run; auto-rotate at size threshold — *deferred (see notes)*
+- [x] AI context files on vault init: `AGENTS.md`, `WIKI_RULES.md`, `SOURCES.md`, `TASKS.md` (via `ingest init`)
+- [x] End-to-end: place file in `raw/`, run ingest, verify pages in `generated/` are searchable in portal
 
 **Acceptance:** see `specs/phase-3-ingest-pipeline.md`
+
+#### Phase 3 implementation notes (drifts from the initial plan)
+
+**Architecture pivot from CLI-first to Lambda-first.** The original plan was a TypeScript CLI (`pnpm ingest <key>`). What shipped is a Vercel-friendly split: `ingest/` package retains the CLI for vault init + ad-hoc runs, but the user-facing batch path is a portal **Process pending** button (`/api/curate/start`) that fan-outs to an AWS Lambda (`infra/lambda/curate/`). This avoids running long Bedrock loops inside Next.js Route Handlers (Vercel free-tier 60s ceiling) while keeping the dev experience interactive.
+
+**Post-curate finalize step.** Index regeneration is *not* done inside the Lambda — instead `/api/curate/finalize` is called from the UI after the job's status flips to `done`. The route runs `regenerateSpaceIndex(job.space) + regenerateMasterIndex() + invalidateSearchIndex()` using `web/lib/index-gen.ts`. Idempotent via a `finalized` flag on the job state.
+
+**`log.md` append — deferred.** The legacy `web/lib/ingest/run.ts` had `appendLog`, but the Lambda path doesn't. Manifest-based tracking (`_system/processed.json`) covers the "what's been ingested" question; a human-readable audit log can land later without blocking the phase.
+
+**Placement hints loaded once per Lambda invocation.** Original ingest re-read 50 existing pages per file. Refactored to a single `loadPlacementHints` call in `index.ts` handler entry. See postmortem session in `.memory/sessions/2026-05-17-191704.md` for full reasoning.
+
+**Bounded concurrency.** Lambda runs files with `CURATE_CONCURRENCY=3` (env-tunable). All job-JSON writes serialized through an in-process async queue to avoid clobber races.
+
+**Per-stage UI progress.** Lambda writes `stage` ('reading' / 'extracting' / 'writing' / 'manifest') to each `JobFile` so the upload modal can show what's happening between Bedrock round-trips. Chain handoffs (when Lambda re-invokes itself near its 5min timeout) surface via `phase: 'chaining'` so the UI doesn't appear frozen during cold-start.
 
 ### Phase 4 — Personal Wiki CRUD (MVP 2)
 
@@ -178,6 +196,11 @@ Only after MVP 2 has been used in anger.
 - Search backend swap to OpenSearch or Meilisearch
 - RDS Postgres, EKS workers / SQS consumers
 - Admin dashboard, billing, audit logs, tenant isolation
+- Personal space access control: `personal/<user-id>/` routing, per-user index isolation, private space visibility enforcement
+- Multi-tenant index isolation: per-space indexes scoped to tenant, master index excludes personal spaces of other users
+- S3 Event Notifications → Lambda/SQS for event-driven ingest (replace inline trigger from Phase 3)
+- Event-driven ingest: S3 PutObject event on `*/raw/` → triggers ingest automatically (Lambda or background worker). Eliminates need for manual CLI runs or portal trigger buttons. Includes retry logic, dead-letter queue, and status reporting back to the portal.
+- Vault structure schema (`structure.json`) improvements: UI for managing spaces (create/rename/reorder/delete), drag-and-drop file moves between spaces, per-space permissions, schema versioning and migration, validation on upload/write to enforce declared structure
 
 **Acceptance:** see `specs/phase-6-saas.md`
 

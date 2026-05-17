@@ -1,7 +1,7 @@
 import matter from 'gray-matter';
 import { NextResponse } from 'next/server';
 
-import { regenerateIndex } from '@/lib/index-gen';
+import { regenerateIndexesForKey } from '@/lib/index-gen';
 import { appendLog } from '@/lib/log-append';
 import {
   ConcurrencyError,
@@ -11,6 +11,7 @@ import {
   putObject,
 } from '@/lib/s3';
 import { invalidateSearchIndex } from '@/lib/search';
+import { displayPathForKey, sourceTypeFromKey } from '@/lib/vault-paths';
 
 type Params = { params: Promise<{ id: string[] }> };
 
@@ -43,11 +44,11 @@ export async function GET(_req: Request, { params }: Params) {
   const doc = {
     id: key,
     title: (fm.title as string) || keyToTitle(key),
-    path: key.replace(/\.md$/, '').split('/').join(' / '),
+    path: displayPathForKey(key),
     s3_key: s3Key,
     source_type:
       (fm.source_type as string) ||
-      (key.startsWith('generated/') ? 'generated' : 'authored'),
+      sourceTypeFromKey(key),
     updated: (fm.updated as string) ?? '',
     author: (fm.author as string) ?? 'unknown',
     tags: Array.isArray(fm.tags) ? fm.tags : fm.tags ? [String(fm.tags)] : [],
@@ -96,6 +97,7 @@ export async function PUT(req: Request, { params }: Params) {
 
   const logTitle = (fm.title as string) || keyToTitle(key);
   await appendLog('edited', key, logTitle);
+  await regenerateIndexesForKey(key);
   invalidateSearchIndex();
 
   return NextResponse.json({ id: key, title: logTitle });
@@ -116,7 +118,7 @@ export async function DELETE(_req: Request, { params }: Params) {
   }
 
   await deleteObject(key);
-  await regenerateIndex();
+  await regenerateIndexesForKey(key);
   await appendLog('deleted', key, title);
   invalidateSearchIndex();
 

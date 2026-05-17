@@ -78,7 +78,7 @@ export function Editor({ doc, docId, etag, onClose, onSave, showToast }: EditorP
     <>
       <div className="doc-toolbar">
         <div className="crumbs">
-          <span className="crumb">wiki</span>
+          <span className="crumb">My wiki</span>
           <span className="sep">/</span>
           <span className="crumb current">{title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.md</span>
         </div>

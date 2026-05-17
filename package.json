@@ -8,6 +8,7 @@
     "build": "pnpm --filter @vaultmark/web build",
     "lint": "pnpm --filter @vaultmark/web lint",
     "typecheck": "pnpm --filter @vaultmark/web typecheck",
+    "ingest": "pnpm --filter @vaultmark/ingest start",
     "parity:step1": "node scripts/parity-step1.mjs && node scripts/parity-icons.mjs && node scripts/parity-data.mjs && node scripts/parity-bodies.mjs",
     "parity:step2": "node scripts/parity-step2.mjs",
     "parity:step3": "node scripts/parity-step3.mjs",

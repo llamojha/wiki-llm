@@ -28,7 +28,11 @@ export type IconKey =
   | 'warn'
   | 'close'
   | 'settings'
-  | 'tag';
+  | 'tag'
+  | 'upload'
+  | 's3'
+  | 'file'
+  | 'trash';
 
 export const ICONS: Record<IconKey, ReactNode> = {
   folder: (
@@ -188,6 +192,30 @@ export const ICONS: Record<IconKey, ReactNode> = {
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
       <path d="M2 2v6l7 7 6-6-7-7H2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
       <circle cx="5" cy="5" r=".8" fill="currentColor"/>
+    </svg>
+  ),
+  upload: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <path d="M8 10.5V2.5M8 2.5L4.5 6M8 2.5L11.5 6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M2.5 10v2.5c0 .55.45 1 1 1h9c.55 0 1-.45 1-1V10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  ),
+  s3: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <ellipse cx="8" cy="3.5" rx="5" ry="1.5" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M3 3.5v9c0 .83 2.24 1.5 5 1.5s5-.67 5-1.5v-9" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M3 7.5c0 .83 2.24 1.5 5 1.5s5-.67 5-1.5M3 10.5c0 .83 2.24 1.5 5 1.5s5-.67 5-1.5" stroke="currentColor" strokeWidth="1.3"/>
+    </svg>
+  ),
+  file: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <path d="M3 2h6.5L13 5.5V14H3V2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+      <path d="M9.5 2v3.5H13" stroke="currentColor" strokeWidth="1.3"/>
+    </svg>
+  ),
+  trash: (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+      <path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5c.04.55.5 1 1.05 1h4.5c.55 0 1-.45 1.05-1L12 4M6.5 7v5M9.5 7v5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   ),
 };

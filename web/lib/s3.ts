@@ -1,6 +1,7 @@
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
@@ -23,6 +24,24 @@ function client(): S3Client {
 
 function fullKey(relKey: string): string {
   return prefix ? `${prefix}/${relKey}`.replace(/^\//, '') : relKey;
+}
+
+/** List top-level folders (spaces) in the vault. */
+export async function listSpaces(): Promise<string[]> {
+  const res = await client().send(
+    new ListObjectsV2Command({
+      Bucket: bucket,
+      Prefix: prefix ? `${prefix}/` : '',
+      Delimiter: '/',
+    }),
+  );
+  return (res.CommonPrefixes ?? [])
+    .map((p) => {
+      const full = p.Prefix ?? '';
+      const rel = prefix ? full.slice(prefix.length + 1) : full;
+      return rel.replace(/\/$/, '');
+    })
+    .filter((s) => s.length > 0);
 }
 
 /** List all .md keys under the vault prefix. Returns keys relative to prefix. */
@@ -61,6 +80,14 @@ export async function getObject(relKey: string): Promise<string> {
     new GetObjectCommand({ Bucket: bucket, Key: fullKey(relKey) }),
   );
   return (await res.Body?.transformToString('utf-8')) ?? '';
+}
+
+/** Fetch object metadata by relative key. */
+export async function headObject(relKey: string): Promise<{ lastModified: Date | null }> {
+  const res = await client().send(
+    new HeadObjectCommand({ Bucket: bucket, Key: fullKey(relKey) }),
+  );
+  return { lastModified: res.LastModified ?? null };
 }
 
 export class ConcurrencyError extends Error {

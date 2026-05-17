@@ -1,6 +1,16 @@
 import matter from 'gray-matter';
 
+import { getStructure } from '@/lib/vault-structure';
 import { getObject, listObjects, putObject } from '@/lib/s3';
+import {
+  authoredSpaceFromKey,
+  authoredPrefix,
+  generatedSpaceFromKey,
+  generatedPrefix,
+  isDocumentKey,
+  systemKey,
+  USERS_ROOT,
+} from '@/lib/vault-paths';
 
 function toTitleCase(str: string): string {
   return str.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -14,42 +24,70 @@ function extractSummary(content: string): string {
     .slice(0, 80);
 }
 
-/**
- * Regenerate index.md from all docs in the vault.
- *
- * Known limitation: O(n) — reads every doc on every create/delete.
- * At 200 docs this adds ~2-3s latency. Acceptable for MVP.
- * Future optimization: incremental index updates (add/remove single entries).
- */
-export async function regenerateIndex(): Promise<void> {
-  const keys = (await listObjects()).filter(
-    (k) => k !== 'index.md' && k !== 'log.md',
-  );
+async function buildLine(key: string): Promise<string> {
+  try {
+    const raw = await getObject(key);
+    const { data, content } = matter(raw);
+    const title =
+      (data.title as string) ||
+      toTitleCase(key.replace(/^.*\//, '').replace(/\.md$/, ''));
+    const summary = extractSummary(content);
+    return `- ${key} — ${title} — ${summary}`;
+  } catch {
+    const title = toTitleCase(key.replace(/^.*\//, '').replace(/\.md$/, ''));
+    return `- ${key} — ${title} —`;
+  }
+}
+
+/** Regenerate a single space's index.md. */
+export async function regenerateSpaceIndex(space: string): Promise<void> {
+  const keys = [
+    ...(await listObjects(generatedPrefix(space))),
+    ...(await listObjects(authoredPrefix(space))),
+  ].filter(isDocumentKey);
 
   const lines: string[] = [];
-  const BATCH = 20;
-
-  for (let i = 0; i < keys.length; i += BATCH) {
-    const batch = keys.slice(i, i + BATCH);
-    const results = await Promise.all(
-      batch.map(async (key) => {
-        try {
-          const raw = await getObject(key);
-          const { data, content } = matter(raw);
-          const title =
-            (data.title as string) ||
-            toTitleCase(key.replace(/^.*\//, '').replace(/\.md$/, ''));
-          const summary = extractSummary(content);
-          return `- ${key} — ${title} — ${summary}`;
-        } catch {
-          const title = toTitleCase(key.replace(/^.*\//, '').replace(/\.md$/, ''));
-          return `- ${key} — ${title} —`;
-        }
-      }),
-    );
-    lines.push(...results);
+  for (let i = 0; i < keys.length; i += 20) {
+    const batch = keys.slice(i, i + 20);
+    lines.push(...(await Promise.all(batch.map(buildLine))));
   }
 
-  const indexContent = `---\ntitle: Index\ntype: nav\nupdated: ${new Date().toISOString()}\n---\n\n${lines.join('\n')}\n`;
-  await putObject('index.md', indexContent);
+  const body = `---\ntitle: ${toTitleCase(space)} Index\ntype: nav\nupdated: ${new Date().toISOString()}\n---\n\n${lines.join('\n')}\n`;
+  await putObject(systemKey(`indexes/${space}.md`), body);
+}
+
+function indexSpaceFromKey(key: string): string | null {
+  if (key.startsWith(`${USERS_ROOT}/`)) return null;
+  return generatedSpaceFromKey(key) ?? authoredSpaceFromKey(key);
+}
+
+export async function regenerateIndexesForKey(key: string): Promise<void> {
+  const space = indexSpaceFromKey(key);
+  if (space) await regenerateSpaceIndex(space);
+  await regenerateMasterIndex();
+}
+
+/** Regenerate the master index.md (aggregates all shared spaces, excludes personal). */
+export async function regenerateMasterIndex(): Promise<void> {
+  const structure = await getStructure();
+  const spaces = structure.spaces.filter((s) => s.indexed).map((s) => s.name);
+  const sections: string[] = [];
+
+  for (const space of spaces.sort()) {
+    const keys = [
+      ...(await listObjects(generatedPrefix(space))),
+      ...(await listObjects(authoredPrefix(space))),
+    ].filter(isDocumentKey);
+    if (!keys.length) continue;
+
+    const lines: string[] = [];
+    for (let i = 0; i < keys.length; i += 20) {
+      const batch = keys.slice(i, i + 20);
+      lines.push(...(await Promise.all(batch.map(buildLine))));
+    }
+    sections.push(`## ${toTitleCase(space)}\n${lines.join('\n')}`);
+  }
+
+  const body = `---\ntitle: Index\ntype: nav\nupdated: ${new Date().toISOString()}\n---\n\n${sections.join('\n\n')}\n`;
+  await putObject(systemKey('index.md'), body);
 }

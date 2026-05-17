@@ -15,6 +15,7 @@ import { SearchPalette } from './search-palette';
 import { Sidebar } from './sidebar';
 import { ToastStack } from './toast-stack';
 import { TopBar } from './top-bar';
+import { UploadModal, type LibraryTab } from './upload-modal';
 
 const HOME_IDS = new Set(['__home', '__recent', '__starred']);
 
@@ -61,8 +62,8 @@ function buildGeneratedDocFromPrompt(prompt: string): { id: string; doc: Generat
   const answer = `Here's a synthesized overview of **${title.toLowerCase()}**, drawn from the docs your team has indexed.\n\nThis page was generated from a prompt and stitches together the most relevant passages found across the wiki. Edit it freely — your changes won't affect the original sources.`;
   const doc: GeneratedDoc = {
     title,
-    path: `generated / ${slug}.md`,
-    s3: `generated/${slug}.md`,
+    path: `saved / ${slug}.md`,
+    s3: `users/amllamojha/authored/personal/saved/${slug}.md`,
     source: 'personal',
     updated: 'just now',
     author: 'you · via assistant',
@@ -78,13 +79,18 @@ function buildGeneratedDocFromPrompt(prompt: string): { id: string; doc: Generat
 
 /** Convert an API doc response into a LiveDoc for DocReader. */
 function apiDocToDoc(api: ApiDoc, html: SanitizedHtml): LiveDoc {
+  const source = api.source_type === 'generated'
+    ? 'generated'
+    : api.source_type === 'personal'
+      ? 'personal'
+      : 'shared';
   return {
     generated: false,
     kind: 'live',
     title: api.title,
     path: api.path,
     s3: api.s3_key,
-    source: api.source_type === 'generated' ? 'generated' : 'shared',
+    source,
     updated: api.updated || 'unknown',
     author: api.author || 'unknown',
     tags: api.tags,
@@ -114,6 +120,8 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
   const [liveDoc, setLiveDoc] = useState<LiveDoc | null>(null);
   const [docLoading, setDocLoading] = useState(false);
   const [tree, setTree] = useState<ApiTreeNode[]>(initialTree);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadTab, setUploadTab] = useState<LibraryTab>('upload');
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -303,6 +311,9 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
         activeId={activeId}
         onOpen={openDoc}
         onNewPage={onNewPage}
+        onUpload={() => { setUploadTab('upload'); setUploadOpen(true); }}
+        onProcessPending={() => { setUploadTab('pending'); setUploadOpen(true); }}
+        onReindex={() => { setUploadTab('reindex'); setUploadOpen(true); }}
         apiTree={tree}
       />
       <main className="main">
@@ -322,6 +333,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
             prompts={prompts}
             setPrompts={setPrompts}
             onAskPrompt={handleAskPrompt}
+            onUpload={() => { setUploadTab('upload'); setUploadOpen(true); }}
             docCount={countTreeDocs(tree)}
             wikiCount={countTreeDocs(tree.filter(n => n.type === 'folder' && n.name.toLowerCase() === 'wiki'))}
           />
@@ -338,6 +350,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
             docId={activeId}
             onAskInChat={() => setChatOpen(true)}
             onEdit={() => setEditing(true)}
+            onUpload={() => { setUploadTab('upload'); setUploadOpen(true); }}
             onStarToggle={(starred, etag) => {
               if (liveDoc) setLiveDoc({ ...liveDoc, starred, etag });
             }}
@@ -367,6 +380,15 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
         onOpenDoc={openDoc}
+      />
+
+      <UploadModal
+        open={uploadOpen}
+        initialTab={uploadTab}
+        spaces={tree.filter((n) => n.type === 'folder' && !n.id.startsWith('folder:__')).map((n) => n.id.replace('folder:', ''))}
+        onClose={() => setUploadOpen(false)}
+        onUploaded={() => getTree().then(setTree).catch(() => showToast('Failed to refresh sidebar'))}
+        showToast={showToast}
       />
 
       <ToastStack message={toast} />
