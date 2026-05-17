@@ -2,7 +2,12 @@ import { NextResponse } from 'next/server';
 import { getObject, headObject } from '@/lib/s3';
 import { systemKey } from '@/lib/vault-paths';
 
-const STALE_AFTER_MS = 3 * 60 * 1000;
+// Lambda writes per-stage heartbeats every few seconds, so the job JSON's
+// LastModified should advance well within this window during real work.
+const STALE_AFTER_MS = 90 * 1000;
+// While the Lambda is mid-handoff (`phase: 'chaining'`), LastModified can
+// freeze across the new invocation's cold start. Use a more generous window.
+const STALE_AFTER_MS_CHAINING = 5 * 60 * 1000;
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -21,11 +26,12 @@ export async function GET(req: Request) {
     const job = JSON.parse(raw);
     if (job.status === 'processing' && meta.lastModified) {
       const ageMs = Date.now() - meta.lastModified.getTime();
-      if (ageMs > STALE_AFTER_MS) {
+      const threshold = job.phase === 'chaining' ? STALE_AFTER_MS_CHAINING : STALE_AFTER_MS;
+      if (ageMs > threshold) {
         return NextResponse.json({
           ...job,
           status: 'stale',
-          staleAfterMs: STALE_AFTER_MS,
+          staleAfterMs: threshold,
           lastUpdatedAt: meta.lastModified.toISOString(),
         });
       }

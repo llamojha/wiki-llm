@@ -6,6 +6,15 @@ This repo builds **Vaultmark**, an S3-backed Markdown knowledge portal for indiv
 - Engineering plan: [`ROADMAP.md`](ROADMAP.md) — phases, decisions log, sequencing
 - This file: codebase operating guide
 
+## Steering context (auto-loaded)
+
+@.kiro/steering/architecture.md
+@.kiro/steering/conventions.md
+@.kiro/steering/tech-stack.md
+@.kiro/steering/development-standards.md
+@.kiro/steering/aws-infrastructure.md
+@.kiro/steering/philosophy.md
+
 ## Current state (May 2026)
 
 The repo is mid-pivot from `wiki-llm` (a CLI + Bedrock wiki maintainer) to Vaultmark (a portal product).

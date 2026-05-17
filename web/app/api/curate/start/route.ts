@@ -91,15 +91,27 @@ export async function POST(req: Request) {
     error: null,
   };
 
-  await putObject(systemKey(`jobs/${jobId}.json`), JSON.stringify(job, null, 2));
+  const jobKey = systemKey(`jobs/${jobId}.json`);
+  await putObject(jobKey, JSON.stringify(job, null, 2));
 
   // Invoke Lambda async
   const payload = { jobId, space: policy.space, files: selected, bucket: BUCKET, prefix: PREFIX };
-  await lambdaClient().send(new InvokeCommand({
-    FunctionName: LAMBDA_ARN,
-    InvocationType: InvocationType.Event, // async
-    Payload: new TextEncoder().encode(JSON.stringify(payload)),
-  }));
+  try {
+    await lambdaClient().send(new InvokeCommand({
+      FunctionName: LAMBDA_ARN,
+      InvocationType: InvocationType.Event, // async
+      Payload: new TextEncoder().encode(JSON.stringify(payload)),
+    }));
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Lambda invocation failed';
+    await putObject(jobKey, JSON.stringify({
+      ...job,
+      status: 'error',
+      completedAt: new Date().toISOString(),
+      error: message,
+    }, null, 2));
+    return NextResponse.json({ detail: message, jobId }, { status: 502 });
+  }
 
   return NextResponse.json({ jobId, total: selected.length, remaining: pending.length - selected.length });
 }

@@ -4,7 +4,10 @@
       "WebSearch",
       "Bash(pnpm *)",
       "Bash(node *)",
-      "Bash(grep *)"
+      "Bash(grep *)",
+      "Bash(npm test *)",
+      "Bash(npx tsc *)",
+      "Bash(npm run build *)"
     ]
   }
 }

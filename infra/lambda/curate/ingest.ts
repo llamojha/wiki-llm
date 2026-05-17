@@ -10,6 +10,9 @@ import {
   sourceSlug,
 } from './source-card.js';
 import { generatedPrefix, systemKey } from './paths.js';
+import type { FileStage } from './types.js';
+
+export type StageReporter = (stage: FileStage) => Promise<void>;
 
 function nowMs(): number {
   return Date.now();
@@ -24,23 +27,18 @@ function sourceCardKey(hash: string): string {
   return systemKey(`source-cards/${hash.replace(/^sha256:/, '')}.json`);
 }
 
-export async function processSource(
+/**
+ * Read up to 50 lightweight summaries of existing pages in the generated space.
+ *
+ * Loop-invariant across a batch — call this **once per Lambda invocation**, not
+ * once per file. Re-reading 50 full Markdown bodies for every input file was the
+ * dominant cost in the previous design (see postmortem 2026-05-17).
+ */
+export async function loadPlacementHints(
   bucket: string,
   prefix: string,
-  space: string,
-  rawKey: string,
-  jobId?: string,
+  ingestSpace: string,
 ): Promise<string[]> {
-  // 1. Read source
-  let startedAt = nowMs();
-  const sourceContent = await getObject(bucket, prefix, rawKey);
-  const hash = computeHash(sourceContent);
-  logTiming(jobId, rawKey, 'read-source', startedAt);
-
-  const ingestSpace = await getGeneratedSpace(bucket, prefix);
-
-  // 2. Get lightweight existing page summaries for placement hints.
-  startedAt = nowMs();
   const generatedRoot = generatedPrefix(ingestSpace);
   const existingKeys = await listObjects(bucket, prefix, generatedRoot);
   const summaryReads = existingKeys
@@ -61,17 +59,37 @@ export async function processSource(
     const firstLine = lines.slice(startIdx).find(l => l.trim());
     summaries.push(`- ${key}: ${firstLine?.slice(0, 80) ?? ''}`);
   }
-  logTiming(jobId, rawKey, 'read-placement-hints', startedAt);
+  return summaries;
+}
 
-  // 3. Extract one compact source card. Index/log/global synthesis happen later.
+export async function processSource(
+  bucket: string,
+  prefix: string,
+  _space: string,
+  rawKey: string,
+  hints: string[],
+  jobId?: string,
+  onStage?: StageReporter,
+): Promise<string[]> {
+  // 1. Read source
+  await onStage?.('reading');
+  let startedAt = nowMs();
+  const sourceContent = await getObject(bucket, prefix, rawKey);
+  const hash = computeHash(sourceContent);
+  logTiming(jobId, rawKey, 'read-source', startedAt);
+
+  const ingestSpace = await getGeneratedSpace(bucket, prefix);
+
+  // 2. Extract one compact source card. Index/log/global synthesis happen later.
   const system = buildExtractionSystemPrompt();
   const user = buildExtractionUserPrompt({
     space: ingestSpace,
     rawKey,
     sourceContent,
-    existingPageSummaries: summaries.join('\n'),
+    existingPageSummaries: hints.join('\n'),
   });
 
+  await onStage?.('extracting');
   startedAt = nowMs();
   const response = await converse(system, user);
   logTiming(jobId, rawKey, 'bedrock-extract', startedAt);
@@ -87,6 +105,7 @@ export async function processSource(
   const pageContent = renderSourcePage(card, rawKey, hash);
 
   // 4. Deterministically write the durable card and source page.
+  await onStage?.('writing');
   startedAt = nowMs();
   await putJson(bucket, prefix, cardKey, {
     ...card,
@@ -99,6 +118,7 @@ export async function processSource(
   logTiming(jobId, rawKey, 'write-source-card-and-page', startedAt);
 
   // 5. Update manifest. Final index/log/lint is a separate maintenance pass.
+  await onStage?.('manifest');
   startedAt = nowMs();
   const manifest = await getManifest(bucket, prefix);
   const updated = addToManifest(manifest, rawKey, hash, outputSpace, [pagePath], cardKey);

@@ -16,7 +16,24 @@ type UploadModalProps = {
 
 type FileStatus = 'queued' | 'uploading' | 'indexing' | 'indexed' | 'queued-curate' | 'error';
 type UploadFile = { id: string; name: string; size: number; file: File; status: FileStatus; progress: number; error?: string };
-type StreamLine = { name: string; ts: string; status: 'curating' | 'indexed' | 'error'; error?: string; duration?: string };
+type FileStage = 'reading' | 'extracting' | 'writing' | 'manifest';
+type JobPhase = 'chaining';
+type StreamLine = {
+  name: string;
+  ts: string;
+  status: 'curating' | 'indexed' | 'error';
+  error?: string;
+  duration?: string;
+  stage?: FileStage;
+  startedAt?: string;
+};
+
+const STAGE_LABEL: Record<FileStage, string> = {
+  reading: 'reading source',
+  extracting: 'calling Bedrock',
+  writing: 'writing pages',
+  manifest: 'updating manifest',
+};
 
 function fmtSize(b: number): string {
   if (b < 1024) return `${b} B`;
@@ -53,8 +70,17 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
   const [pendingStream, setPendingStream] = useState<StreamLine[]>([]);
   const [pendingRunning, setPendingRunning] = useState(false);
   const [pendingDone, setPendingDone] = useState(false);
+  const [pendingNow, setPendingNow] = useState<number>(() => Date.now());
+  const [pendingPhase, setPendingPhase] = useState<JobPhase | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const jobIdRef = useRef<string | null>(null);
+
+  // Re-render every second while running so elapsed timers tick smoothly.
+  useEffect(() => {
+    if (!pendingRunning) return;
+    const id = setInterval(() => setPendingNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [pendingRunning]);
 
   // Reindex tab
   const [reindexRunning, setReindexRunning] = useState(false);
@@ -73,7 +99,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
     }
     setTab(initialTab ?? 'upload');
     setFiles([]); setDragActive(false);
-    setPendingStream([]); setPendingRunning(false); setPendingDone(false); setPendingJobTotal(0);
+    setPendingStream([]); setPendingRunning(false); setPendingDone(false); setPendingJobTotal(0); setPendingPhase(null);
     setReindexRunning(false); setReindexDone(false); setReindexTotal(0); setReindexIndexed(0); setReindexRawCount(0);
     if (spaces.length && !spaces.includes(space)) setSpace(defaultSpace(spaces));
   }, [open, initialTab]);
@@ -175,7 +201,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
-    setPendingStream([]); setPendingRunning(true); setPendingDone(false); setPendingJobTotal(0);
+    setPendingStream([]); setPendingRunning(true); setPendingDone(false); setPendingJobTotal(0); setPendingPhase(null);
     try {
       const limit = pendingLimit === 'all' ? undefined : Number.parseInt(pendingLimit, 10);
       // Start the Lambda job
@@ -199,27 +225,50 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
       // Poll for status
       const poll = async () => {
         while (!ctrl.signal.aborted) {
-          await new Promise(r => setTimeout(r, 3000));
+          await new Promise(r => setTimeout(r, 1200));
           if (ctrl.signal.aborted) return;
 
           const statusRes = await fetch(`/api/curate/status?job=${encodeURIComponent(jobId)}`, { signal: ctrl.signal });
           if (!statusRes.ok) continue;
           const job = await statusRes.json() as {
             status: string;
-            files: Array<{ key: string; status: string; pages?: string[]; error?: string }>;
+            phase?: JobPhase;
+            files: Array<{
+              key: string;
+              status: string;
+              pages?: string[];
+              error?: string;
+              stage?: FileStage;
+              startedAt?: string;
+              finishedAt?: string;
+            }>;
             completed: number;
             total: number;
           };
+          setPendingPhase(job.phase ?? null);
 
-          // Update stream lines from job state
-          const ts = () => { const n = new Date(); return `${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}:${String(n.getSeconds()).padStart(2, '0')}`; };
+          const fmtTs = (iso: string) => {
+            const n = new Date(iso);
+            return `${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}:${String(n.getSeconds()).padStart(2, '0')}`;
+          };
+          const fmtDur = (start?: string, end?: string) => {
+            if (!start || !end) return undefined;
+            const ms = new Date(end).getTime() - new Date(start).getTime();
+            if (!Number.isFinite(ms) || ms < 0) return undefined;
+            const s = Math.round(ms / 100) / 10;
+            return `${s}s`;
+          };
           const lines: StreamLine[] = job.files.map(f => ({
             name: f.key.split('/').slice(-1)[0] ?? f.key,
-            ts: f.status === 'done' || f.status === 'error' ? ts() : '',
+            ts: (f.status === 'done' || f.status === 'error') && f.finishedAt ? fmtTs(f.finishedAt) : '',
             status: f.status === 'done' ? 'indexed' : f.status === 'error' ? 'error' : 'curating',
             error: f.error,
+            stage: f.stage,
+            startedAt: f.startedAt,
+            duration: fmtDur(f.startedAt, f.finishedAt),
           }));
           setPendingStream(lines);
+          setPendingNow(Date.now());
 
           if (job.status === 'stale') {
             setPendingRunning(false);
@@ -462,17 +511,56 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
                   </div>
                 </div>
               )}
-              {pendingStream.map((e, i) => (
-                <div key={i} className={'stream-line ' + e.status}>
-                  <span className="stream-ts">{e.ts}</span>
-                  <span className="stream-arrow">{e.status === 'indexed' ? ICONS.check : e.status === 'error' ? ICONS.warn : '·'}</span>
-                  <span className="stream-name">{e.name}</span>
-                  {e.status === 'curating' && <span className="spinner"></span>}
-                  {e.error && <span className="stream-error">{e.error}</span>}
-                  {e.duration && <span className="stream-duration">{e.duration}</span>}
-                </div>
-              ))}
+              {pendingStream.map((e, i) => {
+                const elapsedSec = e.status === 'curating' && e.startedAt
+                  ? Math.max(0, Math.round((pendingNow - new Date(e.startedAt).getTime()) / 1000))
+                  : null;
+                return (
+                  <div key={i} className={'stream-line ' + e.status}>
+                    <span className="stream-ts">{e.ts}</span>
+                    <span className="stream-arrow">{e.status === 'indexed' ? ICONS.check : e.status === 'error' ? ICONS.warn : '·'}</span>
+                    <span className="stream-name">{e.name}</span>
+                    {e.status === 'curating' && <span className="spinner"></span>}
+                    {e.status === 'curating' && e.stage && (
+                      <span className="stream-stage" style={{ fontSize: 11, color: 'var(--fg-3)' }}>
+                        {STAGE_LABEL[e.stage]}
+                      </span>
+                    )}
+                    {elapsedSec !== null && (
+                      <span className="stream-duration" style={{ color: 'var(--fg-3)' }}>{elapsedSec}s</span>
+                    )}
+                    {e.error && <span className="stream-error">{e.error}</span>}
+                    {e.duration && e.status !== 'curating' && <span className="stream-duration">{e.duration}</span>}
+                  </div>
+                );
+              })}
             </div>
+            {(pendingRunning || pendingDone) && pendingJobTotal > 0 && (
+              <div className="upload-row-bar" style={{ marginTop: 8 }}>
+                <div
+                  className="upload-row-bar-fill"
+                  style={{
+                    width:
+                      (Math.min(
+                        100,
+                        (pendingStream.filter(e => e.status === 'indexed' || e.status === 'error').length /
+                          pendingJobTotal) * 100,
+                      )) + '%',
+                  }}
+                ></div>
+              </div>
+            )}
+            {pendingRunning && pendingPhase === 'chaining' && (
+              <div
+                className="stream-line"
+                style={{ marginTop: 8, fontSize: 12, color: 'var(--fg-2)' }}
+              >
+                <span className="spinner"></span>
+                <span style={{ marginLeft: 8 }}>
+                  Continuing in a new worker — batch is being handed off to avoid the 5-minute Lambda timeout…
+                </span>
+              </div>
+            )}
 
             <div className="upload-foot">
               <div className="batch-control" aria-label="Batch size">
@@ -491,7 +579,16 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
               </div>
               <span className="upload-summary">
                 {!pendingRunning && !pendingDone && (pendingCount === 0 ? 'Nothing pending' : `${pendingCount} file${pendingCount > 1 ? 's' : ''} pending`)}
-                {pendingRunning && `${pendingStream.filter(e => e.status === 'indexed').length} of ${pendingJobTotal || pendingCount} done`}
+                {pendingRunning && (() => {
+                  const doneCount = pendingStream.filter(e => e.status === 'indexed' || e.status === 'error').length;
+                  const active = pendingStream.find(e => e.status === 'curating');
+                  const total = pendingJobTotal || pendingCount;
+                  if (active) {
+                    const stageText = active.stage ? STAGE_LABEL[active.stage] : 'processing';
+                    return `${doneCount} / ${total} · ${active.name} (${stageText})`;
+                  }
+                  return `${doneCount} / ${total} done`;
+                })()}
                 {pendingDone && `${pendingStream.length} curated · searchable now`}
               </span>
               <span style={{ flex: 1 }}></span>

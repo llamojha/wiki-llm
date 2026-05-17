@@ -5,11 +5,23 @@ export type FileBlock = {
 
 export type FileStatus = 'pending' | 'processing' | 'done' | 'error';
 
+export type FileStage =
+  | 'reading'
+  | 'extracting'
+  | 'writing'
+  | 'manifest';
+
 export type JobFile = {
   key: string;
   status: FileStatus;
   pages?: string[];
   error?: string;
+  /** Sub-stage within `processing`. Cleared once status flips to done/error. */
+  stage?: FileStage;
+  /** ISO timestamp set when status moves to `processing`. */
+  startedAt?: string;
+  /** ISO timestamp set when status flips to `done` or `error`. */
+  finishedAt?: string;
 };
 
 export type JobState = {
@@ -22,6 +34,14 @@ export type JobState = {
   startedAt: string;
   completedAt: string | null;
   error: string | null;
+  /**
+   * Sub-state inside `status: 'processing'`. Set to `'chaining'` immediately
+   * before the Lambda re-invokes itself to continue a batch past its timeout.
+   * Cleared when the next invocation begins or the job finishes.
+   */
+  phase?: 'chaining';
+  /** ISO timestamp when `phase` was last set. */
+  chainedAt?: string;
 };
 
 export type ProcessedFileEntry = {
