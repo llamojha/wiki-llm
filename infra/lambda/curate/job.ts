@@ -1,36 +1,42 @@
 import type { JobState } from './types.js';
 import { getObject, putJson } from './s3.js';
-import { systemKey } from './paths.js';
+import type { ScopePaths } from './scope.js';
 
-function jobKey(jobId: string): string {
-  return systemKey(`jobs/${jobId}.json`);
+function jobKey(scope: ScopePaths, jobId: string): string {
+  return scope.systemKey(`jobs/${jobId}.json`);
 }
 
-export async function getJob(bucket: string, prefix: string, jobId: string): Promise<JobState> {
-  const raw = await getObject(bucket, prefix, jobKey(jobId));
+export async function getJob(
+  bucket: string,
+  prefix: string,
+  scope: ScopePaths,
+  jobId: string,
+): Promise<JobState> {
+  const raw = await getObject(bucket, prefix, jobKey(scope, jobId));
   return JSON.parse(raw) as JobState;
 }
 
 export async function updateJob(
   bucket: string,
   prefix: string,
+  scope: ScopePaths,
   jobId: string,
   patch: Partial<JobState>,
 ): Promise<void> {
-  const current = await getJob(bucket, prefix, jobId);
-  // Preserve cancelled status — don't let a patch overwrite it
+  const current = await getJob(bucket, prefix, scope, jobId);
   if (current.status === 'cancelled' && !patch.status) {
     return;
   }
   const updated = current.status === 'cancelled'
     ? { ...current, ...patch, status: 'cancelled' as const }
     : { ...current, ...patch };
-  await putJson(bucket, prefix, jobKey(jobId), updated);
+  await putJson(bucket, prefix, jobKey(scope, jobId), updated);
 }
 
 export async function createJob(
   bucket: string,
   prefix: string,
+  scope: ScopePaths,
   jobId: string,
   space: string,
   files: string[],
@@ -39,6 +45,8 @@ export async function createJob(
     id: jobId,
     status: 'processing',
     space,
+    scope: scope.scope,
+    userId: scope.userId,
     total: files.length,
     completed: 0,
     files: files.map(key => ({ key, status: 'pending' })),
@@ -46,6 +54,6 @@ export async function createJob(
     completedAt: null,
     error: null,
   };
-  await putJson(bucket, prefix, jobKey(jobId), job);
+  await putJson(bucket, prefix, jobKey(scope, jobId), job);
   return job;
 }

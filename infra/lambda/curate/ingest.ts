@@ -9,10 +9,11 @@ import {
   spaceFromRawKey,
   sourceSlug,
 } from './source-card.js';
-import { generatedPrefix, systemKey } from './paths.js';
+import type { ScopePaths } from './scope.js';
 import type { FileStage } from './types.js';
 
 export type StageReporter = (stage: FileStage) => Promise<void>;
+export type WriteQueue = <T>(fn: () => Promise<T>) => Promise<T>;
 
 function nowMs(): number {
   return Date.now();
@@ -23,8 +24,8 @@ function logTiming(jobId: string | undefined, rawKey: string, stage: string, sta
   console.log(`${prefix}${rawKey} ${stage} ${Date.now() - startedAt}ms`);
 }
 
-function sourceCardKey(hash: string): string {
-  return systemKey(`source-cards/${hash.replace(/^sha256:/, '')}.json`);
+function sourceCardKey(scope: ScopePaths, hash: string): string {
+  return scope.systemKey(`source-cards/${hash.replace(/^sha256:/, '')}.json`);
 }
 
 /**
@@ -37,9 +38,10 @@ function sourceCardKey(hash: string): string {
 export async function loadPlacementHints(
   bucket: string,
   prefix: string,
+  scope: ScopePaths,
   ingestSpace: string,
 ): Promise<string[]> {
-  const generatedRoot = generatedPrefix(ingestSpace);
+  const generatedRoot = scope.generatedPrefix(ingestSpace);
   const existingKeys = await listObjects(bucket, prefix, generatedRoot);
   const summaryReads = existingKeys
     .filter(key => key.endsWith('.md'))
@@ -68,8 +70,20 @@ export async function processSource(
   _space: string,
   rawKey: string,
   hints: string[],
+  scope: ScopePaths,
   jobId?: string,
   onStage?: StageReporter,
+  /**
+   * Serializes the manifest's read-modify-write step. Required when callers
+   * run `processSource` concurrently (e.g. `CURATE_CONCURRENCY > 1`) —
+   * otherwise concurrent workers each read the same baseline
+   * `processed.json`, merge their own file in, and the last writer wins,
+   * silently dropping the other workers' manifest entries.
+   *
+   * When omitted (single-threaded callers, tests), manifest writes happen
+   * inline.
+   */
+  enqueueManifestWrite?: WriteQueue,
 ): Promise<string[]> {
   // 1. Read source
   await onStage?.('reading');
@@ -100,8 +114,8 @@ export async function processSource(
     console.warn(`[${jobId ?? 'curate'}] ${rawKey} is scoped to ${sourceSpace}, but generated output is forced to ${ingestSpace}`);
   }
   const outputSpace = ingestSpace;
-  const cardKey = sourceCardKey(hash);
-  const pagePath = `${generatedPrefix(outputSpace)}sources/${sourceSlug(card, rawKey, hash)}.md`;
+  const cardKey = sourceCardKey(scope, hash);
+  const pagePath = `${scope.generatedPrefix(outputSpace)}sources/${sourceSlug(card, rawKey, hash)}.md`;
   const pageContent = renderSourcePage(card, rawKey, hash);
 
   // 4. Deterministically write the durable card and source page.
@@ -118,11 +132,20 @@ export async function processSource(
   logTiming(jobId, rawKey, 'write-source-card-and-page', startedAt);
 
   // 5. Update manifest. Final index/log/lint is a separate maintenance pass.
+  // Serialized via enqueueManifestWrite so concurrent workers don't clobber
+  // each other's entries (see param doc).
   await onStage?.('manifest');
   startedAt = nowMs();
-  const manifest = await getManifest(bucket, prefix);
-  const updated = addToManifest(manifest, rawKey, hash, outputSpace, [pagePath], cardKey);
-  await saveManifest(bucket, prefix, updated);
+  const writeManifest = async () => {
+    const manifest = await getManifest(bucket, prefix, scope);
+    const updated = addToManifest(manifest, rawKey, hash, outputSpace, [pagePath], cardKey);
+    await saveManifest(bucket, prefix, scope, updated);
+  };
+  if (enqueueManifestWrite) {
+    await enqueueManifestWrite(writeManifest);
+  } else {
+    await writeManifest();
+  }
   logTiming(jobId, rawKey, 'update-manifest', startedAt);
 
   return [pagePath];

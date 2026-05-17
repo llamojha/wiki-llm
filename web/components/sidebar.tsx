@@ -46,14 +46,14 @@ function countDocs(nodes: TreeNodeType[]): number {
 }
 
 function filterByScope(nodes: TreeNodeType[], scope: Scope): TreeNodeType[] {
-  if (scope === 'personal') {
-    const personal = nodes.find(
+  if (scope === 'user') {
+    const user = nodes.find(
       (n): n is TreeNodeType & { type: 'folder' } =>
-        n.type === 'folder' && n.id === 'folder:__personal',
+        n.type === 'folder' && n.id === 'folder:__user',
     );
-    return personal?.children ?? [];
+    return user?.children ?? [];
   }
-  return nodes.filter((n) => !(n.type === 'folder' && n.id === 'folder:__personal'));
+  return nodes.filter((n) => !(n.type === 'folder' && n.id === 'folder:__user'));
 }
 
 export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, onUpload, onProcessPending, onReindex, apiTree }: SidebarProps) {
@@ -74,7 +74,7 @@ export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, onUpload
         <button className={scope === 'shared' ? 'on' : ''} onClick={() => setScope('shared')}>
           {ICONS.globe} Shared
         </button>
-        <button className={scope === 'personal' ? 'on' : ''} onClick={() => setScope('personal')}>
+        <button className={scope === 'user' ? 'on' : ''} onClick={() => setScope('user')}>
           {ICONS.lock} My wiki
         </button>
       </div>
@@ -93,7 +93,7 @@ export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, onUpload
       </button>
 
       <div className="nav-section">
-        <span>{scope === 'shared' ? 'Shared spaces' : 'My pages'}</span>
+        <span>{scope === 'shared' ? 'Shared spaces' : 'My library'}</span>
         <div style={{ display: 'flex', gap: 2 }}>
           <button onClick={onUpload} title="Upload Markdown files">{ICONS.upload}</button>
           <button onClick={onNewPage} title="New page">{ICONS.plus}</button>

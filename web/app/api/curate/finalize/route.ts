@@ -1,19 +1,19 @@
 import { NextResponse } from 'next/server';
 
 import { getObject, putObject } from '@/lib/s3';
-import { systemKey } from '@/lib/vault-paths';
 import {
   regenerateMasterIndex,
   regenerateSpaceIndex,
 } from '@/lib/index-gen';
 import { invalidateSearchIndex } from '@/lib/search';
+import { resolveScope, type Scope } from '@/lib/scope';
 
 /**
  * Post-ingest finalization step.
  *
  * The curate Lambda writes generated pages to S3 but does not touch any
  * derived artifacts. This route regenerates the affected space's `index.md`,
- * the master `_system/index.md`, and invalidates the in-memory Fuse search
+ * the scope's master `index.md`, and invalidates the in-memory Fuse search
  * cache so the new pages become discoverable.
  *
  * Idempotent: once a job's `finalized` flag is true, subsequent calls return
@@ -21,13 +21,18 @@ import { invalidateSearchIndex } from '@/lib/search';
  */
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
-  const { jobId } = body as { jobId?: string };
+  const { jobId, scope: scopeName, userId } = body as {
+    jobId?: string;
+    scope?: Scope;
+    userId?: string;
+  };
 
   if (!jobId) {
     return NextResponse.json({ detail: 'jobId is required' }, { status: 400 });
   }
 
-  const key = systemKey(`jobs/${jobId}.json`);
+  const scope = resolveScope({ scope: scopeName ?? 'shared', userId });
+  const key = scope.systemKey(`jobs/${jobId}.json`);
 
   let job: {
     id: string;
@@ -57,8 +62,8 @@ export async function POST(req: Request) {
     return NextResponse.json(job);
   }
 
-  await regenerateSpaceIndex(job.space);
-  await regenerateMasterIndex();
+  await regenerateSpaceIndex(job.space, scope);
+  await regenerateMasterIndex(scope);
   invalidateSearchIndex();
 
   const updated = {

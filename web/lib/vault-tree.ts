@@ -7,6 +7,7 @@ import {
   isDocumentKey,
   personalPrefix,
 } from '@/lib/vault-paths';
+import { resolveScope } from '@/lib/scope';
 
 export type TreeNode =
   | { type: 'doc'; id: string; name: string }
@@ -49,21 +50,60 @@ function addKeys(root: TreeNode[], space: string, storagePrefix: string, keys: s
   }
 }
 
+/**
+ * Build the full vault tree with one synthetic `__user` folder containing the
+ * active user's content (all spaces, including `personal`) and one folder per
+ * declared shared space.
+ *
+ * The sidebar's scope toggle filters this single tree: `shared` hides `__user`,
+ * `user` returns only `__user`'s children.
+ */
 export async function getTree(): Promise<TreeNode[]> {
   const structure = await getStructure();
   const tree: TreeNode[] = [];
   const defaultUser = structure.defaultUser || DEFAULT_USER_ID;
-  const personalRoot = personalPrefix(defaultUser);
-  const personalKeys = (await listObjects(personalRoot)).filter(isDocumentKey);
-  const personalChildren: TreeNode[] = [];
-  addKeys(personalChildren, '__personal', personalRoot, personalKeys);
+  const userScope = resolveScope({ scope: 'user', userId: defaultUser });
+  const userLabel = structure.users?.find((u) => u.id === defaultUser)?.label || 'My wiki';
+
+  // Build the user's library: personal first, then any other declared spaces
+  // they have content in (both generated and authored).
+  const userChildren: TreeNode[] = [];
+
+  const personalKeys = (await listObjects(personalPrefix(defaultUser))).filter(isDocumentKey);
+  if (personalKeys.length) {
+    const personalChildren: TreeNode[] = [];
+    addKeys(personalChildren, `__user/personal`, personalPrefix(defaultUser), personalKeys);
+    userChildren.push({
+      type: 'folder',
+      id: 'folder:__user/personal',
+      name: 'Personal',
+      children: personalChildren,
+    });
+  }
+
+  for (const space of structure.spaces.filter((s) => s.indexed)) {
+    const generated = (await listObjects(userScope.generatedPrefix(space.name))).filter(isDocumentKey);
+    const authored = (await listObjects(userScope.authoredPrefix(space.name))).filter(isDocumentKey);
+    if (!generated.length && !authored.length) continue;
+    const spaceChildren: TreeNode[] = [];
+    addKeys(spaceChildren, `__user/${space.name}`, userScope.generatedPrefix(space.name), generated);
+    addKeys(spaceChildren, `__user/${space.name}`, userScope.authoredPrefix(space.name), authored);
+    userChildren.push({
+      type: 'folder',
+      id: `folder:__user/${space.name}`,
+      name: space.label,
+      children: spaceChildren,
+    });
+  }
+
   tree.push({
     type: 'folder',
-    id: 'folder:__personal',
-    name: structure.users?.find((u) => u.id === defaultUser)?.label || 'My wiki',
-    children: personalChildren,
+    id: 'folder:__user',
+    name: userLabel,
+    children: userChildren,
   });
 
+  // Shared spaces — one folder per declared `indexed` space.
   for (const space of structure.spaces.filter((s) => s.indexed)) {
     const generated = (await listObjects(generatedPrefix(space.name))).filter(isDocumentKey);
     const authored = (await listObjects(authoredPrefix(space.name))).filter(isDocumentKey);

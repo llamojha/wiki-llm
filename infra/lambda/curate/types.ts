@@ -28,6 +28,10 @@ export type JobState = {
   id: string;
   status: 'processing' | 'done' | 'error' | 'cancelled';
   space: string;
+  /** Scope this job operates against. Defaults to `'shared'` when absent. */
+  scope?: 'shared' | 'user';
+  /** Present iff `scope === 'user'`. */
+  userId?: string;
   total: number;
   completed: number;
   files: JobFile[];
@@ -71,6 +75,10 @@ export type CurateEvent = {
   bucket: string;
   prefix: string;
   startIndex?: number;
+  /** Defaults to `'shared'` if absent (for backward compatibility with older invocations). */
+  scope?: 'shared' | 'user';
+  /** Required when `scope === 'user'`. */
+  userId?: string;
 };
 
 export type SourceCardClaim = {

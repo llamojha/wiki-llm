@@ -1,17 +1,23 @@
 import { NextResponse } from 'next/server';
 import { getObject, putObject } from '@/lib/s3';
-import { systemKey } from '@/lib/vault-paths';
+import { resolveScope, type Scope } from '@/lib/scope';
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
-  const { jobId } = body as { jobId?: string };
+  const { jobId, scope: scopeName, userId } = body as {
+    jobId?: string;
+    scope?: Scope;
+    userId?: string;
+  };
 
   if (!jobId) {
     return NextResponse.json({ detail: 'jobId is required' }, { status: 400 });
   }
 
+  const scope = resolveScope({ scope: scopeName ?? 'shared', userId });
+
   try {
-    const key = systemKey(`jobs/${jobId}.json`);
+    const key = scope.systemKey(`jobs/${jobId}.json`);
     const raw = await getObject(key);
     const job = JSON.parse(raw);
     job.status = 'cancelled';
