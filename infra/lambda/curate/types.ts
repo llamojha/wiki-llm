@@ -42,6 +42,14 @@ export type JobState = {
   phase?: 'chaining';
   /** ISO timestamp when `phase` was last set. */
   chainedAt?: string;
+  /**
+   * True once `/api/curate/finalize` has regenerated the affected space's
+   * `index.md`, the master `index.md`, and invalidated the in-memory search
+   * cache. Idempotent: a second call is a no-op.
+   */
+  finalized?: boolean;
+  /** ISO timestamp when `finalized` flipped to true. */
+  finalizedAt?: string;
 };
 
 export type ProcessedFileEntry = {

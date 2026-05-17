@@ -72,6 +72,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
   const [pendingDone, setPendingDone] = useState(false);
   const [pendingNow, setPendingNow] = useState<number>(() => Date.now());
   const [pendingPhase, setPendingPhase] = useState<JobPhase | null>(null);
+  const [pendingFinalizing, setPendingFinalizing] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const jobIdRef = useRef<string | null>(null);
 
@@ -99,7 +100,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
     }
     setTab(initialTab ?? 'upload');
     setFiles([]); setDragActive(false);
-    setPendingStream([]); setPendingRunning(false); setPendingDone(false); setPendingJobTotal(0); setPendingPhase(null);
+    setPendingStream([]); setPendingRunning(false); setPendingDone(false); setPendingJobTotal(0); setPendingPhase(null); setPendingFinalizing(false);
     setReindexRunning(false); setReindexDone(false); setReindexTotal(0); setReindexIndexed(0); setReindexRawCount(0);
     if (spaces.length && !spaces.includes(space)) setSpace(defaultSpace(spaces));
   }, [open, initialTab]);
@@ -201,7 +202,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
-    setPendingStream([]); setPendingRunning(true); setPendingDone(false); setPendingJobTotal(0); setPendingPhase(null);
+    setPendingStream([]); setPendingRunning(true); setPendingDone(false); setPendingJobTotal(0); setPendingPhase(null); setPendingFinalizing(false);
     try {
       const limit = pendingLimit === 'all' ? undefined : Number.parseInt(pendingLimit, 10);
       // Start the Lambda job
@@ -279,6 +280,24 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
 
           if (job.status === 'done' || job.status === 'error' || job.status === 'cancelled') {
             setPendingRunning(false);
+            if (job.status === 'done') {
+              setPendingFinalizing(true);
+              try {
+                const finalizeRes = await fetch('/api/curate/finalize', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ jobId }),
+                });
+                if (!finalizeRes.ok) {
+                  const data = await finalizeRes.json().catch(() => ({}));
+                  showToast(data.detail || 'Finalize failed — search index may be stale');
+                }
+              } catch {
+                showToast('Finalize failed — search index may be stale');
+              } finally {
+                setPendingFinalizing(false);
+              }
+            }
             setPendingDone(true);
             onUploaded();
             return;
@@ -561,6 +580,17 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
                 </span>
               </div>
             )}
+            {pendingFinalizing && (
+              <div
+                className="stream-line"
+                style={{ marginTop: 8, fontSize: 12, color: 'var(--fg-2)' }}
+              >
+                <span className="spinner"></span>
+                <span style={{ marginLeft: 8 }}>
+                  Finalizing — regenerating index.md and refreshing search…
+                </span>
+              </div>
+            )}
 
             <div className="upload-foot">
               <div className="batch-control" aria-label="Batch size">
@@ -578,7 +608,8 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
                 ))}
               </div>
               <span className="upload-summary">
-                {!pendingRunning && !pendingDone && (pendingCount === 0 ? 'Nothing pending' : `${pendingCount} file${pendingCount > 1 ? 's' : ''} pending`)}
+                {!pendingRunning && !pendingDone && !pendingFinalizing && (pendingCount === 0 ? 'Nothing pending' : `${pendingCount} file${pendingCount > 1 ? 's' : ''} pending`)}
+                {pendingFinalizing && 'Finalizing index…'}
                 {pendingRunning && (() => {
                   const doneCount = pendingStream.filter(e => e.status === 'indexed' || e.status === 'error').length;
                   const active = pendingStream.find(e => e.status === 'curating');
@@ -594,7 +625,11 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
               <span style={{ flex: 1 }}></span>
               <button className="btn ghost" onClick={onClose}>Close</button>
               {!pendingRunning ? (
-                <button className="btn primary" disabled={pendingCount === 0} onClick={startPendingStream}>
+                <button
+                  className="btn primary"
+                  disabled={pendingCount === 0 || pendingFinalizing}
+                  onClick={startPendingStream}
+                >
                   {ICONS.spark} {pendingDone ? 'Run again' : 'Process batch'}
                 </button>
               ) : (

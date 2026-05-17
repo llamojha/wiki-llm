@@ -4,6 +4,7 @@ import matter from 'gray-matter';
 import { getObject, listObjects, putObject } from '@/lib/s3';
 import { getStructure } from '@/lib/vault-structure';
 import { RAW_PREFIX, authoredPrefix, generatedPrefix, isDocumentKey, systemKey } from '@/lib/vault-paths';
+import { invalidateSearchIndex } from '@/lib/search';
 
 const SPACE_RE = /^[a-z0-9][a-z0-9-]*$/;
 
@@ -99,6 +100,8 @@ export async function POST(req: Request) {
         }
         const masterBody = `---\ntitle: Index\ntype: nav\nupdated: ${new Date().toISOString()}\n---\n\n${sections.join('\n\n')}\n`;
         await putObject(systemKey('index.md'), masterBody);
+
+        invalidateSearchIndex();
 
         send({ type: 'done', indexed });
       } catch (err) {
