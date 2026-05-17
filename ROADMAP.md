@@ -120,20 +120,34 @@ Backend joins. Real S3 read, real search. Editor and Chat stay mock-backed.
 
 **Acceptance:** see `specs/phase-2-real-read-path.md`
 
-### Phase 3 — Ingest Pipeline (MVP 1)
+### Phase 3 — Ingest Pipeline (MVP 1) ✓
 
 TypeScript CLI that transforms raw docs into structured wiki pages via Bedrock.
 
-- [ ] `ingest/` package in the pnpm workspace (TypeScript, shared `@aws-sdk` deps)
-- [ ] CLI entrypoint: `pnpm ingest <s3-key-or-glob>` and `pnpm ingest --lint`
-- [ ] S3 write layer: PutObject for `generated/` prefix; `source_type = generated`
-- [ ] Bedrock invoke via `@aws-sdk/client-bedrock-runtime`; model pinned to `amazon.nova-2-lite-v1:0`
-- [ ] `index.md` regeneration (flat list of all navigable docs) after each ingest run
-- [ ] `log.md` append on every ingest run; auto-rotate at size threshold
-- [ ] AI context files on vault init: `AGENTS.md`, `WIKI_RULES.md`, `SOURCES.md`, `TASKS.md`
-- [ ] End-to-end: place file in `raw/`, run ingest, verify pages in `generated/` are searchable in portal
+- [x] `ingest/` package in the pnpm workspace (TypeScript, shared `@aws-sdk` deps)
+- [x] CLI entrypoint: `pnpm ingest <s3-key-or-glob>` and `pnpm ingest --lint`
+- [x] S3 write layer: PutObject for `generated/` prefix; `source_type = generated`
+- [x] Bedrock invoke via `@aws-sdk/client-bedrock-runtime`; model pinned to `amazon.nova-2-lite-v1:0`
+- [x] `index.md` regeneration (flat list of all navigable docs) after each ingest run
+- [ ] `log.md` append on every ingest run; auto-rotate at size threshold — *deferred (see notes)*
+- [x] AI context files on vault init: `AGENTS.md`, `WIKI_RULES.md`, `SOURCES.md`, `TASKS.md` (via `ingest init`)
+- [x] End-to-end: place file in `raw/`, run ingest, verify pages in `generated/` are searchable in portal
 
 **Acceptance:** see `specs/phase-3-ingest-pipeline.md`
+
+#### Phase 3 implementation notes (drifts from the initial plan)
+
+**Architecture pivot from CLI-first to Lambda-first.** The original plan was a TypeScript CLI (`pnpm ingest <key>`). What shipped is a Vercel-friendly split: `ingest/` package retains the CLI for vault init + ad-hoc runs, but the user-facing batch path is a portal **Process pending** button (`/api/curate/start`) that fan-outs to an AWS Lambda (`infra/lambda/curate/`). This avoids running long Bedrock loops inside Next.js Route Handlers (Vercel free-tier 60s ceiling) while keeping the dev experience interactive.
+
+**Post-curate finalize step.** Index regeneration is *not* done inside the Lambda — instead `/api/curate/finalize` is called from the UI after the job's status flips to `done`. The route runs `regenerateSpaceIndex(job.space) + regenerateMasterIndex() + invalidateSearchIndex()` using `web/lib/index-gen.ts`. Idempotent via a `finalized` flag on the job state.
+
+**`log.md` append — deferred.** The legacy `web/lib/ingest/run.ts` had `appendLog`, but the Lambda path doesn't. Manifest-based tracking (`_system/processed.json`) covers the "what's been ingested" question; a human-readable audit log can land later without blocking the phase.
+
+**Placement hints loaded once per Lambda invocation.** Original ingest re-read 50 existing pages per file. Refactored to a single `loadPlacementHints` call in `index.ts` handler entry. See postmortem session in `.memory/sessions/2026-05-17-191704.md` for full reasoning.
+
+**Bounded concurrency.** Lambda runs files with `CURATE_CONCURRENCY=3` (env-tunable). All job-JSON writes serialized through an in-process async queue to avoid clobber races.
+
+**Per-stage UI progress.** Lambda writes `stage` ('reading' / 'extracting' / 'writing' / 'manifest') to each `JobFile` so the upload modal can show what's happening between Bedrock round-trips. Chain handoffs (when Lambda re-invokes itself near its 5min timeout) surface via `phase: 'chaining'` so the UI doesn't appear frozen during cold-start.
 
 ### Phase 4 — Personal Wiki CRUD (MVP 2)
 
