@@ -319,7 +319,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
       <main className="main">
         {editing ? (
           <Editor
-            doc={doc}
+            doc={activeId === '__new' ? undefined : doc}
             docId={activeId !== '__new' ? activeId : undefined}
             etag={liveDoc?.etag}
             onClose={() => setEditing(false)}
