@@ -1,9 +1,9 @@
-import { createHash } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { LambdaClient, InvokeCommand, InvocationType } from '@aws-sdk/client-lambda';
 import { getObject, listObjects, putObject } from '@/lib/s3';
 import { getIngestPolicy } from '@/lib/ingest-policy';
 import { resolveScope, type Scope } from '@/lib/scope';
+import { resolvePending, type ProcessedManifest } from '@/lib/curate-pending';
 
 const LAMBDA_ARN = process.env.CURATE_LAMBDA_ARN;
 const BUCKET = process.env.VAULT_BUCKET ?? '';
@@ -16,52 +16,6 @@ function lambdaClient(): LambdaClient {
   return _lambda;
 }
 
-type ProcessedManifest = { files: Record<string, { hash: string }> };
-
-function computeHash(content: string): string {
-  return 'sha256:' + createHash('sha256').update(content).digest('hex');
-}
-
-/**
- * Resolve which raw keys are pending curation. A key is pending if:
- *   - it has no entry in the manifest yet (new file), or
- *   - it has an entry but the current content hash differs (file was
- *     re-uploaded with new contents).
- *
- * Key-only detection misses the re-upload case because the manifest still
- * carries the old hash for the same key, so the file would be silently
- * dropped from the pending set. Hash-checking only the previously-seen keys
- * keeps the cost proportional to the manifest size, not the new-file count.
- */
-async function resolvePending(
-  allKeys: string[],
-  manifest: ProcessedManifest,
-): Promise<string[]> {
-  const newKeys: string[] = [];
-  const possiblyStale: string[] = [];
-  for (const k of allKeys) {
-    if (manifest.files[k]) possiblyStale.push(k);
-    else newKeys.push(k);
-  }
-
-  // Re-hash known keys in parallel. Read failures are treated as "include
-  // it, the Lambda will surface a clearer error if the object is gone."
-  const modified: string[] = [];
-  await Promise.all(
-    possiblyStale.map(async (k) => {
-      try {
-        const content = await getObject(k);
-        if (computeHash(content) !== manifest.files[k].hash) {
-          modified.push(k);
-        }
-      } catch {
-        modified.push(k);
-      }
-    }),
-  );
-
-  return [...newKeys, ...modified].sort();
-}
 
 export async function POST(req: Request) {
   if (!LAMBDA_ARN) {

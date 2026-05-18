@@ -81,7 +81,11 @@ export async function getTree(): Promise<TreeNode[]> {
     });
   }
 
-  for (const space of structure.spaces.filter((s) => s.indexed)) {
+  // Skip `personal` here — it's already covered by the dedicated block
+  // above. Otherwise an `indexed: true` entry for `personal` in
+  // structure.json would re-walk the same `users/<id>/authored/personal/`
+  // prefix and add every doc twice to the My-wiki sidebar.
+  for (const space of structure.spaces.filter((s) => s.indexed && s.name !== 'personal')) {
     const generated = (await listObjects(userScope.generatedPrefix(space.name))).filter(isDocumentKey);
     const authored = (await listObjects(userScope.authoredPrefix(space.name))).filter(isDocumentKey);
     if (!generated.length && !authored.length) continue;
