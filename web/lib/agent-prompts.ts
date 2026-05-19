@@ -13,6 +13,8 @@ export type BuildSystemPromptOpts = {
   scopeMode: ScopeMode;
   /** Title of the doc currently open in the reader, if any — gives the agent context for "this page" questions. */
   contextDocTitle?: string;
+  /** Relative S3 key of the open doc — pair with contextDocTitle so the agent can call read_document directly. */
+  contextDocId?: string;
   /**
    * When true, the user has explicitly opted into unsourced generation via
    * the "Draft anyway" button. The agent must skip search, draft from prior
@@ -84,10 +86,17 @@ Every factual claim must be tied to a document you read via read_document. In yo
 
 If you did not call read_document for a piece of information, you cannot cite it. If you cannot cite, you should not make the claim.`;
 
+  const contextDocLine =
+    opts.contextDocTitle && opts.contextDocId
+      ? `Currently-open document: **${opts.contextDocTitle}** (\`${opts.contextDocId}\`). When the user says "this page", "this doc", or asks a question that's clearly about what they're viewing, call \`read_document\` on this id first.`
+      : opts.contextDocTitle
+        ? `Currently-open document: **${opts.contextDocTitle}** (the user may be asking about this specifically).`
+        : '';
+
   const scopeContext = `## Scope context
 
 Active scope: **${opts.scopeMode}** — your searches and reads cover ${scopeLabel}.
-${opts.contextDocTitle ? `Currently-open document: **${opts.contextDocTitle}** (the user may be asking about this specifically).` : ''}`.trim();
+${contextDocLine}`.trim();
 
   const examples = opts.forceUnsourcedGeneration ? '' : EXAMPLES;
 

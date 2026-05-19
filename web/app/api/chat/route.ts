@@ -81,6 +81,7 @@ export async function POST(req: Request) {
           scopeMode,
           userId,
           catalog,
+          contextDocId: body.contextDocId,
           forceUnsourcedGeneration: body.forceUnsourcedGeneration,
           abortSignal: req.signal,
         })) {

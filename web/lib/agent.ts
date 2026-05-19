@@ -65,7 +65,14 @@ export type RunAgentOpts = {
   scopeMode: ScopeMode;
   userId?: string;
   catalog: string;
-  contextDocTitle?: string;
+  /**
+   * Relative S3 key of the document the user has open in the reader. When
+   * present, the agent loop resolves its title once and embeds it in the
+   * system prompt as "Currently-open document" so questions like "what
+   * does this say?" target the right doc instead of catalog-matching by
+   * title similarity.
+   */
+  contextDocId?: string;
   forceUnsourcedGeneration?: boolean;
   /**
    * Propagated to the Bedrock SDK so the server-side Converse call is
@@ -81,10 +88,21 @@ const MAX_TOKENS_PER_TURN = 4096;
 // ─── Loop ────────────────────────────────────────────────────────────────
 
 export async function* runAgent(opts: RunAgentOpts): AsyncGenerator<AgentEvent> {
+  // If the client provided a contextDocId (user has a doc open in the
+  // reader), resolve its title and any frontmatter once so the system
+  // prompt can name it directly. Scope-checked — silently dropped if the
+  // doc is outside the active scope, so a crafty context can't bypass it.
+  const contextDocInfo = await resolveContextDoc(
+    opts.contextDocId,
+    opts.scopeMode,
+    opts.userId,
+  );
+
   const systemText = buildSystemPrompt({
     catalog: opts.catalog,
     scopeMode: opts.scopeMode,
-    contextDocTitle: opts.contextDocTitle,
+    contextDocTitle: contextDocInfo?.title,
+    contextDocId: contextDocInfo?.id,
     forceUnsourcedGeneration: opts.forceUnsourcedGeneration,
   });
   const system: SystemContentBlock[] = [{ text: systemText }];
@@ -315,7 +333,11 @@ async function dispatchTool(
         opts.userId,
       );
     case 'read_document':
-      return await readDocument({ doc_id: String(input.doc_id ?? '') });
+      return await readDocument(
+        { doc_id: String(input.doc_id ?? '') },
+        opts.scopeMode,
+        opts.userId,
+      );
     case 'propose_page':
       return proposePage({
         slug: String(input.slug ?? ''),
@@ -336,4 +358,25 @@ function toolResultToJson(name: AgentToolName, result: unknown): unknown {
     return { status: 'preview-shown', note: 'The preview was shown to the user. They will decide whether to save.' };
   }
   return result;
+}
+
+/**
+ * Best-effort resolution of the user's currently-open document. Returns
+ * `{ id, title }` if the doc is in the active scope and readable; `null`
+ * otherwise. Failures are swallowed — a missing or out-of-scope context
+ * doc is not worth aborting the chat over, it just means the agent loses
+ * the "you are looking at <X>" hint.
+ */
+async function resolveContextDoc(
+  contextDocId: string | undefined,
+  scopeMode: ScopeMode,
+  userId: string | undefined,
+): Promise<{ id: string; title: string } | null> {
+  if (!contextDocId) return null;
+  try {
+    const doc = await readDocument({ doc_id: contextDocId }, scopeMode, userId);
+    return { id: doc.id, title: doc.title };
+  } catch {
+    return null;
+  }
 }

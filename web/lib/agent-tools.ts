@@ -153,8 +153,12 @@ export async function searchVault(
  * only keys whose inferred scope is `shared`. For `user`, only keys
  * belonging to *this user* (the `userId` argument, defaulting to the
  * vault default user).
+ *
+ * Exported so `readDocument` can enforce the same gate — otherwise a
+ * prompt-injected model could read `users/<other>/...` keys directly,
+ * bypassing the scope isolation that `searchVault` enforces.
  */
-function isInAllowedScope(key: string, scopeMode: ScopeMode, userId?: string): boolean {
+export function isInAllowedScope(key: string, scopeMode: ScopeMode, userId?: string): boolean {
   const inferred = inferScopeFromKey(key);
   if (scopeMode === 'both') {
     if (inferred.scope === 'shared') return true;
@@ -179,8 +183,22 @@ export type ReadDocumentResult = {
   scope: Scope;
 };
 
-/** Read a single document. Throws on missing key; agent loop catches and reports as tool_result error. */
-export async function readDocument(input: ReadDocumentInput): Promise<ReadDocumentResult> {
+/**
+ * Read a single document. Enforces the active scope — a prompt-injected
+ * (or merely curious) model trying to read `users/<other>/...` is rejected
+ * before any S3 call. Throws on disallowed-scope or missing-key; the agent
+ * loop catches and reports as tool_result error.
+ */
+export async function readDocument(
+  input: ReadDocumentInput,
+  scopeMode: ScopeMode,
+  userId?: string,
+): Promise<ReadDocumentResult> {
+  if (!isInAllowedScope(input.doc_id, scopeMode, userId)) {
+    throw new Error(
+      `read_document denied: "${input.doc_id}" is outside the active scope (${scopeMode}${userId ? `:${userId}` : ''}). Use search_vault to find documents you can read.`,
+    );
+  }
   const raw = await getObject(input.doc_id);
   const { data, content } = matter(raw);
 
