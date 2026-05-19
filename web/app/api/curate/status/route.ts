@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getObject, headObject } from '@/lib/s3';
-import { systemKey } from '@/lib/vault-paths';
+import { resolveScope, type Scope } from '@/lib/scope';
 
 // Lambda writes per-stage heartbeats every few seconds, so the job JSON's
 // LastModified should advance well within this window during real work.
@@ -12,13 +12,17 @@ const STALE_AFTER_MS_CHAINING = 5 * 60 * 1000;
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const jobId = searchParams.get('job');
+  const scopeName = (searchParams.get('scope') as Scope | null) ?? 'shared';
+  const userId = searchParams.get('userId') ?? undefined;
 
   if (!jobId) {
     return NextResponse.json({ detail: 'job query param required' }, { status: 400 });
   }
 
+  const scope = resolveScope({ scope: scopeName, userId });
+
   try {
-    const key = systemKey(`jobs/${jobId}.json`);
+    const key = scope.systemKey(`jobs/${jobId}.json`);
     const [raw, meta] = await Promise.all([
       getObject(key),
       headObject(key),

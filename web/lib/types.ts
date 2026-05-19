@@ -1,6 +1,13 @@
 import type { ReactNode } from 'react';
 
-export type Scope = 'shared' | 'personal';
+/**
+ * UI/data scope. Aligned with the backend scope (`web/lib/scope.ts`):
+ * - `shared` — root-level vault content.
+ * - `user`   — the active user's subtree under `users/<id>/`. This used to
+ *   be called `personal`, but personal is a *space name*, not a scope; the
+ *   user's tree contains personal **and** any other spaces they have content in.
+ */
+export type Scope = 'shared' | 'user';
 
 export type SourceType = 'shared' | 'personal' | 'generated';
 

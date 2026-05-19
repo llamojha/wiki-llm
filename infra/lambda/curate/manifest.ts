@@ -1,23 +1,48 @@
 import { createHash } from 'node:crypto';
-import type { ProcessedManifest, ProcessedFileEntry } from './types.js';
+import type { ProcessedManifest } from './types.js';
 import { getObjectOrNull, putJson } from './s3.js';
-import { systemKey } from './paths.js';
+import type { ScopePaths } from './scope.js';
 
-const MANIFEST_KEY = systemKey('processed.json');
+/**
+ * Manifest of files that have been curated, keyed by raw S3 key.
+ *
+ * Per-scope: each scope (shared or a specific user) has its own
+ * `_system/processed.json`. The two manifests never reference each other.
+ */
+function manifestKey(scope: ScopePaths): string {
+  return scope.systemKey('processed.json');
+}
 
 export function computeHash(content: string): string {
   return 'sha256:' + createHash('sha256').update(content).digest('hex');
 }
 
-export async function getManifest(bucket: string, prefix: string): Promise<ProcessedManifest> {
-  const raw = await getObjectOrNull(bucket, prefix, MANIFEST_KEY)
-    ?? await getObjectOrNull(bucket, prefix, '_processed.json');
-  if (!raw) return { files: {} };
-  return JSON.parse(raw) as ProcessedManifest;
+export async function getManifest(
+  bucket: string,
+  prefix: string,
+  scope: ScopePaths,
+): Promise<ProcessedManifest> {
+  const primary = await getObjectOrNull(bucket, prefix, manifestKey(scope));
+  if (primary) return JSON.parse(primary) as ProcessedManifest;
+
+  // Legacy fallback: pre-scope shared deployments wrote to `_processed.json`
+  // at the bucket root. Only honor it on shared scope to avoid leaking shared
+  // manifest data into a user's view.
+  if (scope.scope === 'shared') {
+    const legacy = await getObjectOrNull(bucket, prefix, '_processed.json');
+    if (legacy) return JSON.parse(legacy) as ProcessedManifest;
+  }
+
+  return { files: {} };
 }
 
-export async function saveManifest(bucket: string, prefix: string, manifest: ProcessedManifest): Promise<void> {
-  await putJson(bucket, prefix, MANIFEST_KEY, manifest);
+export async function saveManifest(
+  bucket: string,
+  prefix: string,
+  scope: ScopePaths,
+  manifest: ProcessedManifest,
+): Promise<void> {
+  await putJson(bucket, prefix, manifestKey(scope), manifest);
 }
 
 export function getPendingFiles(
@@ -27,10 +52,10 @@ export function getPendingFiles(
 ): string[] {
   return rawKeys.filter(key => {
     const entry = manifest.files[key];
-    if (!entry) return true; // new file
+    if (!entry) return true;
     const content = rawContents.get(key);
     if (!content) return true;
-    return computeHash(content) !== entry.hash; // modified
+    return computeHash(content) !== entry.hash;
   });
 }
 

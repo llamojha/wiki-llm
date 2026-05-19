@@ -149,24 +149,38 @@ TypeScript CLI that transforms raw docs into structured wiki pages via Bedrock.
 
 **Per-stage UI progress.** Lambda writes `stage` ('reading' / 'extracting' / 'writing' / 'manifest') to each `JobFile` so the upload modal can show what's happening between Bedrock round-trips. Chain handoffs (when Lambda re-invokes itself near its 5min timeout) surface via `phase: 'chaining'` so the UI doesn't appear frozen during cold-start.
 
-### Phase 4 — Personal Wiki CRUD (MVP 2)
+### Phase 4 — Personal Wiki CRUD (MVP 2) ✓
 
 User-facing write path via Next.js Route Handlers.
 
-- [ ] Route Handlers: `POST /api/docs`, `PUT /api/docs/:id`, `DELETE /api/docs/:id`
-- [ ] S3 PutObject with checksum-based optimistic concurrency — 409 on conflict
-- [ ] Frontmatter as canonical metadata; `source_type = authored`
-- [ ] Immediate `index.md` regen on every user write/delete
-- [ ] `log.md` append on every create/edit/delete
-- [ ] In-memory search index invalidation on write (rebuild on next search)
-- [ ] Wire Editor component to real write endpoints (replace mock)
-- [ ] Sanitization audit, document allowed tags
-- [ ] No tags — search indexing handles discoverability
-- [ ] Per-page URLs: `/[...id]` catch-all route mirroring S3 keys for deep-linking and bookmarking
-- [ ] Starred documents: `starred` frontmatter field, star/unstar UI, filtered view
-- [ ] Mock audit: verify all `web/lib/mock/` usage is replaced by real data paths; remove mock imports from production code
+- [x] Route Handlers: `POST /api/docs`, `PUT /api/docs/:id`, `DELETE /api/docs/:id`
+- [x] S3 PutObject with checksum-based optimistic concurrency — 409 on conflict
+- [x] Frontmatter as canonical metadata; `source_type = personal` (see notes — vocabulary divergence)
+- [x] Immediate `index.md` regen on every user write/delete
+- [x] `log.md` append on every create/edit/delete
+- [x] In-memory search index invalidation on write (rebuild on next search)
+- [x] Wire Editor component to real write endpoints (replace mock)
+- [x] Sanitization audit, document allowed tags (see `web/lib/SANITIZATION.md`)
+- [x] No tags — search indexing handles discoverability
+- [x] Per-page URLs: `/[...id]` catch-all route mirroring S3 keys for deep-linking and bookmarking
+- [x] Starred documents: `starred` frontmatter field, star/unstar UI, filtered view
+- [x] Mock audit: verify all `web/lib/mock/` usage is replaced by real data paths; remove mock imports from production code
 
 **Acceptance:** see `specs/phase-4-personal-wiki-crud.md`
+
+#### Phase 4 implementation notes (drifts from the initial plan)
+
+**`source_type = personal` for personal-wiki writes, not `authored`.** The original checklist line said `source_type = authored`, but the implementation writes `'personal'` for documents created via the personal wiki path (`POST /api/docs` → `lib/vault-paths.ts::personalPrefix()` → `users/<id>/authored/personal/`). This matches the decisions log's full vocabulary (`authored | uploaded | generated | personal`) and the helper in `vault-paths.ts::sourceTypeFromKey` which returns `'personal'` for that prefix. `authored` remains reserved for shared, non-AI human-authored pages (Phase 6 territory in the multi-tenant scope).
+
+**Optimistic concurrency uses S3 ETags directly.** No content hashing — the `getObjectWithETag` helper returns the ETag from S3's `HeadObject`/`GetObject`, the editor round-trips it as `etag` in the PUT body, and `putObject(key, body, ifMatch)` calls `PutObject` with `IfMatch` set. S3 returns `PreconditionFailed` which `lib/s3.ts` re-throws as `ConcurrencyError`, the route maps to 409.
+
+**Side effects on every write are inline, not queued.** `POST/PUT/DELETE` synchronously run `regenerateIndexesForKey(key)` (or `regenerateMasterIndex` on create) + `appendLog(...)` + `invalidateSearchIndex()` before returning. Trade-off: write latency includes index regen (typically <1s on a small vault); benefit is no eventually-consistent window where a doc is on S3 but not yet in `index.md` or search. Revisit if vault size makes this slow.
+
+**`/dev/parity/page.tsx` still imports from `lib/mock/` — intentional.** The parity-verification page (`web/app/dev/parity/`) is dev-only by route name and exists to diff against `portal/`. It's the only remaining mock importer; no production paths use it.
+
+**Star route lives at `PATCH /api/star/[...id]`, separate from `/api/docs`.** Toggling `starred` is its own narrow operation (frontmatter-only edit, no body). Keeps the docs CRUD route focused on full-document writes.
+
+**Markdown rendering hardened later — see Phase 3 notes.** Added `remark-frontmatter` to the unified pipeline in `lib/markdown.ts` so curated pages (with `---\n…\n---` YAML blocks) render without the frontmatter bleeding into the body. Affects both Phase 3 generated pages and Phase 4 personal pages.
 
 ### Phase 5 — Ask-Wiki Agent (MVP 2)
 
@@ -187,22 +201,55 @@ Bedrock Nova 2 Lite agent in the chat panel, served from Next.js.
 
 **Acceptance:** see `specs/phase-5-ask-wiki-agent.md`
 
-### Phase 6 — SaaS (deferred)
+### Phase 6 — SaaS (deferred, partially scaffolded)
 
 Only after MVP 2 has been used in anger.
+
+#### Already scaffolded (single-user-for-now, but contract is multi-tenant-ready)
+
+The vault layout, scope plumbing, and per-user isolation primitives are already in place from the scope-aware refactor (see implementation notes below). Adding a second user is additive: introduce a current-user context, replace the hardcoded `DEFAULT_USER_ID` lookup in the Library modal, and the rest of the system already routes correctly.
+
+- [x] S3 layout: `users/<id>/raw/`, `users/<id>/generated/<space>/`, `users/<id>/authored/<space>/`, `users/<id>/_system/` (mirror of shared roots)
+- [x] Scope-aware backend: every route (`/api/upload`, `/api/raw`, `/api/curate/{start,status,cancel,finalize}`, `/api/reindex`) accepts `{ scope: 'shared' \| 'user', userId? }` and operates only inside the requested scope's prefix tree
+- [x] Scope-aware Lambda: `CurateEvent` carries scope; manifest, job JSON, source-cards, and generated pages all land under the scope's `_system/` and `generated/`
+- [x] Scope-aware index regeneration: `regenerateSpaceIndex`/`regenerateMasterIndex` take a `ScopePaths`; `regenerateIndexesForKey` infers scope from the key prefix; finalize and CRUD writes regenerate the right scope's indexes
+- [x] Library modal scope toggle: Shared vs My, disabled while a job is running; destination toggle (raw — process with AI later — vs authored — final, no AI) replaces the legacy `subpath` flag
+- [x] Sidebar scope toggle wired to the vault tree: `__user` synthetic folder contains all user content (personal + any other space the user has content in)
+
+#### Still deferred for true multi-tenant SaaS
 
 - Multi-tenant S3 layout (`tenants/<tenant>/users/<user>/`)
 - Auth: Keycloak / OIDC / SAML
 - Search backend swap to OpenSearch or Meilisearch
 - RDS Postgres, EKS workers / SQS consumers
 - Admin dashboard, billing, audit logs, tenant isolation
-- Personal space access control: `personal/<user-id>/` routing, per-user index isolation, private space visibility enforcement
-- Multi-tenant index isolation: per-space indexes scoped to tenant, master index excludes personal spaces of other users
+- Cross-tenant index isolation: today the in-memory Fuse search index walks all S3 objects regardless of scope. Multi-tenant requires scope-scoped search.
 - S3 Event Notifications → Lambda/SQS for event-driven ingest (replace inline trigger from Phase 3)
 - Event-driven ingest: S3 PutObject event on `*/raw/` → triggers ingest automatically (Lambda or background worker). Eliminates need for manual CLI runs or portal trigger buttons. Includes retry logic, dead-letter queue, and status reporting back to the portal.
 - Vault structure schema (`structure.json`) improvements: UI for managing spaces (create/rename/reorder/delete), drag-and-drop file moves between spaces, per-space permissions, schema versioning and migration, validation on upload/write to enforce declared structure
+- Per-user `structure.json`: today the space list is global. Each user gets their own space declarations once we have real multi-user. `personal` is currently a reserved space name that's only meaningful in user scope.
 
 **Acceptance:** see `specs/phase-6-saas.md`
+
+#### Scope-aware refactor — implementation notes
+
+Shipped 2026-05-17 / 2026-05-18 as preparation for Phase 6. Surfaced via a single primitive (`ScopePaths`) and a thin `resolveScope()` helper mirrored in both `web/lib/scope.ts` and `infra/lambda/curate/scope.ts`.
+
+**Vocabulary alignment.** Renamed the UI `Scope = 'shared' \| 'personal'` to `'shared' \| 'user'`. The sidebar's "personal" toggle was a vocabulary mismatch — `personal` is a *space*, not a scope. `SourceType = 'personal'` (a doc's origin) and the `personal` space name remain unchanged as orthogonal concepts.
+
+**`DEFAULT_USER_ID` consolidated to two sources.** `web/lib/vault-paths.ts` exports the canonical web constant, used by the modal and tree builder. The Lambda has its own copy in `infra/lambda/curate/paths.ts` because it's bundled separately and can't share modules.
+
+**Lambda contract is forward-compatible, not strictly backward-safe.** The `CurateEvent` `scope` field is optional and defaults to `'shared'` if absent. This means *old* web → *new* Lambda works correctly. But *new* web → *old* Lambda silently falls through to shared behavior, which corrupts shared paths when the user clicks "My". **Deploy the Lambda before shipping the web change**, or the cross-deploy window is a data-corruption risk. Adding a `curateEventVersion` field with a strict version check would prevent this — pending.
+
+**`/api/curate` (single-file POST) removed.** The old upload flow invoked it per-file via an "Auto-index after upload" checkbox. The checkbox and route are deleted; raw files now go through the explicit Pending tab batch flow, authored files are finalized inline by `/api/upload`.
+
+**Sidebar tree carries all user content under one synthetic folder.** `__user` contains a `Personal` subfolder (mapped to `authored/personal/`) plus one folder per declared space that has user content (mapped to `users/<id>/generated/<space>/` and `users/<id>/authored/<space>/`). Shared spaces are siblings of `__user` at the tree root. The sidebar scope toggle filters which side of the tree is shown.
+
+**Known gaps from the scope-refactor postmortem still open:**
+- No runtime smoke test of the user-scope path; only typecheck verified
+- Mid-job scope change is prevented by disabling the toggle while running, but the modal closing + reopening discards the in-flight job (already pre-existing behavior, but the user-scope path makes it more visible)
+- Finalize + CRUD writes are not serialized; same-scope concurrent finalize races on `index.md` writes (pre-existing)
+- `personal` as a reserved-name vs first-class declared space is unresolved
 
 ### Phase 7 — Multimodal & Audio (deferred)
 

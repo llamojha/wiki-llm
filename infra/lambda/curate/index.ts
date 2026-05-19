@@ -4,6 +4,7 @@ import type { CurateEvent, FileStage, JobState } from './types.js';
 import { processSource, loadPlacementHints } from './ingest.js';
 import { getJob, updateJob } from './job.js';
 import { getGeneratedSpace } from './structure.js';
+import { resolveScope } from './scope.js';
 
 const TIMEOUT_BUFFER_MS = 30_000;
 const DEFAULT_CONCURRENCY = Math.max(
@@ -46,20 +47,24 @@ async function continueLater(
 export async function handler(event: CurateEvent, context: Context): Promise<void> {
   const { jobId, space, files, bucket, prefix } = event;
   const startIndex = event.startIndex ?? 0;
+  const scope = resolveScope({
+    scope: event.scope ?? 'shared',
+    userId: event.userId,
+  });
 
-  console.log(`[${jobId}] Starting curate invocation at ${startIndex + 1}/${files.length} (concurrency=${DEFAULT_CONCURRENCY})`);
+  console.log(`[${jobId}] Starting curate invocation at ${startIndex + 1}/${files.length} scope=${scope.scope}${scope.userId ? `:${scope.userId}` : ''} (concurrency=${DEFAULT_CONCURRENCY})`);
 
   // Clear `phase` on entry — if we're a chained continuation, the prior
   // invocation set phase='chaining' before invoking us.
-  const initialJob = await getJob(bucket, prefix, jobId);
+  const initialJob = await getJob(bucket, prefix, scope, jobId);
   if (initialJob.phase) {
-    await updateJob(bucket, prefix, jobId, { phase: undefined, chainedAt: undefined });
+    await updateJob(bucket, prefix, scope, jobId, { phase: undefined, chainedAt: undefined });
   }
 
   // Pass A — load placement hints **once** per invocation, not per file.
   const ingestSpace = await getGeneratedSpace(bucket, prefix);
   const hintsStart = Date.now();
-  const hints = await loadPlacementHints(bucket, prefix, ingestSpace);
+  const hints = await loadPlacementHints(bucket, prefix, scope, ingestSpace);
   console.log(`[${jobId}] Loaded ${hints.length} placement hint(s) in ${Date.now() - hintsStart}ms`);
 
   // All job-JSON writes flow through this queue (Pass B).
@@ -72,7 +77,7 @@ export async function handler(event: CurateEvent, context: Context): Promise<voi
 
   async function runOne(i: number): Promise<void> {
     // Cancel check before any work for this file.
-    const job = await getJob(bucket, prefix, jobId);
+    const job = await getJob(bucket, prefix, scope, jobId);
     if (job.status === 'cancelled') { cancelled = true; return; }
 
     const rawKey = files[i];
@@ -81,8 +86,8 @@ export async function handler(event: CurateEvent, context: Context): Promise<voi
 
     // Mark file as processing.
     await enqueueWrite(async () => {
-      const current = await getJob(bucket, prefix, jobId);
-      await updateJob(bucket, prefix, jobId, {
+      const current = await getJob(bucket, prefix, scope, jobId);
+      await updateJob(bucket, prefix, scope, jobId, {
         files: current.files.map((f, idx) =>
           idx === i ? { ...f, status: 'processing', startedAt, stage: 'reading' } : f,
         ),
@@ -91,9 +96,9 @@ export async function handler(event: CurateEvent, context: Context): Promise<voi
 
     const reportStage = (stage: FileStage): Promise<void> => enqueueWrite(async () => {
       try {
-        const current = await getJob(bucket, prefix, jobId);
+        const current = await getJob(bucket, prefix, scope, jobId);
         if (current.status === 'cancelled') return;
-        await updateJob(bucket, prefix, jobId, {
+        await updateJob(bucket, prefix, scope, jobId, {
           files: current.files.map((f, idx) => (idx === i ? { ...f, stage } : f)),
         });
       } catch (err) {
@@ -102,32 +107,32 @@ export async function handler(event: CurateEvent, context: Context): Promise<voi
     });
 
     try {
-      const pages = await processSource(bucket, prefix, space, rawKey, hints, jobId, reportStage);
+      const pages = await processSource(bucket, prefix, space, rawKey, hints, scope, jobId, reportStage, enqueueWrite);
       console.log(`[${jobId}] Done ${rawKey}: ${pages.length} page(s) written`);
       const finishedAt = new Date().toISOString();
       await enqueueWrite(async () => {
-        const current = await getJob(bucket, prefix, jobId);
+        const current = await getJob(bucket, prefix, scope, jobId);
         const nextFiles = current.files.map((f, idx) =>
           idx === i
             ? { ...f, status: 'done' as const, pages, finishedAt, stage: undefined }
             : f,
         );
         const completed = nextFiles.filter(f => f.status === 'done' || f.status === 'error').length;
-        await updateJob(bucket, prefix, jobId, { completed, files: nextFiles });
+        await updateJob(bucket, prefix, scope, jobId, { completed, files: nextFiles });
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       console.error(`[${jobId}] Error on ${rawKey}:`, err);
       const finishedAt = new Date().toISOString();
       await enqueueWrite(async () => {
-        const current = await getJob(bucket, prefix, jobId);
+        const current = await getJob(bucket, prefix, scope, jobId);
         const nextFiles = current.files.map((f, idx) =>
           idx === i
             ? { ...f, status: 'error' as const, error: msg, finishedAt, stage: undefined }
             : f,
         );
         const completed = nextFiles.filter(f => f.status === 'done' || f.status === 'error').length;
-        await updateJob(bucket, prefix, jobId, { completed, files: nextFiles });
+        await updateJob(bucket, prefix, scope, jobId, { completed, files: nextFiles });
       });
     }
   }
@@ -161,14 +166,14 @@ export async function handler(event: CurateEvent, context: Context): Promise<voi
 
   if (stoppedForTimeout) {
     // Find the first unfinished file so the next invocation resumes there.
-    const finalJob: JobState = await getJob(bucket, prefix, jobId);
+    const finalJob: JobState = await getJob(bucket, prefix, scope, jobId);
     const firstUnfinishedIdx = finalJob.files.findIndex(
       f => f.status !== 'done' && f.status !== 'error',
     );
     const resumeAt = firstUnfinishedIdx === -1 ? files.length : firstUnfinishedIdx;
     if (resumeAt < files.length) {
       // Pass D — make the chain handoff visible to the UI.
-      await updateJob(bucket, prefix, jobId, {
+      await updateJob(bucket, prefix, scope, jobId, {
         phase: 'chaining',
         chainedAt: new Date().toISOString(),
       });
@@ -178,7 +183,7 @@ export async function handler(event: CurateEvent, context: Context): Promise<voi
   }
 
   // Mark job done.
-  await updateJob(bucket, prefix, jobId, {
+  await updateJob(bucket, prefix, scope, jobId, {
     status: 'done',
     completedAt: new Date().toISOString(),
     phase: undefined,

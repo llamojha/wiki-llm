@@ -233,7 +233,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
   );
 
   const onNewPage = () => {
-    setScope('personal');
+    setScope('user');
     setActiveId('__new');
     setEditing(true);
   };
@@ -268,7 +268,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
   const handleAskPrompt = (p: string, opts?: { createPage?: boolean }) => {
     if (opts?.createPage) {
       const id = generateFromPrompt(p);
-      setScope('personal');
+      setScope('user');
       setActiveId(id);
       setEditing(false);
       showToast('Generated page added to My wiki');
@@ -281,7 +281,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
   const handleSaveFromChat = (page: GeneratedDoc) => {
     const id = makeId('doc-me-gen-');
     setGeneratedDocs((prev) => ({ ...prev, [id]: page }));
-    setScope('personal');
+    setScope('user');
     setActiveId(id);
     setChatOpen(false);
     showToast(`Saved "${page.title}" to your wiki`);
@@ -319,7 +319,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
       <main className="main">
         {editing ? (
           <Editor
-            doc={doc}
+            doc={activeId === '__new' ? undefined : doc}
             docId={activeId !== '__new' ? activeId : undefined}
             etag={liveDoc?.etag}
             onClose={() => setEditing(false)}

@@ -48,7 +48,8 @@ export function Editor({ doc, docId, etag, onClose, onSave, showToast }: EditorP
           return;
         }
         if (!res.ok) {
-          showToast('Failed to save');
+          const data = await res.json().catch(() => ({}));
+          showToast(data.detail || 'Failed to save');
           return;
         }
         onSave(title, docId);
@@ -61,7 +62,10 @@ export function Editor({ doc, docId, etag, onClose, onSave, showToast }: EditorP
         });
 
         if (!res.ok) {
-          showToast('Failed to create page');
+          // Surface the server's `detail` (e.g. 'A page with slug "foo"
+          // already exists') so the user knows why creation failed.
+          const data = await res.json().catch(() => ({}));
+          showToast(data.detail || 'Failed to create page');
           return;
         }
         const data = await res.json();

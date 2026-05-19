@@ -2,8 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ICONS } from '@/lib/icons';
+import { DEFAULT_USER_ID } from '@/lib/vault-paths';
 
 export type LibraryTab = 'upload' | 'pending' | 'reindex';
+
+type Scope = 'shared' | 'user';
 
 type UploadModalProps = {
   open: boolean;
@@ -18,6 +21,8 @@ type FileStatus = 'queued' | 'uploading' | 'indexing' | 'indexed' | 'queued-cura
 type UploadFile = { id: string; name: string; size: number; file: File; status: FileStatus; progress: number; error?: string };
 type FileStage = 'reading' | 'extracting' | 'writing' | 'manifest';
 type JobPhase = 'chaining';
+
+type Destination = 'raw' | 'authored';
 type StreamLine = {
   name: string;
   ts: string;
@@ -47,21 +52,28 @@ function defaultSpace(spaces: string[]): string {
 
 export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, showToast }: UploadModalProps) {
   const [tab, setTab] = useState<LibraryTab>(initialTab ?? 'upload');
+  const [scope, setScope] = useState<Scope>('shared');
   const [space, setSpace] = useState(defaultSpace(spaces));
-  const [subpath, setSubpath] = useState<'raw' | 'wiki'>('raw');
+  const [destination, setDestination] = useState<Destination>('raw');
   const [files, setFiles] = useState<UploadFile[]>([]);
   const [dragActive, setDragActive] = useState(false);
-  const [autoIndex, setAutoIndex] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
 
   // Refs for latest values (avoids stale closures in async chains)
+  const scopeRef = useRef(scope);
   const spaceRef = useRef(space);
-  const autoIndexRef = useRef(autoIndex);
-  const subpathRef = useRef(subpath);
+  const destinationRef = useRef(destination);
+  useEffect(() => { scopeRef.current = scope; }, [scope]);
   useEffect(() => { spaceRef.current = space; }, [space]);
-  useEffect(() => { autoIndexRef.current = autoIndex; }, [autoIndex]);
-  useEffect(() => { subpathRef.current = subpath; }, [subpath]);
+  useEffect(() => { destinationRef.current = destination; }, [destination]);
+
+  // Build the scope-bearing query string fragment used by GETs.
+  const scopeQuery = (s: Scope = scope): string =>
+    s === 'user' ? `&scope=user&userId=${encodeURIComponent(DEFAULT_USER_ID)}` : '';
+  // Build the scope payload used by POSTs.
+  const scopePayload = (s: Scope = scope): Record<string, string> =>
+    s === 'user' ? { scope: 'user', userId: DEFAULT_USER_ID } : { scope: 'shared' };
 
   // Pending tab
   const [pendingCount, setPendingCount] = useState(0);
@@ -99,13 +111,14 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
       return;
     }
     setTab(initialTab ?? 'upload');
+    setScope('shared'); setDestination('raw');
     setFiles([]); setDragActive(false);
     setPendingStream([]); setPendingRunning(false); setPendingDone(false); setPendingJobTotal(0); setPendingPhase(null); setPendingFinalizing(false);
     setReindexRunning(false); setReindexDone(false); setReindexTotal(0); setReindexIndexed(0); setReindexRawCount(0);
     if (spaces.length && !spaces.includes(space)) setSpace(defaultSpace(spaces));
   }, [open, initialTab]);
 
-  // Fetch pending count when space changes
+  // Fetch pending count when space/scope changes.
   useEffect(() => {
     if (!open) return;
     if (tab === 'pending' && space !== 'wiki') {
@@ -113,12 +126,13 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
       return;
     }
     const ctrl = new AbortController();
-    fetch(`/api/raw?space=${encodeURIComponent(space)}`, { signal: ctrl.signal })
+    fetch(`/api/raw?space=${encodeURIComponent(space)}${scopeQuery(scope)}`, { signal: ctrl.signal })
       .then(r => r.json())
       .then(d => setPendingCount(d.count ?? 0))
       .catch(() => { if (!ctrl.signal.aborted) setPendingCount(0); });
     return () => ctrl.abort();
-  }, [open, space, tab]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, space, tab, scope]);
 
   // Escape to close
   useEffect(() => {
@@ -133,15 +147,17 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
   }, []);
 
   const processFile = useCallback(async (entry: UploadFile) => {
+    const currentScope = scopeRef.current;
     const currentSpace = spaceRef.current;
-    const currentAutoIndex = autoIndexRef.current;
-    const currentSubpath = subpathRef.current;
+    const currentDestination = destinationRef.current;
 
     updateFile(entry.id, { status: 'uploading', progress: 0 });
     const form = new FormData();
     form.append('file', entry.file);
-    form.append('space', currentSpace);
-    form.append('path', currentSubpath);
+    form.append('destination', currentDestination);
+    form.append('scope', currentScope);
+    if (currentScope === 'user') form.append('userId', DEFAULT_USER_ID);
+    if (currentDestination === 'authored') form.append('space', currentSpace);
     try {
       const res = await fetch('/api/upload', { method: 'POST', body: form });
       if (!res.ok) {
@@ -149,28 +165,12 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
         updateFile(entry.id, { status: 'error', error: data.detail || 'Upload failed' });
         return;
       }
-      let key: string;
-      try {
-        const json = await res.json();
-        key = json.key;
-      } catch {
-        updateFile(entry.id, { status: 'error', error: 'Invalid response' });
-        return;
-      }
-      updateFile(entry.id, { status: 'uploading', progress: 100 });
-
-      if (currentAutoIndex) {
-        updateFile(entry.id, { status: 'indexing', progress: 100 });
-        const curateRes = await fetch('/api/curate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ space: currentSpace, key }),
-        });
-        if (!curateRes.ok) { updateFile(entry.id, { status: 'error', error: 'Indexing failed' }); return; }
-        updateFile(entry.id, { status: 'indexed' });
-      } else {
-        updateFile(entry.id, { status: 'queued-curate' });
-      }
+      // Authored writes are finalized server-side (indexes regened, log appended).
+      // Raw writes are deferred — curate batch picks them up later.
+      updateFile(entry.id, {
+        status: currentDestination === 'authored' ? 'indexed' : 'queued-curate',
+        progress: 100,
+      });
     } catch { updateFile(entry.id, { status: 'error', error: 'Network error' }); }
   }, [updateFile]);
 
@@ -209,7 +209,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
       const startRes = await fetch('/api/curate/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ space, ...(limit ? { limit } : {}) }),
+        body: JSON.stringify({ space, ...(limit ? { limit } : {}), ...scopePayload() }),
         signal: ctrl.signal,
       });
       if (!startRes.ok) {
@@ -229,7 +229,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
           await new Promise(r => setTimeout(r, 1200));
           if (ctrl.signal.aborted) return;
 
-          const statusRes = await fetch(`/api/curate/status?job=${encodeURIComponent(jobId)}`, { signal: ctrl.signal });
+          const statusRes = await fetch(`/api/curate/status?job=${encodeURIComponent(jobId)}${scopeQuery()}`, { signal: ctrl.signal });
           if (!statusRes.ok) continue;
           const job = await statusRes.json() as {
             status: string;
@@ -286,7 +286,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
                 const finalizeRes = await fetch('/api/curate/finalize', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ jobId }),
+                  body: JSON.stringify({ jobId, ...scopePayload() }),
                 });
                 if (!finalizeRes.ok) {
                   const data = await finalizeRes.json().catch(() => ({}));
@@ -316,7 +316,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
       fetch('/api/curate/cancel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobId: jobIdRef.current }),
+        body: JSON.stringify({ jobId: jobIdRef.current, ...scopePayload() }),
       }).catch(() => {});
     }
     abortRef.current?.abort();
@@ -330,7 +330,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
       const res = await fetch('/api/reindex', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(space === '__all' ? {} : { space }),
+        body: JSON.stringify({ ...(space === '__all' ? {} : { space }), ...scopePayload() }),
       });
       if (!res.ok || !res.body) { setReindexRunning(false); showToast('Re-index failed'); return; }
       const reader = res.body.getReader();
@@ -370,6 +370,33 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
             <span style={{ color: 'var(--fg-3)', fontSize: 11.5, fontFamily: 'var(--font-mono)' }}>{pendingCount} pending</span>
           </div>
           <button className="icon-btn" onClick={onClose} title="Close">{ICONS.close}</button>
+        </div>
+
+        {/* Scope toggle — every operation in this modal is bound to this scope. */}
+        <div className="upload-meta" style={{ borderBottom: '1px solid var(--border-1, rgba(255,255,255,0.08))', paddingBottom: 12 }}>
+          <div className="upload-meta-row">
+            <label>Scope</label>
+            <div className="space-select">
+              <button
+                className={'space-pill' + (scope === 'shared' ? ' on' : '')}
+                onClick={() => setScope('shared')}
+                disabled={pendingRunning || reindexRunning}
+                title="Shared library — visible to everyone in a multi-tenant deployment"
+              >
+                {ICONS.globe}
+                <span>Shared</span>
+              </button>
+              <button
+                className={'space-pill' + (scope === 'user' ? ' on' : '')}
+                onClick={() => setScope('user')}
+                disabled={pendingRunning || reindexRunning}
+                title="My library — isolated to this user's subtree"
+              >
+                {ICONS.user ?? ICONS.globe}
+                <span>My ({DEFAULT_USER_ID})</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -412,22 +439,26 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
           </div>
           {tab === 'upload' && (
             <div className="upload-meta-row">
-              <label>Path</label>
+              <label>Destination</label>
               <div className="space-select">
-                <button className={'space-pill' + (subpath === 'raw' ? ' on' : '')} onClick={() => setSubpath('raw')}>
+                <button className={'space-pill' + (destination === 'raw' ? ' on' : '')} onClick={() => setDestination('raw')}>
                   <span>raw/</span>
-                  <span style={{ fontSize: 10, color: 'var(--fg-3)' }}>AI ingest</span>
+                  <span style={{ fontSize: 10, color: 'var(--fg-3)' }}>process with AI later</span>
                 </button>
-                <button className={'space-pill' + (subpath === 'wiki' ? ' on' : '')} onClick={() => setSubpath('wiki')}>
+                <button className={'space-pill' + (destination === 'authored' ? ' on' : '')} onClick={() => setDestination('authored')}>
                   <span>authored/</span>
-                  <span style={{ fontSize: 10, color: 'var(--fg-3)' }}>direct</span>
+                  <span style={{ fontSize: 10, color: 'var(--fg-3)' }}>final, no AI</span>
                 </button>
               </div>
             </div>
           )}
           <div className="upload-s3-preview">
             {ICONS.s3}
-            <span>s3://vaultmark/{subpath === 'raw' ? 'raw/' : `authored/${space}/`}</span>
+            <span>
+              s3://vaultmark/
+              {scope === 'user' ? `users/${DEFAULT_USER_ID}/` : ''}
+              {destination === 'raw' ? 'raw/' : `authored/${space}/`}
+            </span>
           </div>
         </div>
 
@@ -490,10 +521,6 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
             )}
 
             <div className="upload-foot">
-              <label className="upload-check">
-                <input type="checkbox" checked={autoIndex} onChange={e => setAutoIndex(e.target.checked)}/>
-                <span>Auto-index after upload</span>
-              </label>
               <span style={{ flex: 1 }}></span>
               <span className="upload-summary">
                 {files.length === 0 && 'No files selected'}

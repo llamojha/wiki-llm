@@ -1,5 +1,5 @@
 import { getStructure, type VaultStructure } from '@/lib/vault-structure';
-import { RAW_PREFIX, generatedPrefix } from '@/lib/vault-paths';
+import type { ScopePaths } from '@/lib/scope';
 
 export const INGEST_SPACE = 'wiki';
 
@@ -20,9 +20,20 @@ function findIngestSpace(structure: VaultStructure): string | null {
   return null;
 }
 
-export async function getIngestPolicy(): Promise<IngestPolicy | null> {
+/**
+ * Resolve the ingest policy for a given scope.
+ *
+ * The space list is global to the vault (read from shared `_system/structure.json`),
+ * but the raw/generated prefixes are scope-specific so curation only ever reads
+ * and writes inside the active scope's subtree.
+ */
+export async function getIngestPolicy(scope: ScopePaths): Promise<IngestPolicy | null> {
   const structure = await getStructure();
   const space = findIngestSpace(structure);
   if (!space) return null;
-  return { space, rawPrefix: RAW_PREFIX, generatedPrefix: generatedPrefix(space) };
+  return {
+    space,
+    rawPrefix: scope.rawPrefix,
+    generatedPrefix: scope.generatedPrefix(space),
+  };
 }

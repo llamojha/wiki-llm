@@ -3,7 +3,8 @@ import matter from 'gray-matter';
 
 import { getObject, listObjects, putObject } from '@/lib/s3';
 import { getStructure } from '@/lib/vault-structure';
-import { RAW_PREFIX, authoredPrefix, generatedPrefix, isDocumentKey, systemKey } from '@/lib/vault-paths';
+import { isDocumentKey } from '@/lib/vault-paths';
+import { resolveScope, type Scope } from '@/lib/scope';
 import { invalidateSearchIndex } from '@/lib/search';
 
 const SPACE_RE = /^[a-z0-9][a-z0-9-]*$/;
@@ -29,12 +30,17 @@ async function buildLine(key: string): Promise<string> {
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
-  const { space } = body as { space?: string };
+  const { space, scope: scopeName, userId } = body as {
+    space?: string;
+    scope?: Scope;
+    userId?: string;
+  };
 
   if (space && !SPACE_RE.test(space)) {
     return NextResponse.json({ detail: 'invalid space name' }, { status: 400 });
   }
 
+  const scope = resolveScope({ scope: scopeName ?? 'shared', userId });
   const structure = await getStructure();
 
   const encoder = new TextEncoder();
@@ -45,37 +51,37 @@ export async function POST(req: Request) {
       };
 
       try {
-        // Determine which logical spaces to index
+        // Determine which logical spaces to index for this scope.
         let targetSpaces: string[];
         if (space) {
           targetSpaces = [space];
         } else if (structure.spaces.length > 0) {
-          // Only index spaces declared in structure.json with indexed: true
           targetSpaces = structure.spaces.filter((s) => s.indexed).map((s) => s.name);
+          if (scope.scope === 'user' && !targetSpaces.includes('personal')) {
+            targetSpaces.push('personal');
+          }
         } else {
           targetSpaces = [];
         }
 
-        // Gather keys per space
+        // Gather keys per space, scoped.
         const spaceKeys: { space: string; keys: string[] }[] = [];
-        let rawCount = 0;
         for (const s of targetSpaces) {
           const keys = [
-            ...(await listObjects(generatedPrefix(s))),
-            ...(await listObjects(authoredPrefix(s))),
+            ...(await listObjects(scope.generatedPrefix(s))),
+            ...(await listObjects(scope.authoredPrefix(s))),
           ].filter(isDocumentKey);
           spaceKeys.push({ space: s, keys });
         }
 
-        // Count shared raw inputs that have not yet been processed.
-        const rootRaw = await listObjects(RAW_PREFIX);
-        rawCount += rootRaw.length;
+        // Count scope's raw inputs that have not yet been processed.
+        const rawList = await listObjects(scope.rawPrefix);
+        const rawCount = rawList.length;
 
         const total = spaceKeys.reduce((n, sk) => n + sk.keys.length, 0);
         let indexed = 0;
-        send({ type: 'start', total, rawCount, spaces: targetSpaces });
+        send({ type: 'start', total, rawCount, spaces: targetSpaces, scope: scope.scope, userId: scope.userId });
 
-        // Build per-space index.md
         const spaceLines: Map<string, string[]> = new Map();
         for (const sk of spaceKeys) {
           const lines: string[] = [];
@@ -86,11 +92,13 @@ export async function POST(req: Request) {
           }
           spaceLines.set(sk.space, lines);
           const indexBody = `---\ntitle: ${toTitleCase(sk.space)} Index\ntype: nav\nupdated: ${new Date().toISOString()}\n---\n\n${lines.join('\n')}\n`;
-          await putObject(systemKey(`indexes/${sk.space}.md`), indexBody);
+          await putObject(scope.systemKey(`indexes/${sk.space}.md`), indexBody);
         }
 
-        // Master index — only include spaces from structure (or all if no structure)
-        const masterSpaces = spaceKeys.filter((sk) => sk.space !== 'personal');
+        // Master index — shared excludes personal, user scope includes everything.
+        const masterSpaces = scope.scope === 'shared'
+          ? spaceKeys.filter((sk) => sk.space !== 'personal')
+          : spaceKeys;
         const sections: string[] = [];
         for (const sk of masterSpaces.sort((a, b) => a.space.localeCompare(b.space))) {
           const lines = spaceLines.get(sk.space);
@@ -99,7 +107,7 @@ export async function POST(req: Request) {
           sections.push(`## ${label}\n${lines.join('\n')}`);
         }
         const masterBody = `---\ntitle: Index\ntype: nav\nupdated: ${new Date().toISOString()}\n---\n\n${sections.join('\n\n')}\n`;
-        await putObject(systemKey('index.md'), masterBody);
+        await putObject(scope.systemKey('index.md'), masterBody);
 
         invalidateSearchIndex();
 
