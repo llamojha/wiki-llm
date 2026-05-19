@@ -1,0 +1,339 @@
+import type {
+  Message,
+  ContentBlock,
+  SystemContentBlock,
+  ToolConfiguration,
+} from '@aws-sdk/client-bedrock-runtime';
+
+// Local mirror of `@smithy/types::DocumentType` — what the Bedrock SDK
+// expects for `toolUse.input` and `toolResult.content[].json`. Mirrored
+// locally to avoid a direct dep on the transitive Smithy package.
+type DocumentType =
+  | null
+  | boolean
+  | string
+  | number
+  | DocumentType[]
+  | { [k: string]: DocumentType };
+
+import { converseStream } from '@/lib/bedrock';
+import {
+  TOOL_SPECS,
+  searchVault,
+  readDocument,
+  proposePage,
+  type AgentToolName,
+  type ScopeMode,
+  type ReadDocumentResult,
+} from '@/lib/agent-tools';
+import { buildSystemPrompt } from '@/lib/agent-prompts';
+
+/**
+ * Agent loop for Phase 5 Ask-Wiki.
+ *
+ * Drives a Bedrock Converse-stream + tool-use loop. Yields envelope events
+ * (text deltas, tool uses, citations, propose-page previews, refusals,
+ * done, error). The caller marshals each event onto the NDJSON wire format.
+ *
+ * Design ref: `specs/phase-5-ask-wiki-agent.md` — Design Details section.
+ */
+
+// ─── Public event envelope ───────────────────────────────────────────────
+
+export type AgentEvent =
+  | { type: 'text'; delta: string }
+  | { type: 'tool_use'; name: AgentToolName; input: unknown }
+  | { type: 'tool_result'; name: AgentToolName; ok: boolean; error?: string }
+  | { type: 'cite'; id: string; title: string; section: string }
+  | { type: 'propose_page'; slug: string; title: string; body: string }
+  | { type: 'refuse'; reason: 'no-sources'; canForce: boolean; message: string }
+  /**
+   * Soft signal that the agent produced an answer without grounding it in
+   * any document. Distinct from `refuse` — the answer IS shown to the
+   * user, but the UI should flag that it's uncited so the reader knows
+   * to treat it carefully. Fix #6 — closes the gap where an agent that
+   * searches, gets hits, but doesn't read any of them slipped past the
+   * refuse check.
+   */
+  | { type: 'warning'; reason: 'no-reads'; message: string }
+  | { type: 'done' }
+  | { type: 'error'; detail: string };
+
+export type RunAgentOpts = {
+  message: string;
+  history?: Message[];
+  scopeMode: ScopeMode;
+  userId?: string;
+  catalog: string;
+  contextDocTitle?: string;
+  forceUnsourcedGeneration?: boolean;
+  /**
+   * Propagated to the Bedrock SDK so the server-side Converse call is
+   * cancelled when the client disconnects (see route handler — request's
+   * AbortSignal feeds this).
+   */
+  abortSignal?: AbortSignal;
+};
+
+const MAX_ROUNDS = 6;
+const MAX_TOKENS_PER_TURN = 4096;
+
+// ─── Loop ────────────────────────────────────────────────────────────────
+
+export async function* runAgent(opts: RunAgentOpts): AsyncGenerator<AgentEvent> {
+  const systemText = buildSystemPrompt({
+    catalog: opts.catalog,
+    scopeMode: opts.scopeMode,
+    contextDocTitle: opts.contextDocTitle,
+    forceUnsourcedGeneration: opts.forceUnsourcedGeneration,
+  });
+  const system: SystemContentBlock[] = [{ text: systemText }];
+
+  const toolConfig: ToolConfiguration = { tools: TOOL_SPECS };
+
+  const messages: Message[] = [
+    ...(opts.history ?? []),
+    { role: 'user', content: [{ text: opts.message }] },
+  ];
+
+  // Track docs read in this run for deterministic citation emission. Keyed
+  // by doc_id so duplicate reads don't double-cite.
+  const reads = new Map<string, ReadDocumentResult>();
+  // Track whether the agent has called search_vault yet — needed for the
+  // refuse-on-no-sources logic in non-forced mode.
+  let searchCallsMade = 0;
+  let searchHitsFound = 0;
+
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    let stopReason: string | undefined;
+    const assistantContent: ContentBlock[] = [];
+    // Per-turn accumulator for in-flight tool_use blocks, keyed by content-
+    // block index.
+    type PendingToolUse = {
+      toolUseId: string;
+      name: string;
+      inputChunks: string[];
+    };
+    const pendingByIndex = new Map<number, PendingToolUse>();
+    // Per-turn buffer for text blocks, keyed by content-block index.
+    const textByIndex = new Map<number, string>();
+
+    let stream: AsyncIterable<unknown>;
+    try {
+      stream = await converseStream(
+        {
+          system,
+          messages,
+          toolConfig,
+          inferenceConfig: { maxTokens: MAX_TOKENS_PER_TURN },
+        },
+        opts.abortSignal,
+      );
+    } catch (err) {
+      yield { type: 'error', detail: err instanceof Error ? err.message : 'Bedrock request failed' };
+      return;
+    }
+
+    // Consume the model's stream events for this turn.
+    // The SDK's union is wide; we narrow at the use-site.
+    for await (const ev of stream as AsyncIterable<Record<string, unknown>>) {
+      // contentBlockStart — may carry a toolUse start.
+      if ('contentBlockStart' in ev && ev.contentBlockStart) {
+        const start = ev.contentBlockStart as {
+          contentBlockIndex?: number;
+          start?: { toolUse?: { toolUseId?: string; name?: string } };
+        };
+        const idx = start.contentBlockIndex ?? 0;
+        const tu = start.start?.toolUse;
+        if (tu && tu.toolUseId && tu.name) {
+          pendingByIndex.set(idx, { toolUseId: tu.toolUseId, name: tu.name, inputChunks: [] });
+        }
+      }
+
+      // contentBlockDelta — incremental text or tool-input JSON fragment.
+      if ('contentBlockDelta' in ev && ev.contentBlockDelta) {
+        const d = ev.contentBlockDelta as {
+          contentBlockIndex?: number;
+          delta?: { text?: string; toolUse?: { input?: string } };
+        };
+        const idx = d.contentBlockIndex ?? 0;
+        if (d.delta?.text) {
+          yield { type: 'text', delta: d.delta.text };
+          textByIndex.set(idx, (textByIndex.get(idx) ?? '') + d.delta.text);
+        }
+        if (d.delta?.toolUse?.input !== undefined) {
+          const pending = pendingByIndex.get(idx);
+          if (pending) pending.inputChunks.push(d.delta.toolUse.input);
+        }
+      }
+
+      // contentBlockStop — finalize a block (parse tool input here).
+      if ('contentBlockStop' in ev && ev.contentBlockStop) {
+        const stop = ev.contentBlockStop as { contentBlockIndex?: number };
+        const idx = stop.contentBlockIndex ?? 0;
+        if (textByIndex.has(idx)) {
+          assistantContent.push({ text: textByIndex.get(idx)! });
+        }
+        const pending = pendingByIndex.get(idx);
+        if (pending) {
+          let parsedInput: unknown = {};
+          const joined = pending.inputChunks.join('');
+          if (joined.trim()) {
+            try {
+              parsedInput = JSON.parse(joined);
+            } catch {
+              parsedInput = {};
+            }
+          }
+          assistantContent.push({
+            toolUse: {
+              toolUseId: pending.toolUseId,
+              name: pending.name,
+              input: parsedInput as DocumentType,
+            },
+          });
+        }
+      }
+
+      // messageStop — turn-end signal carrying the stopReason.
+      if ('messageStop' in ev && ev.messageStop) {
+        const ms = ev.messageStop as { stopReason?: string };
+        stopReason = ms.stopReason;
+      }
+    }
+
+    // Append the assistant's turn to the conversation.
+    messages.push({ role: 'assistant', content: assistantContent });
+
+    // If the model is done, emit citations + done and exit.
+    if (stopReason === 'end_turn' || stopReason === 'stop_sequence') {
+      for (const r of reads.values()) {
+        yield { type: 'cite', id: r.id, title: r.title, section: r.section };
+      }
+      if (!opts.forceUnsourcedGeneration) {
+        if (searchCallsMade > 0 && searchHitsFound === 0 && reads.size === 0) {
+          // Hard refusal: agent searched, found nothing, drafted nothing.
+          yield {
+            type: 'refuse',
+            reason: 'no-sources',
+            canForce: true,
+            message: 'I couldn\'t find anything in your vault on this topic. If you\'d like me to draft from general knowledge without citations, use the Draft anyway button.',
+          };
+        } else if (reads.size === 0) {
+          // Soft warning: agent produced an answer without grounding it in
+          // any document. The answer is shown but the reader should be
+          // told it's uncited (the citation discipline didn't bite).
+          yield {
+            type: 'warning',
+            reason: 'no-reads',
+            message: 'This answer was produced without reading any source document — treat it as uncited.',
+          };
+        }
+      }
+      yield { type: 'done' };
+      return;
+    }
+
+    if (stopReason !== 'tool_use') {
+      // Unexpected stop (e.g., max_tokens). Surface and bail.
+      yield { type: 'error', detail: `Unexpected stopReason: ${stopReason ?? '<missing>'}` };
+      return;
+    }
+
+    // Dispatch every tool_use in this turn and collect a user-role
+    // tool_result message to pass back next round.
+    const toolResultContent: ContentBlock[] = [];
+    for (const block of assistantContent) {
+      if (!('toolUse' in block) || !block.toolUse) continue;
+      const { toolUseId, name, input } = block.toolUse;
+      if (!toolUseId || !name) continue;
+
+      yield { type: 'tool_use', name: name as AgentToolName, input };
+
+      try {
+        const result = await dispatchTool(
+          name as AgentToolName,
+          input as Record<string, unknown>,
+          opts,
+        );
+
+        // Hook side effects for the post-loop refusal check.
+        if (name === 'search_vault') {
+          searchCallsMade++;
+          if (Array.isArray(result) && result.length > 0) searchHitsFound += result.length;
+        }
+        if (name === 'read_document') {
+          const r = result as ReadDocumentResult;
+          if (r && r.id && !reads.has(r.id)) reads.set(r.id, r);
+        }
+        if (name === 'propose_page') {
+          const p = result as ReturnType<typeof proposePage>;
+          yield { type: 'propose_page', slug: p.slug, title: p.title, body: p.body };
+        }
+
+        toolResultContent.push({
+          toolResult: {
+            toolUseId,
+            content: [{ json: toolResultToJson(name as AgentToolName, result) as DocumentType }],
+            status: 'success',
+          },
+        });
+        yield { type: 'tool_result', name: name as AgentToolName, ok: true };
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : 'tool dispatch failed';
+        toolResultContent.push({
+          toolResult: {
+            toolUseId,
+            content: [{ text: detail }],
+            status: 'error',
+          },
+        });
+        yield { type: 'tool_result', name: name as AgentToolName, ok: false, error: detail };
+      }
+    }
+    messages.push({ role: 'user', content: toolResultContent });
+  }
+
+  yield { type: 'error', detail: `Agent exceeded ${MAX_ROUNDS} tool-use rounds without finishing` };
+}
+
+// ─── Tool dispatch ───────────────────────────────────────────────────────
+
+async function dispatchTool(
+  name: AgentToolName,
+  input: Record<string, unknown>,
+  opts: RunAgentOpts,
+): Promise<unknown> {
+  switch (name) {
+    case 'search_vault':
+      return await searchVault(
+        {
+          query: String(input.query ?? ''),
+          limit: typeof input.limit === 'number' ? input.limit : undefined,
+        },
+        opts.scopeMode,
+        opts.userId,
+      );
+    case 'read_document':
+      return await readDocument({ doc_id: String(input.doc_id ?? '') });
+    case 'propose_page':
+      return proposePage({
+        slug: String(input.slug ?? ''),
+        title: String(input.title ?? ''),
+        body: String(input.body ?? ''),
+      });
+  }
+}
+
+/**
+ * Marshal a tool result for the back-channel to the model. For `propose_page`
+ * we deliberately send a *confirmation* rather than echoing the body — the
+ * body already went to the client via the propose_page event, and re-sending
+ * it would just inflate the context.
+ */
+function toolResultToJson(name: AgentToolName, result: unknown): unknown {
+  if (name === 'propose_page') {
+    return { status: 'preview-shown', note: 'The preview was shown to the user. They will decide whether to save.' };
+  }
+  return result;
+}

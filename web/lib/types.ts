@@ -72,8 +72,15 @@ export type Doc = AuthoredDoc | GeneratedDoc | LiveDoc;
 export type LiveDoc = {
   generated: false;
   kind: 'live';
+  /**
+   * Relative S3 key (e.g. `users/<id>/authored/personal/foo.md`). Used as
+   * the doc identity passed to APIs that take a key. Distinct from `s3`,
+   * which is the full key including VAULT_PREFIX.
+   */
+  id: string;
   title: string;
   path: string;
+  /** Full S3 key including VAULT_PREFIX. Display-only — never send to APIs. */
   s3: string;
   source: SourceType;
   updated: string;

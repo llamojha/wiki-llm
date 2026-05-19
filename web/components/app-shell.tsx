@@ -87,6 +87,7 @@ function apiDocToDoc(api: ApiDoc, html: SanitizedHtml): LiveDoc {
   return {
     generated: false,
     kind: 'live',
+    id: api.id,
     title: api.title,
     path: api.path,
     s3: api.s3_key,
@@ -122,6 +123,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
   const [tree, setTree] = useState<ApiTreeNode[]>(initialTree);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadTab, setUploadTab] = useState<LibraryTab>('upload');
+  const [editorDraft, setEditorDraft] = useState<{ title: string; body: string } | undefined>(undefined);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -278,13 +280,16 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
     window.dispatchEvent(new CustomEvent<string>(ASK_EVENT, { detail: p }));
   };
 
-  const handleSaveFromChat = (page: GeneratedDoc) => {
-    const id = makeId('doc-me-gen-');
-    setGeneratedDocs((prev) => ({ ...prev, [id]: page }));
+  /**
+   * Chat panel's post-hoc Save: open the Editor pre-filled with the agent's
+   * answer + citations as a draft. User reviews/edits and the existing
+   * Editor save flow (Phase 4) writes via POST /api/docs.
+   */
+  const handleDraftFromChat = (draft: { title: string; body: string }) => {
+    setEditorDraft(draft);
     setScope('user');
-    setActiveId(id);
-    setChatOpen(false);
-    showToast(`Saved "${page.title}" to your wiki`);
+    setActiveId('__new');
+    setEditing(true);
   };
 
   const handleEditorSave = (title: string, docId?: string) => {
@@ -322,8 +327,9 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
             doc={activeId === '__new' ? undefined : doc}
             docId={activeId !== '__new' ? activeId : undefined}
             etag={liveDoc?.etag}
-            onClose={() => setEditing(false)}
-            onSave={handleEditorSave}
+            initialDraft={editorDraft}
+            onClose={() => { setEditing(false); setEditorDraft(undefined); }}
+            onSave={(title, id) => { setEditorDraft(undefined); handleEditorSave(title, id); }}
             showToast={showToast}
           />
         ) : HOME_IDS.has(activeId) ? (
@@ -370,7 +376,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
         open={chatOpen}
         onClose={() => setChatOpen(false)}
         onOpenDoc={openDoc}
-        onSavePage={handleSaveFromChat}
+        onDraftFromChat={handleDraftFromChat}
         contextDoc={doc}
       />
 

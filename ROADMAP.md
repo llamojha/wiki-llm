@@ -182,24 +182,58 @@ User-facing write path via Next.js Route Handlers.
 
 **Markdown rendering hardened later — see Phase 3 notes.** Added `remark-frontmatter` to the unified pipeline in `lib/markdown.ts` so curated pages (with `---\n…\n---` YAML blocks) render without the frontmatter bleeding into the body. Affects both Phase 3 generated pages and Phase 4 personal pages.
 
-### Phase 5 — Ask-Wiki Agent (MVP 2)
+### Phase 5 — Ask-Wiki Agent (MVP 2) ✓
 
 Bedrock Nova 2 Lite agent in the chat panel, served from Next.js.
 
-- [ ] Route Handler: `POST /api/chat` with streaming (ReadableStream)
-- [ ] Bedrock converse API via `@aws-sdk/client-bedrock-runtime`
-- [ ] Agent loop: read `index.md` → tool calls → answer with citations
-- [ ] Tools (direct function calls to existing lib modules):
-  - [ ] `search_vault(query, scope)` — Fuse.js search with scope (all / folder / page)
-  - [ ] `read_document(doc_id)` — S3 GetObject via `lib/s3.ts`
-  - [ ] `propose_page(slug, title, body)` — preview + user-confirmed write only
-- [ ] Scoped search (agent-only; UI search stays global)
-- [ ] Agent proposes new pages only, on explicit user request
-- [ ] Refusal behavior on zero relevant hits
-- [ ] Citations with deep links to docs
-- [ ] Usage logging; chat persistence deferred
+- [x] Route Handler: `POST /api/chat` with streaming (ReadableStream, NDJSON envelope)
+- [x] Bedrock converse API via `@aws-sdk/client-bedrock-runtime` (`ConverseStreamCommand`)
+- [x] Agent loop: read `index.md` (scope-aware catalog) → tool calls → answer with citations
+- [x] Tools (direct function calls — no HTTP):
+  - [x] `search_vault(query, limit?)` — Fuse.js search with scope post-filtering
+  - [x] `read_document(doc_id)` — S3 GetObject + frontmatter parse
+  - [x] `propose_page(slug, title, body)` — preview event + user-confirmed write via `POST /api/docs`
+- [x] Scoped search — chat panel scope selector (`shared` / `user` / `both`, default `both`)
+- [x] Agent proposes new pages only on explicit generation requests (Path A) + post-hoc Save-as-page routes through the Editor (Path B)
+- [x] Refusal behavior on zero relevant hits — emits `{type: refuse, canForce: true}`, chat UI renders **Draft anyway (no sources)** button that re-issues the request with `forceUnsourcedGeneration: true`
+- [x] Citations with deep links to docs — built deterministically from `read_document` calls, not from text parsing
+- [x] Usage logging to `<scope>/_system/usage-log.jsonl`; chat persistence deferred
 
-**Acceptance:** see `specs/phase-5-ask-wiki-agent.md`
+**Acceptance:** see `specs/phase-5-ask-wiki-agent.md` — 16 criteria, Implementation Notes section dated 2026-05-18.
+
+#### Phase 5 implementation notes (drifts captured in spec)
+
+Full notes in `specs/phase-5-ask-wiki-agent.md`. Headlines:
+
+- **Force-unsourced is a system-prompt branch**, not a runtime flag inside the agent loop — `buildSystemPrompt` swaps the entire "Generation rules" section.
+- **`runtime: 'nodejs'`** on `/api/chat` route — Vercel Edge's 60s timeout was too tight for 6-round tool-use loops; Node serverless gives 300s.
+- **`DocumentType` mirrored locally** in `agent.ts` rather than depending on `@smithy/types` (transitive Smithy package not directly importable).
+- **Citations are deterministic from `read_document` calls** — the route never parses model output for cites. No-hallucination guarantee enforced at the protocol level.
+- **Post-hoc Save routes through the Editor** via a new `initialDraft` prop, not directly to `/api/docs`. Path A (implicit) and Path B (post-hoc) coexist.
+- **Smoke checklist** at `web/lib/__smoke__/phase-5-agent.md` — 8 scenarios; runtime walk-through is the gate.
+
+#### Known open follow-ups (not blocking MVP 2)
+
+- Manual smoke walk-through still pending — typecheck + build are the only gates today.
+- Editable slug in the propose-page preview (currently fixed by the agent).
+- Web runtime needs `bedrock:InvokeModel*` IAM in whichever environment hosts it.
+
+#### Phase 5 v2 patches landed (2026-05-18)
+
+After the v1 postmortem caught 11 issues (1 scope-leak P1, 1 wrong-key-shape P1, 1 missing-history P1, plus 8 P2/P3), all 11 were fixed in a follow-up batch:
+- Scope filter strict (was leaking via `.includes`)
+- Relative `id` on `LiveDoc` (was sending full prefixed key)
+- `useRef`-based text buffer (was abusing `setMessages` as sync getter)
+- `AbortSignal` threaded into the Bedrock SDK call
+- Chat panel sends history (multi-turn context)
+- Warning event for uncited answers + UI banner
+- Light inline Markdown during streaming
+- Live activity indicator (`tool_use` events drive it)
+- `propose_page` preview moved to CSS classes
+- "Drafted from chat" tag in Editor
+- Few-shot examples in system prompt
+
+See `specs/phase-5-ask-wiki-agent.md` v2 fixes table for the full rundown.
 
 ### Phase 6 — SaaS (deferred, partially scaffolded)
 
@@ -243,13 +277,20 @@ Shipped 2026-05-17 / 2026-05-18 as preparation for Phase 6. Surfaced via a singl
 
 **`/api/curate` (single-file POST) removed.** The old upload flow invoked it per-file via an "Auto-index after upload" checkbox. The checkbox and route are deleted; raw files now go through the explicit Pending tab batch flow, authored files are finalized inline by `/api/upload`.
 
-**Sidebar tree carries all user content under one synthetic folder.** `__user` contains a `Personal` subfolder (mapped to `authored/personal/`) plus one folder per declared space that has user content (mapped to `users/<id>/generated/<space>/` and `users/<id>/authored/<space>/`). Shared spaces are siblings of `__user` at the tree root. The sidebar scope toggle filters which side of the tree is shown.
+**Sidebar tree carries all user content under one synthetic folder.** `__user` contains a `Personal` subfolder (mapped to `authored/personal/`) plus one folder per declared space that has user content (mapped to `users/<id>/generated/<space>/` and `users/<id>/authored/<space>/`). Shared spaces are siblings of `__user` at the tree root. The sidebar scope toggle filters which side of the tree is shown. The declared-space loop skips `personal` to avoid double-listing entries already covered by the dedicated Personal block.
+
+**Follow-up fixes shipped 2026-05-18:**
+- **Manifest write serialization (P1).** Concurrent `processSource` workers under `CURATE_CONCURRENCY > 1` were each reading the same baseline `processed.json` and the last writer was silently dropping the others' entries. The Lambda now routes the manifest's read-modify-write through the same in-process write queue as the job-JSON updates.
+- **Hash-based pending detection (P2).** `/api/curate/start` and `/api/raw` previously filtered raw keys only by manifest membership, missing re-uploads (same key, new content). Both routes now use a shared `resolvePending` helper (`web/lib/curate-pending.ts`) that hashes already-known keys in parallel and includes the modified ones. The Pending tab badge and the backend gate now agree.
+- **New-page editor bug.** Clicking "New page" while a doc was open left the previous doc in component state, so the editor pre-filled the new doc with the previous one's title and body. Saving then 409'd on the slug collision. Fixed by passing `doc={undefined}` to the Editor when `activeId === '__new'`.
+- **Editor error surfacing.** POST/PUT failures on `/api/docs` now surface the route's `detail` field in the toast instead of a generic "Failed to save" — users see the actual reason (e.g. *A page with slug "foo" already exists*).
 
 **Known gaps from the scope-refactor postmortem still open:**
 - No runtime smoke test of the user-scope path; only typecheck verified
-- Mid-job scope change is prevented by disabling the toggle while running, but the modal closing + reopening discards the in-flight job (already pre-existing behavior, but the user-scope path makes it more visible)
-- Finalize + CRUD writes are not serialized; same-scope concurrent finalize races on `index.md` writes (pre-existing)
+- Mid-job scope change is prevented by disabling the toggle while running, but the modal closing + reopening discards the in-flight job (pre-existing)
+- Finalize + CRUD writes are not serialized **across requests**; same-scope concurrent finalizes still race on `index.md` writes (in-Lambda concurrency was addressed, cross-request was not)
 - `personal` as a reserved-name vs first-class declared space is unresolved
+- Cross-deploy Lambda compatibility has no version guard; deploy Lambda before the web change
 
 ### Phase 7 — Multimodal & Audio (deferred)
 
