@@ -365,11 +365,11 @@ export function ChatPanel({ open, onClose, onOpenDoc, onDraftFromChat, contextDo
   // Cross-component "ask" event from elsewhere in the app (e.g. home view).
   useEffect(() => {
     const onAsk = (e: Event) => {
-      if (open) send((e as CustomEvent<string>).detail);
+      send((e as CustomEvent<string>).detail);
     };
     window.addEventListener(ASK_EVENT, onAsk);
     return () => window.removeEventListener(ASK_EVENT, onAsk);
-  }, [open, send]);
+  }, [send]);
 
   const saveProposal = useCallback(
     async (msg: Message) => {

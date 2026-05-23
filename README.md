@@ -8,7 +8,7 @@ Markdown in object storage is the durable knowledge layer. The portal renders, s
 
 ## Status
 
-Early development. Phase 2 (real read path) is complete. Phase 3 (ingest pipeline) is next.
+Early MVP. Phases 0-5 are implemented in the single Next.js app shape tracked by `ROADMAP.md`: S3 read/search, personal wiki CRUD, Lambda-backed curation, and the Bedrock ask-wiki agent.
 
 - **Product spec:** [`prd_vaultmark_markdown_llm_wiki.md`](prd_vaultmark_markdown_llm_wiki.md)
 - **Engineering plan:** [`ROADMAP.md`](ROADMAP.md)
@@ -64,7 +64,7 @@ cp infra/.env.example web/.env.local
 # Edit web/.env.local with your S3 bucket/prefix
 
 # Start the app
-pnpm --filter web dev   # http://localhost:3000
+pnpm dev   # http://localhost:3000
 ```
 
 ### Environment variables
@@ -75,6 +75,7 @@ Create `web/.env.local`:
 VAULT_BUCKET=your-s3-bucket
 VAULT_PREFIX=your-prefix
 VAULT_REGION=us-east-1
+BEDROCK_MODEL=amazon.nova-2-lite-v1:0
 ```
 
 AWS credentials are picked up from the standard chain (`~/.aws/credentials`, instance role, env vars). No hardcoding.
@@ -83,13 +84,25 @@ AWS credentials are picked up from the standard chain (`~/.aws/credentials`, ins
 
 ```
 s3://<bucket>/<prefix>/
-  raw/          Source documents (immutable inputs)
-  wiki/         User-authored pages
-  generated/    AI-generated pages from the ingest pipeline
-  assets/       Images and binary assets
-  articles/     Published articles (not processed by ingest)
-  index.md      Machine-maintained catalog
-  log.md        Append-only write history
+  raw/                    Shared source documents
+  generated/<space>/      Shared AI-generated pages
+  authored/<space>/       Shared human-authored pages
+  _system/                Shared indexes, jobs, manifests, logs
+  users/<user-id>/
+    raw/
+    generated/<space>/
+    authored/<space>/
+    _system/
+  assets/                 Images and binary assets
+```
+
+Common commands:
+
+```bash
+pnpm dev
+pnpm typecheck
+pnpm build
+pnpm ingest -- --help
 ```
 
 ## Deployment

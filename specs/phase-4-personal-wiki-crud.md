@@ -91,7 +91,7 @@ Append-only. One line per event. Pipe-delimited.
 
 ## Acceptance Criteria
 
-1. `POST /api/docs` creates a new page in S3 with correct frontmatter and `source_type = authored`.
+1. `POST /api/docs` creates a new page in S3 with correct frontmatter and `source_type = personal` under `users/<user-id>/authored/personal/`.
 2. `PUT /api/docs/:id` updates an existing page. Uses S3 ETag-based optimistic concurrency — concurrent edit returns 409.
 3. `DELETE /api/docs/:id` removes the document from S3.
 4. `index.md` is regenerated immediately after every create/delete with format `- path — Title — Summary`.

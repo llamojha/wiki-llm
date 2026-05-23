@@ -2,6 +2,13 @@
 
 **Milestone:** MVP 1
 
+> Current implementation note (May 2026): this spec records the original
+> space-first design. The active roadmap supersedes the physical layout with
+> provenance-rooted shared/user prefixes: `raw/`, `generated/<space>/`,
+> `authored/<space>/`, `_system/`, and `users/<user-id>/...`. Treat examples
+> below that write directly to `<space>/...` or `<space>/raw/...` as historical
+> unless `ROADMAP.md` explicitly maps them into the current phase contract.
+
 ## Goal
 
 A TypeScript CLI and portal integration that transforms raw source documents into structured, indexed wiki pages via Bedrock. Organized by spaces (Confluence-style), with per-space indexing, upload from portal or CLI, and automatic ingest on arrival.

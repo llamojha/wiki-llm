@@ -105,6 +105,7 @@ export async function POST(req: Request) {
 
   // Lambda payload carries scope so the Lambda can resolve the same paths.
   const payload = {
+    curateEventVersion: 2,
     jobId,
     space: policy.space,
     files: selected,

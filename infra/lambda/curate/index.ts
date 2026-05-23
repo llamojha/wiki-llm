@@ -52,6 +52,17 @@ export async function handler(event: CurateEvent, context: Context): Promise<voi
     userId: event.userId,
   });
 
+  if (event.scope === 'user' && event.curateEventVersion !== 2) {
+    const message = 'Unsupported curate event contract for user scope. Deploy the scope-aware web and Lambda together.';
+    console.error(`[${jobId}] ${message}`);
+    await updateJob(bucket, prefix, scope, jobId, {
+      status: 'error',
+      completedAt: new Date().toISOString(),
+      error: message,
+    });
+    return;
+  }
+
   console.log(`[${jobId}] Starting curate invocation at ${startIndex + 1}/${files.length} scope=${scope.scope}${scope.userId ? `:${scope.userId}` : ''} (concurrency=${DEFAULT_CONCURRENCY})`);
 
   // Clear `phase` on entry — if we're a chained continuation, the prior

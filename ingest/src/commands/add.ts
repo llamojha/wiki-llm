@@ -13,7 +13,7 @@ export async function add(files: string[], opts: AddOpts) {
 
   for (const file of files) {
     const filename = path.basename(file);
-    const key = `${opts.space}/raw/${filename}`;
+    const key = `raw/${filename}`;
     const body = fs.readFileSync(file, 'utf-8');
 
     await putObject(key, body);
@@ -21,7 +21,7 @@ export async function add(files: string[], opts: AddOpts) {
     uploadedKeys.push(key);
   }
 
-  console.log(`\nUploaded ${uploadedKeys.length} file(s) to ${opts.space}/raw/`);
+  console.log(`\nUploaded ${uploadedKeys.length} file(s) to raw/ for space "${opts.space}"`);
 
   if (opts.ingest) {
     console.log('\nRunning ingest...\n');

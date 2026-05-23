@@ -1,4 +1,4 @@
-import { getObject, listObjects, listSpaces } from '../s3.js';
+import { getObject, listObjects } from '../s3.js';
 import { planPages } from '../plan.js';
 import { generatePages } from '../generate.js';
 import { writePages } from '../write.js';
@@ -11,8 +11,9 @@ interface RunOpts {
 }
 
 async function processSpace(space: string, keys: string[], opts: RunOpts) {
-  // Discover raw files in this space
-  const rawPrefix = `${space}/raw/`;
+  // Shared-scope raw files live under raw/; generated output is written under
+  // generated/<space>/ to match the active Next.js/Lambda layout.
+  const rawPrefix = 'raw/';
   let rawKeys: string[];
   if (keys.length > 0) {
     rawKeys = keys.map((k) => (k.startsWith(rawPrefix) ? k : `${rawPrefix}${k}`));
@@ -29,7 +30,7 @@ async function processSpace(space: string, keys: string[], opts: RunOpts) {
   // Read space index for context
   let indexContent = '';
   try {
-    indexContent = await getObject(`${space}/index.md`);
+    indexContent = await getObject(`_system/indexes/${space}.md`);
   } catch {
     // No index yet
   }
@@ -42,7 +43,7 @@ async function processSpace(space: string, keys: string[], opts: RunOpts) {
     const plan = await planPages(content, indexContent, rawKey, space);
     console.log(`     Plan: ${plan.pages.length} page(s)`);
     for (const p of plan.pages) {
-      console.log(`       ${p.action} ${p.type} → ${space}/${p.path}`);
+      console.log(`       ${p.action} ${p.type} → generated/${space}/${p.path}`);
     }
 
     if (opts.dryRun) {
@@ -60,11 +61,11 @@ async function processSpace(space: string, keys: string[], opts: RunOpts) {
 
   // Regen space index
   await regenerateSpaceIndex(space);
-  console.log(`  ✓ ${space}/index.md regenerated`);
+  console.log(`  ✓ _system/indexes/${space}.md regenerated`);
 }
 
 export async function run(keys: string[], opts: RunOpts) {
-  const spaces = opts.space ? [opts.space] : await listSpaces();
+  const spaces = opts.space ? [opts.space] : await configuredSpaces();
 
   if (spaces.length === 0) {
     console.log('No spaces found. Run `pnpm ingest init --space <name>` to create one.');
@@ -82,4 +83,16 @@ export async function run(keys: string[], opts: RunOpts) {
   }
 
   console.log('\nDone.');
+}
+
+async function configuredSpaces(): Promise<string[]> {
+  try {
+    const raw = await getObject('_system/structure.json');
+    const structure = JSON.parse(raw) as { spaces?: Array<{ name: string; generated?: boolean; indexed?: boolean }> };
+    const generated = structure.spaces?.filter((space) => space.generated !== false && space.indexed !== false).map((space) => space.name) ?? [];
+    if (generated.length) return generated;
+  } catch {
+    // Fall back to the default MVP ingest space.
+  }
+  return ['wiki'];
 }

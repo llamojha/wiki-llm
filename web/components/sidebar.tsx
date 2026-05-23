@@ -83,11 +83,11 @@ export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, onUpload
         <span className="nav-icon">{ICONS.home}</span>
         <span className="nav-label">Home</span>
       </button>
-      <button className="nav-row" onClick={() => onOpen('__recent')}>
+      <button className={'nav-row' + (activeId === '__recent' ? ' active' : '')} onClick={() => onOpen('__recent')}>
         <span className="nav-icon">{ICONS.recent}</span>
         <span className="nav-label">Recent</span>
       </button>
-      <button className="nav-row" onClick={() => onOpen('__starred')}>
+      <button className={'nav-row' + (activeId === '__starred' ? ' active' : '')} onClick={() => onOpen('__starred')}>
         <span className="nav-icon">{ICONS.star}</span>
         <span className="nav-label">Starred</span>
       </button>

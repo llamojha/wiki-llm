@@ -25,6 +25,8 @@ export type ApiSearchResult = {
   path: string;
   snippet: string;
   rank: number;
+  updated: string;
+  source_type: string;
 };
 
 async function get<T>(path: string): Promise<T> {
@@ -39,5 +41,16 @@ export const getTree = (vaultId = 'default') =>
 export const getDoc = (docId: string) =>
   get<ApiDoc>(`/api/docs/${encodeURIComponent(docId)}`);
 
-export const search = (q: string) =>
-  get<ApiSearchResult[]>(`/api/search?q=${encodeURIComponent(q)}`);
+export type ApiSearchOptions = {
+  scope?: 'shared' | 'user' | 'both';
+  userId?: string;
+  folder?: string;
+};
+
+export const search = (q: string, opts: ApiSearchOptions = {}) => {
+  const params = new URLSearchParams({ q });
+  if (opts.scope) params.set('scope', opts.scope);
+  if (opts.userId) params.set('userId', opts.userId);
+  if (opts.folder) params.set('folder', opts.folder);
+  return get<ApiSearchResult[]>(`/api/search?${params.toString()}`);
+};
