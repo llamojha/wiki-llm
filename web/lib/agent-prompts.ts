@@ -54,7 +54,9 @@ You have three tools. Use them deliberately.
 - **read_document(doc_id)** — read a document's full Markdown content. You MUST call this on every document you intend to cite. Citations are derived from your read_document calls, not from your response text. Calling read_document is the only way to produce a citation.
 - **propose_page(slug, title, body)** — draft a new Markdown page for the user's personal wiki. Use ONLY when the user explicitly asks you to write, draft, generate, or save a page. Casual Q&A turns must NOT call this.
 
-Prefer reading directly from the catalog when an entry obviously matches the user's question. Use search_vault when the catalog hint is ambiguous or insufficient. Always read_document before citing.`;
+Prefer reading directly from the catalog when an entry obviously matches the user's question. Use search_vault when the catalog hint is ambiguous or insufficient. Always read_document before citing.
+
+**Batch your tool calls.** When you need to read several documents to answer, emit ALL the \`read_document\` calls in a single turn (multiple tool_use blocks in one response). They run in parallel and cost you one round instead of one per document. Serializing reads across turns is wasteful and may exhaust your tool-use budget before you can answer.`;
 
   const refusalPolicy = `## Refusal policy
 

@@ -358,7 +358,7 @@ export async function* runAgent(opts: RunAgentOpts): AsyncGenerator<AgentEvent> 
   // never returned end_turn. Dump the full trace so the tool sequence behind
   // the failure is visible without needing to reproduce with DEBUG_AGENT.
   console.warn(
-    `[agent] exhausted ${MAX_ROUNDS} rounds without end_turn — trace:\n` +
+    `[agent] exhausted ${MAX_ROUNDS} rounds without end_turn — forcing final answer. trace:\n` +
       trace
         .map(
           (r) =>
@@ -374,7 +374,58 @@ export async function* runAgent(opts: RunAgentOpts): AsyncGenerator<AgentEvent> 
         )
         .join('\n'),
   );
-  yield { type: 'error', detail: `Agent exceeded ${MAX_ROUNDS} tool-use rounds without finishing` };
+
+  // Graceful fallback: one final Converse call WITHOUT toolConfig so the
+  // model has no choice but to produce a text answer using whatever it has
+  // already read. Better than dead-ending the user with an error, and any
+  // documents already read still cite normally.
+  //
+  // We nudge the model in a system-style user turn so it knows the budget
+  // is spent and it should wrap up with what it has.
+  messages.push({
+    role: 'user',
+    content: [
+      {
+        text:
+          'You have used your tool-use budget. Do NOT request any more tools. Produce your final answer now using only the documents you have already read. Cite them with [n] markers as instructed.',
+      },
+    ],
+  });
+
+  try {
+    const finalStream = await converseStream(
+      {
+        system,
+        messages,
+        inferenceConfig: { maxTokens: MAX_TOKENS_PER_TURN },
+        // toolConfig intentionally omitted — forces a text answer.
+      },
+      opts.abortSignal,
+    );
+    for await (const ev of finalStream as AsyncIterable<Record<string, unknown>>) {
+      if ('contentBlockDelta' in ev && ev.contentBlockDelta) {
+        const d = ev.contentBlockDelta as { delta?: { text?: string } };
+        if (d.delta?.text) yield { type: 'text', delta: d.delta.text };
+      }
+    }
+    for (const r of reads.values()) {
+      yield { type: 'cite', id: r.id, title: r.title, section: r.section };
+    }
+    if (!opts.forceUnsourcedGeneration && reads.size === 0) {
+      yield {
+        type: 'warning',
+        reason: 'no-reads',
+        message:
+          'This answer was produced without reading any source document — treat it as uncited.',
+      };
+    }
+    yield { type: 'done' };
+  } catch (err) {
+    yield {
+      type: 'error',
+      detail: err instanceof Error ? err.message : 'forced final-answer turn failed',
+    };
+  }
 }
 
 // ─── Tool dispatch ───────────────────────────────────────────────────────
