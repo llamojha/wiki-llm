@@ -4,6 +4,7 @@ import { resolveScope, type Scope } from '@/lib/scope';
 import { regenerateMasterIndex, regenerateSpaceIndex } from '@/lib/index-gen';
 import { invalidateSearchIndex } from '@/lib/search';
 import { appendLog } from '@/lib/log-append';
+import { flagGuard } from '@/lib/flags';
 
 const SPACE_RE = /^[a-z0-9][a-z0-9-]*$/;
 
@@ -26,6 +27,9 @@ function sanitizeFilename(name: string): string {
  * Both destinations work for both `shared` and `user` scopes.
  */
 export async function POST(req: Request) {
+  const blocked = flagGuard('upload');
+  if (blocked) return blocked;
+
   const form = await req.formData();
   const file = form.get('file') as File | null;
   const space = form.get('space') as string | null;

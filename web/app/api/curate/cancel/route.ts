@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getObject, putObject } from '@/lib/s3';
 import { resolveScope, type Scope } from '@/lib/scope';
+import { flagGuard } from '@/lib/flags';
 
 export async function POST(req: Request) {
+  const blocked = flagGuard('curate');
+  if (blocked) return blocked;
+
   const body = await req.json().catch(() => ({}));
   const { jobId, scope: scopeName, userId } = body as {
     jobId?: string;

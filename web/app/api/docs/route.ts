@@ -11,6 +11,7 @@ import {
   personalPrefix,
   sourceTypeFromKey,
 } from '@/lib/vault-paths';
+import { flagGuard } from '@/lib/flags';
 
 type DocSummary = {
   id: string;
@@ -96,6 +97,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const blocked = flagGuard('editor');
+  if (blocked) return blocked;
+
   const body = await req.json();
   const { title, body: content, slug } = body as {
     title?: string;

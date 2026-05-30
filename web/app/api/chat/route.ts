@@ -6,6 +6,7 @@ import { getObject } from '@/lib/s3';
 import { resolveScope } from '@/lib/scope';
 import type { ScopeMode } from '@/lib/agent-tools';
 import { logChatInteraction } from '@/lib/usage-log';
+import { flagGuard } from '@/lib/flags';
 
 /**
  * Phase 5 — Ask-Wiki agent endpoint. Streams NDJSON events.
@@ -40,6 +41,9 @@ type ChatRequestBody = {
 };
 
 export async function POST(req: Request) {
+  const blocked = flagGuard('agent');
+  if (blocked) return blocked;
+
   const body = (await req.json().catch(() => ({}))) as ChatRequestBody;
 
   if (!body.message || typeof body.message !== 'string' || !body.message.trim()) {

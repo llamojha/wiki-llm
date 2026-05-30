@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { ICONS } from '@/lib/icons';
+import type { FeatureFlags } from '@/lib/flags';
 
 type HomeMode = 'home' | 'recent' | 'starred';
 
@@ -15,6 +16,7 @@ type HomeViewProps = {
   setPrompts: (next: string[]) => void;
   docCount?: number;
   wikiCount?: number;
+  flags: FeatureFlags;
 };
 
 type Activity = { kind: 'index' | 'gen' | 'edit' | 'share'; text: ReactNode; time: string };
@@ -28,7 +30,7 @@ type DocSummary = {
   snippet: string;
 };
 
-export function HomeView({ view, onOpen, onAsk, onAskPrompt, onUpload, prompts, setPrompts, docCount = 0, wikiCount = 0 }: HomeViewProps) {
+export function HomeView({ view, onOpen, onAsk, onAskPrompt, onUpload, prompts, setPrompts, docCount = 0, wikiCount = 0, flags }: HomeViewProps) {
   const [listedDocs, setListedDocs] = useState<DocSummary[]>([]);
   const [listLoading, setListLoading] = useState(false);
   const stats = [
@@ -86,6 +88,7 @@ export function HomeView({ view, onOpen, onAsk, onAskPrompt, onUpload, prompts, 
       </div>
 
       {/* Hero ask-the-wiki card */}
+      {flags.agent && (
       <div className="ask-hero">
         <div className="ask-hero-bg"></div>
         <div className="ask-hero-inner">
@@ -102,13 +105,15 @@ export function HomeView({ view, onOpen, onAsk, onAskPrompt, onUpload, prompts, 
             <span className="kbd" style={{ marginLeft: 'auto' }}>⌘⇧A</span>
           </button>
           <div className="ask-hero-secondary">
-            <button className="ask-hero-secondary-btn" onClick={onUpload}>
-              {ICONS.upload}
-              <div>
-                <div className="ash-title">Upload Markdown</div>
-                <div className="ash-sub">Drop .md files — indexed in seconds</div>
-              </div>
-            </button>
+            {flags.upload && (
+              <button className="ask-hero-secondary-btn" onClick={onUpload}>
+                {ICONS.upload}
+                <div>
+                  <div className="ash-title">Upload Markdown</div>
+                  <div className="ash-sub">Drop .md files — indexed in seconds</div>
+                </div>
+              </button>
+            )}
             <button className="ask-hero-secondary-btn" onClick={() => onAskPrompt('Create a wiki page about our deployment process')}>
               {ICONS.spark}
               <div>
@@ -142,6 +147,7 @@ export function HomeView({ view, onOpen, onAsk, onAskPrompt, onUpload, prompts, 
           </div>
         </div>
       </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 36 }}>
         {stats.map(s => (
@@ -211,15 +217,19 @@ export function HomeView({ view, onOpen, onAsk, onAskPrompt, onUpload, prompts, 
             ))}
           </div>
 
-          <h2 style={{ fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--fg-2)', margin: '24px 0 12px' }}>Try asking</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {askPrompts.map(q => (
-              <button key={q} className="btn ghost" onClick={() => onAskPrompt(q)} style={{ justifyContent: 'flex-start', height: 'auto', padding: '8px 10px', fontWeight: 400, color: 'var(--fg-1)' }}>
-                <span style={{ color: 'var(--accent)' }}>{ICONS.spark}</span>
-                <span style={{ textAlign: 'left' }}>{q}</span>
-              </button>
-            ))}
-          </div>
+          {flags.agent && (
+            <>
+              <h2 style={{ fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--fg-2)', margin: '24px 0 12px' }}>Try asking</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {askPrompts.map(q => (
+                  <button key={q} className="btn ghost" onClick={() => onAskPrompt(q)} style={{ justifyContent: 'flex-start', height: 'auto', padding: '8px 10px', fontWeight: 400, color: 'var(--fg-1)' }}>
+                    <span style={{ color: 'var(--accent)' }}>{ICONS.spark}</span>
+                    <span style={{ textAlign: 'left' }}>{q}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </section>
       </div>
     </div>

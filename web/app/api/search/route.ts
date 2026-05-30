@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { searchScoped, type SearchScope } from '@/lib/search';
+import { flagGuard } from '@/lib/flags';
 
 export async function GET(req: NextRequest) {
+  const blocked = flagGuard('search');
+  if (blocked) return blocked;
+
   const q = req.nextUrl.searchParams.get('q') ?? '';
   const scope = (req.nextUrl.searchParams.get('scope') ?? 'both') as SearchScope;
   const userId = req.nextUrl.searchParams.get('userId') ?? undefined;

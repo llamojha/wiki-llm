@@ -85,6 +85,32 @@ export type RunAgentOpts = {
 const MAX_ROUNDS = 6;
 const MAX_TOKENS_PER_TURN = 4096;
 
+// Live per-round tracing. Off by default; set DEBUG_AGENT=1 to stream each
+// round's stopReason and every tool call+result to the server log as the run
+// happens (useful when reproducing a loop interactively). Independent of this
+// flag, the full trace is always dumped if the loop exhausts MAX_ROUNDS —
+// that's the failure we're hunting, so it shouldn't need opt-in to be visible.
+const DEBUG_AGENT = process.env.DEBUG_AGENT === '1' || process.env.DEBUG_AGENT === 'true';
+
+/** One dispatched tool call within a round, for the diagnostic trace. */
+type TraceTool = { name: string; input: unknown; ok: boolean; error?: string };
+/** One agent turn: the model's stopReason plus the tools it triggered. */
+type TraceRound = { round: number; stopReason?: string; tools: TraceTool[] };
+
+/**
+ * Compact a tool input for logging — drops large fields (e.g. a propose_page
+ * `body`) to a length marker so the trace stays readable and doesn't dump
+ * whole documents into the server log.
+ */
+function summarizeInput(input: unknown): unknown {
+  if (input === null || typeof input !== 'object') return input;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
+    out[k] = typeof v === 'string' && v.length > 120 ? `<${v.length} chars>` : v;
+  }
+  return out;
+}
+
 // ─── Loop ────────────────────────────────────────────────────────────────
 
 export async function* runAgent(opts: RunAgentOpts): AsyncGenerator<AgentEvent> {
@@ -122,7 +148,14 @@ export async function* runAgent(opts: RunAgentOpts): AsyncGenerator<AgentEvent> 
   let searchCallsMade = 0;
   let searchHitsFound = 0;
 
+  // Diagnostic trace of every round + tool call. Always dumped if the loop
+  // exhausts MAX_ROUNDS (the "exceeded N rounds" failure), and live-logged
+  // per round when DEBUG_AGENT is set.
+  const trace: TraceRound[] = [];
+
   for (let round = 0; round < MAX_ROUNDS; round++) {
+    const traceRound: TraceRound = { round, tools: [] };
+    trace.push(traceRound);
     let stopReason: string | undefined;
     const assistantContent: ContentBlock[] = [];
     // Per-turn accumulator for in-flight tool_use blocks, keyed by content-
@@ -223,6 +256,11 @@ export async function* runAgent(opts: RunAgentOpts): AsyncGenerator<AgentEvent> 
     // Append the assistant's turn to the conversation.
     messages.push({ role: 'assistant', content: assistantContent });
 
+    traceRound.stopReason = stopReason;
+    if (DEBUG_AGENT) {
+      console.log(`[agent] round ${round} stopReason=${stopReason ?? '<missing>'}`);
+    }
+
     // If the model is done, emit citations + done and exit.
     if (stopReason === 'end_turn' || stopReason === 'stop_sequence') {
       for (const r of reads.values()) {
@@ -296,6 +334,8 @@ export async function* runAgent(opts: RunAgentOpts): AsyncGenerator<AgentEvent> 
             status: 'success',
           },
         });
+        traceRound.tools.push({ name, input: summarizeInput(input), ok: true });
+        if (DEBUG_AGENT) console.log(`[agent]   tool ${name} ok`, summarizeInput(input));
         yield { type: 'tool_result', name: name as AgentToolName, ok: true };
       } catch (err) {
         const detail = err instanceof Error ? err.message : 'tool dispatch failed';
@@ -306,12 +346,34 @@ export async function* runAgent(opts: RunAgentOpts): AsyncGenerator<AgentEvent> 
             status: 'error',
           },
         });
+        traceRound.tools.push({ name, input: summarizeInput(input), ok: false, error: detail });
+        if (DEBUG_AGENT) console.warn(`[agent]   tool ${name} ERROR: ${detail}`, summarizeInput(input));
         yield { type: 'tool_result', name: name as AgentToolName, ok: false, error: detail };
       }
     }
     messages.push({ role: 'user', content: toolResultContent });
   }
 
+  // Loop exhausted: the model issued tool_use for all MAX_ROUNDS turns and
+  // never returned end_turn. Dump the full trace so the tool sequence behind
+  // the failure is visible without needing to reproduce with DEBUG_AGENT.
+  console.warn(
+    `[agent] exhausted ${MAX_ROUNDS} rounds without end_turn — trace:\n` +
+      trace
+        .map(
+          (r) =>
+            `  round ${r.round} (stop=${r.stopReason ?? '<missing>'}): ` +
+            (r.tools.length
+              ? r.tools
+                  .map(
+                    (t) =>
+                      `${t.name}(${JSON.stringify(t.input)})${t.ok ? '' : ` !ERR:${t.error}`}`,
+                  )
+                  .join(', ')
+              : '<no tools>'),
+        )
+        .join('\n'),
+  );
   yield { type: 'error', detail: `Agent exceeded ${MAX_ROUNDS} tool-use rounds without finishing` };
 }
 

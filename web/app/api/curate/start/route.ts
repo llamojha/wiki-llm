@@ -4,6 +4,7 @@ import { getObject, listObjects, putObject } from '@/lib/s3';
 import { getIngestPolicy } from '@/lib/ingest-policy';
 import { resolveScope, type Scope } from '@/lib/scope';
 import { resolvePending, type ProcessedManifest } from '@/lib/curate-pending';
+import { flagGuard } from '@/lib/flags';
 
 const LAMBDA_ARN = process.env.CURATE_LAMBDA_ARN;
 const BUCKET = process.env.VAULT_BUCKET ?? '';
@@ -18,6 +19,9 @@ function lambdaClient(): LambdaClient {
 
 
 export async function POST(req: Request) {
+  const blocked = flagGuard('curate');
+  if (blocked) return blocked;
+
   if (!LAMBDA_ARN) {
     return NextResponse.json({ detail: 'CURATE_LAMBDA_ARN not configured' }, { status: 500 });
   }

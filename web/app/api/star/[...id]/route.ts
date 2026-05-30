@@ -2,10 +2,14 @@ import matter from 'gray-matter';
 import { NextResponse } from 'next/server';
 
 import { ConcurrencyError, getObjectWithETag, putObject } from '@/lib/s3';
+import { flagGuard } from '@/lib/flags';
 
 type Params = { params: Promise<{ id: string[] }> };
 
 export async function PATCH(_req: Request, { params }: Params) {
+  const blocked = flagGuard('star');
+  if (blocked) return blocked;
+
   const { id } = await params;
   const key = decodeURIComponent(id.join('/'));
 

@@ -1,13 +1,15 @@
 import { Fragment } from 'react';
 import { ICONS } from '@/lib/icons';
 import type { GeneratedDoc } from '@/lib/types';
+import type { FeatureFlags } from '@/lib/flags';
 
 type GeneratedDocReaderProps = {
   doc: GeneratedDoc;
   onEdit: () => void;
+  flags: FeatureFlags;
 };
 
-export function GeneratedDocReader({ doc, onEdit }: GeneratedDocReaderProps) {
+export function GeneratedDocReader({ doc, onEdit, flags }: GeneratedDocReaderProps) {
   return <>
     <div className="doc-toolbar">
       <div className="crumbs">
@@ -20,8 +22,8 @@ export function GeneratedDocReader({ doc, onEdit }: GeneratedDocReaderProps) {
       </div>
       <span className="tag-chip personal">{ICONS.lock} private</span>
       <span className="tag-chip generated">{ICONS.spark} generated</span>
-      <button className="btn ghost icon-only" title="Star">{ICONS.star}</button>
-      <button className="btn" onClick={onEdit}>{ICONS.edit} Edit</button>
+      {flags.star && <button className="btn ghost icon-only" title="Star">{ICONS.star}</button>}
+      {flags.editor && <button className="btn" onClick={onEdit}>{ICONS.edit} Edit</button>}
       <button className="btn">{ICONS.share} Share</button>
     </div>
     <div className="doc-wrap">

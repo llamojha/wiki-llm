@@ -96,6 +96,31 @@ uv run --project api pyright
 docker compose -f infra/docker-compose.yml up
 ```
 
+## Feature flags
+
+Per-feature toggles live in `web/lib/flags.ts` (single source of truth, read
+once from `FEATURE_*` env vars). A feature is **ON unless** its var is set to
+`off`/`false`/`0`/`no`/`disabled` — absent ⇒ on, so everything ships enabled.
+
+Each flag gates **both layers**: `FLAGS` is passed from the root server
+component into the client `AppShell` (which hides the entry point), and
+`flagGuard(name)` short-circuits the matching route handler (404 when off).
+Hiding the button alone is not control — the route guard is the enforcement.
+
+| Env var | Feature | Routes gated |
+|---|---|---|
+| `FEATURE_AGENT` | Ask-Wiki chat | `POST /api/chat` |
+| `FEATURE_UPLOAD` | File upload | `POST /api/upload` |
+| `FEATURE_CURATE` | AI ingest/curate | `/api/curate/*` |
+| `FEATURE_REINDEX` | Re-index | `POST /api/reindex` |
+| `FEATURE_EDITOR` | Page CRUD | `POST/PUT/DELETE /api/docs` |
+| `FEATURE_SEARCH` | Search palette | `GET /api/search` |
+| `FEATURE_STAR` | Star/favorite | `PATCH /api/star` |
+| `FEATURE_PUBLISHING` | Personal site / HTML publishing | none yet (Phase 8) |
+
+Document read paths (`GET /api/docs`, tree, raw) are never gated — the portal
+stays browsable with every feature off.
+
 ## Conventions
 
 - **Pixel parity with the prototype.** While porting `portal/` to `web/`, keep visual output identical. The prototype is the design source of truth until the port is signed off; only deviate where a Next.js idiom forces it (e.g. `<Link>` over `<a>`, `next/image` over raw `<img>`).

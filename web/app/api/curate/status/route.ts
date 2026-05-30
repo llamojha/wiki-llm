@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getObject, headObject } from '@/lib/s3';
 import { resolveScope, type Scope } from '@/lib/scope';
+import { flagGuard } from '@/lib/flags';
 
 // Lambda writes per-stage heartbeats every few seconds, so the job JSON's
 // LastModified should advance well within this window during real work.
@@ -10,6 +11,9 @@ const STALE_AFTER_MS = 90 * 1000;
 const STALE_AFTER_MS_CHAINING = 5 * 60 * 1000;
 
 export async function GET(req: Request) {
+  const blocked = flagGuard('curate');
+  if (blocked) return blocked;
+
   const { searchParams } = new URL(req.url);
   const jobId = searchParams.get('job');
   const scopeName = (searchParams.get('scope') as Scope | null) ?? 'shared';

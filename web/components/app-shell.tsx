@@ -6,6 +6,7 @@ import { ICONS } from '@/lib/icons';
 import { renderMarkdown } from '@/lib/markdown';
 import { type Doc, type LiveDoc, type SanitizedHtml, type Scope } from '@/lib/types';
 import { DEFAULT_THEME, THEME_STORAGE_KEY, type Theme } from '@/lib/theme';
+import type { FeatureFlags } from '@/lib/flags';
 import { ChatFab } from './chat-fab';
 import { ChatPanel } from './chat-panel';
 import { DocReader } from './doc-reader';
@@ -67,9 +68,10 @@ function apiDocToDoc(api: ApiDoc, html: SanitizedHtml): LiveDoc {
 type AppShellProps = {
   initialTree: ApiTreeNode[];
   initialDocId?: string;
+  flags: FeatureFlags;
 };
 
-export function AppShell({ initialTree, initialDocId }: AppShellProps) {
+export function AppShell({ initialTree, initialDocId, flags }: AppShellProps) {
   const [scope, setScope] = useState<Scope>('shared');
   const [activeId, setActiveId] = useState<string>(initialDocId ?? '__home');
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -195,11 +197,11 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      if (flags.search && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setPaletteOpen((p) => !p);
       }
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'a') {
+      if (flags.agent && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'a') {
         e.preventDefault();
         setChatOpen((o) => !o);
       }
@@ -209,7 +211,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [paletteOpen]);
+  }, [paletteOpen, flags.search, flags.agent]);
 
   const doc: Doc | undefined = liveDoc ?? undefined;
 
@@ -247,6 +249,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
         chatOpen={chatOpen}
         theme={theme}
         setTheme={setTheme}
+        flags={flags}
       />
       <Sidebar
         scope={scope}
@@ -258,6 +261,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
         onProcessPending={() => { setUploadTab('pending'); setUploadOpen(true); }}
         onReindex={() => { setUploadTab('reindex'); setUploadOpen(true); }}
         apiTree={tree}
+        flags={flags}
       />
       <main className="main">
         {editing ? (
@@ -281,6 +285,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
             onUpload={() => { setUploadTab('upload'); setUploadOpen(true); }}
             docCount={countTreeDocs(tree)}
             wikiCount={countTreeDocs(tree.filter(n => n.type === 'folder' && n.name.toLowerCase() === 'wiki'))}
+            flags={flags}
           />
         ) : docLoading ? (
           <div className="empty-state">
@@ -299,6 +304,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
             onStarToggle={(starred, etag) => {
               if (liveDoc) setLiveDoc({ ...liveDoc, starred, etag });
             }}
+            flags={flags}
           />
         ) : (
           <div className="empty-state">
@@ -311,22 +317,26 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
         )}
       </main>
 
-      <ChatPanel
-        open={chatOpen}
-        onClose={() => setChatOpen(false)}
-        onOpenDoc={openDoc}
-        onDraftFromChat={handleDraftFromChat}
-        contextDoc={doc}
-      />
+      {flags.agent && (
+        <ChatPanel
+          open={chatOpen}
+          onClose={() => setChatOpen(false)}
+          onOpenDoc={openDoc}
+          onDraftFromChat={handleDraftFromChat}
+          contextDoc={doc}
+        />
+      )}
 
-      {!chatOpen && <ChatFab onClick={() => setChatOpen(true)} />}
+      {flags.agent && !chatOpen && <ChatFab onClick={() => setChatOpen(true)} />}
 
-      <SearchPalette
-        open={paletteOpen}
-        onClose={() => setPaletteOpen(false)}
-        onOpenDoc={openDoc}
-        scope={scope}
-      />
+      {flags.search && (
+        <SearchPalette
+          open={paletteOpen}
+          onClose={() => setPaletteOpen(false)}
+          onOpenDoc={openDoc}
+          scope={scope}
+        />
+      )}
 
       <UploadModal
         open={uploadOpen}
@@ -335,6 +345,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
         onClose={() => setUploadOpen(false)}
         onUploaded={() => getTree().then(setTree).catch(() => showToast('Failed to refresh sidebar'))}
         showToast={showToast}
+        flags={flags}
       />
 
       <ToastStack message={toast} />

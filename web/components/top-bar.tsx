@@ -2,6 +2,7 @@
 
 import { ICONS } from '@/lib/icons';
 import type { Theme } from '@/lib/theme';
+import type { FeatureFlags } from '@/lib/flags';
 
 type TopBarProps = {
   onSearch: () => void;
@@ -9,9 +10,10 @@ type TopBarProps = {
   chatOpen: boolean;
   theme: Theme;
   setTheme: (t: Theme) => void;
+  flags: FeatureFlags;
 };
 
-export function TopBar({ onSearch, onToggleChat, chatOpen, theme, setTheme }: TopBarProps) {
+export function TopBar({ onSearch, onToggleChat, chatOpen, theme, setTheme, flags }: TopBarProps) {
   return (
     <div className="topbar">
       <div className="brand">
@@ -20,11 +22,13 @@ export function TopBar({ onSearch, onToggleChat, chatOpen, theme, setTheme }: To
         <span className="tenant-pill">acme</span>
       </div>
       <div className="topbar-search">
-        <button className="search-trigger" onClick={onSearch}>
-          {ICONS.search}
-          <span>Search docs, runbooks, people…</span>
-          <span className="kbd">⌘K</span>
-        </button>
+        {flags.search && (
+          <button className="search-trigger" onClick={onSearch}>
+            {ICONS.search}
+            <span>Search docs, runbooks, people…</span>
+            <span className="kbd">⌘K</span>
+          </button>
+        )}
       </div>
       <div className="topbar-actions">
         <button className="icon-btn" title="Toggle theme"
@@ -35,12 +39,14 @@ export function TopBar({ onSearch, onToggleChat, chatOpen, theme, setTheme }: To
           {ICONS.bell}
           <span className="dot"></span>
         </button>
-        <button className={'ask-btn' + (chatOpen ? ' active' : '')}
-                onClick={onToggleChat} title="Ask the wiki">
-          {ICONS.spark}
-          <span>Ask the wiki</span>
-          <span className="kbd-inv">⌘⇧A</span>
-        </button>
+        {flags.agent && (
+          <button className={'ask-btn' + (chatOpen ? ' active' : '')}
+                  onClick={onToggleChat} title="Ask the wiki">
+            {ICONS.spark}
+            <span>Ask the wiki</span>
+            <span className="kbd-inv">⌘⇧A</span>
+          </button>
+        )}
         <div className="avatar" title="hello@acme.io">YO</div>
       </div>
     </div>
