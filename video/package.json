@@ -1,0 +1,27 @@
+{
+  "name": "@vaultmark/video",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "audio": "node scripts/generate-audio.mjs",
+    "capture": "node scripts/capture-website-screenshots.mjs",
+    "studio": "remotion studio src/index.ts",
+    "dev": "remotion studio src/index.ts",
+    "compositions": "remotion compositions src/index.ts",
+    "still": "remotion still src/index.ts VaultmarkProductVideo out/poster.png --frame=120",
+    "render": "remotion render src/index.ts VaultmarkProductVideo out/vaultmark-product-video.mp4",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "remotion": "^4.0.465",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@remotion/cli": "^4.0.465",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.7.0"
+  }
+}

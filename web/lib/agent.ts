@@ -352,12 +352,23 @@ async function dispatchTool(
  * we deliberately send a *confirmation* rather than echoing the body — the
  * body already went to the client via the propose_page event, and re-sending
  * it would just inflate the context.
+ *
+ * Bedrock's `toolResult.content[].json` field must be a JSON *object* at the
+ * top level — a bare array (as `search_vault` returns) is rejected with
+ * "The format of the value at ...toolResult.content.0.json is invalid." So we
+ * wrap any non-object result in an object before handing it back to the model.
  */
-function toolResultToJson(name: AgentToolName, result: unknown): unknown {
+function toolResultToJson(name: AgentToolName, result: unknown): Record<string, unknown> {
   if (name === 'propose_page') {
     return { status: 'preview-shown', note: 'The preview was shown to the user. They will decide whether to save.' };
   }
-  return result;
+  if (Array.isArray(result)) {
+    return { results: result };
+  }
+  if (result === null || typeof result !== 'object') {
+    return { value: result };
+  }
+  return result as Record<string, unknown>;
 }
 
 /**

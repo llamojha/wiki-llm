@@ -1,0 +1,8 @@
+Your team already writes Markdown.
+Vaultmark turns it into a searchable knowledge portal, while docs stay where they belong, in S3.
+Open the workspace and the vault is organized into spaces, with real counts, recent pages, and generated docs.
+Ask Wiki lets you question that vault directly. It searches your docs, respects scope, and gives grounded answers with citations.
+When new Markdown arrives, upload it. Raw files can move through AI assisted curation, while authored pages publish directly.
+Search finds runbooks, specs, generated summaries, and personal notes without moving content out of Markdown.
+And when an answer should become durable knowledge, save it back as a reviewed page.
+Vaultmark: portable docs, searchable knowledge, and AI assisted work.
