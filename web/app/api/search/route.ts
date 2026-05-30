@@ -1,12 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { search } from '@/lib/search';
+import { searchScoped, type SearchScope } from '@/lib/search';
+import { flagGuard } from '@/lib/flags';
 
 export async function GET(req: NextRequest) {
+  const blocked = flagGuard('search');
+  if (blocked) return blocked;
+
   const q = req.nextUrl.searchParams.get('q') ?? '';
+  const scope = (req.nextUrl.searchParams.get('scope') ?? 'both') as SearchScope;
+  const userId = req.nextUrl.searchParams.get('userId') ?? undefined;
+  const folder = req.nextUrl.searchParams.get('folder') ?? undefined;
   if (!q.trim()) {
     return NextResponse.json([]);
   }
-  const results = await search(q);
+  if (!['shared', 'user', 'both'].includes(scope)) {
+    return NextResponse.json({ detail: 'invalid scope' }, { status: 400 });
+  }
+  const results = await searchScoped(q, 20, { scope, userId, folder });
   return NextResponse.json(results);
 }

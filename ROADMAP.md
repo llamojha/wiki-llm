@@ -43,6 +43,7 @@ s3://<bucket>/<vault-prefix>/
 | MVP 2 | Phase 4 + 5 | Full personal wiki CRUD + ask-wiki agent |
 | SaaS | Phase 6 | Multi-tenant hosted product |
 | Multimodal | Phase 7 | Voice chat, generated images/infographics, document podcasts |
+| Publishing | Phase 8 | Static HTML pages and visual artifacts generated from canonical Markdown |
 
 ## Architecture note (post-Phase 2 pivot)
 
@@ -182,24 +183,58 @@ User-facing write path via Next.js Route Handlers.
 
 **Markdown rendering hardened later — see Phase 3 notes.** Added `remark-frontmatter` to the unified pipeline in `lib/markdown.ts` so curated pages (with `---\n…\n---` YAML blocks) render without the frontmatter bleeding into the body. Affects both Phase 3 generated pages and Phase 4 personal pages.
 
-### Phase 5 — Ask-Wiki Agent (MVP 2)
+### Phase 5 — Ask-Wiki Agent (MVP 2) ✓
 
 Bedrock Nova 2 Lite agent in the chat panel, served from Next.js.
 
-- [ ] Route Handler: `POST /api/chat` with streaming (ReadableStream)
-- [ ] Bedrock converse API via `@aws-sdk/client-bedrock-runtime`
-- [ ] Agent loop: read `index.md` → tool calls → answer with citations
-- [ ] Tools (direct function calls to existing lib modules):
-  - [ ] `search_vault(query, scope)` — Fuse.js search with scope (all / folder / page)
-  - [ ] `read_document(doc_id)` — S3 GetObject via `lib/s3.ts`
-  - [ ] `propose_page(slug, title, body)` — preview + user-confirmed write only
-- [ ] Scoped search (agent-only; UI search stays global)
-- [ ] Agent proposes new pages only, on explicit user request
-- [ ] Refusal behavior on zero relevant hits
-- [ ] Citations with deep links to docs
-- [ ] Usage logging; chat persistence deferred
+- [x] Route Handler: `POST /api/chat` with streaming (ReadableStream, NDJSON envelope)
+- [x] Bedrock converse API via `@aws-sdk/client-bedrock-runtime` (`ConverseStreamCommand`)
+- [x] Agent loop: read `index.md` (scope-aware catalog) → tool calls → answer with citations
+- [x] Tools (direct function calls — no HTTP):
+  - [x] `search_vault(query, limit?)` — Fuse.js search with scope post-filtering
+  - [x] `read_document(doc_id)` — S3 GetObject + frontmatter parse
+  - [x] `propose_page(slug, title, body)` — preview event + user-confirmed write via `POST /api/docs`
+- [x] Scoped search — chat panel scope selector (`shared` / `user` / `both`, default `both`)
+- [x] Agent proposes new pages only on explicit generation requests (Path A) + post-hoc Save-as-page routes through the Editor (Path B)
+- [x] Refusal behavior on zero relevant hits — emits `{type: refuse, canForce: true}`, chat UI renders **Draft anyway (no sources)** button that re-issues the request with `forceUnsourcedGeneration: true`
+- [x] Citations with deep links to docs — built deterministically from `read_document` calls, not from text parsing
+- [x] Usage logging to `<scope>/_system/usage-log.jsonl`; chat persistence deferred
 
-**Acceptance:** see `specs/phase-5-ask-wiki-agent.md`
+**Acceptance:** see `specs/phase-5-ask-wiki-agent.md` — 16 criteria, Implementation Notes section dated 2026-05-18.
+
+#### Phase 5 implementation notes (drifts captured in spec)
+
+Full notes in `specs/phase-5-ask-wiki-agent.md`. Headlines:
+
+- **Force-unsourced is a system-prompt branch**, not a runtime flag inside the agent loop — `buildSystemPrompt` swaps the entire "Generation rules" section.
+- **`runtime: 'nodejs'`** on `/api/chat` route — Vercel Edge's 60s timeout was too tight for 6-round tool-use loops; Node serverless gives 300s.
+- **`DocumentType` mirrored locally** in `agent.ts` rather than depending on `@smithy/types` (transitive Smithy package not directly importable).
+- **Citations are deterministic from `read_document` calls** — the route never parses model output for cites. No-hallucination guarantee enforced at the protocol level.
+- **Post-hoc Save routes through the Editor** via a new `initialDraft` prop, not directly to `/api/docs`. Path A (implicit) and Path B (post-hoc) coexist.
+- **Smoke checklist** at `web/lib/__smoke__/phase-5-agent.md` — 8 scenarios; runtime walk-through is the gate.
+
+#### Known open follow-ups (not blocking MVP 2)
+
+- Manual smoke walk-through still pending — typecheck + build are the only gates today.
+- Editable slug in the propose-page preview (currently fixed by the agent).
+- Web runtime needs `bedrock:InvokeModel*` IAM in whichever environment hosts it.
+
+#### Phase 5 v2 patches landed (2026-05-18)
+
+After the v1 postmortem caught 11 issues (1 scope-leak P1, 1 wrong-key-shape P1, 1 missing-history P1, plus 8 P2/P3), all 11 were fixed in a follow-up batch:
+- Scope filter strict (was leaking via `.includes`)
+- Relative `id` on `LiveDoc` (was sending full prefixed key)
+- `useRef`-based text buffer (was abusing `setMessages` as sync getter)
+- `AbortSignal` threaded into the Bedrock SDK call
+- Chat panel sends history (multi-turn context)
+- Warning event for uncited answers + UI banner
+- Light inline Markdown during streaming
+- Live activity indicator (`tool_use` events drive it)
+- `propose_page` preview moved to CSS classes
+- "Drafted from chat" tag in Editor
+- Few-shot examples in system prompt
+
+See `specs/phase-5-ask-wiki-agent.md` v2 fixes table for the full rundown.
 
 ### Phase 6 — SaaS (deferred, partially scaffolded)
 
@@ -243,13 +278,20 @@ Shipped 2026-05-17 / 2026-05-18 as preparation for Phase 6. Surfaced via a singl
 
 **`/api/curate` (single-file POST) removed.** The old upload flow invoked it per-file via an "Auto-index after upload" checkbox. The checkbox and route are deleted; raw files now go through the explicit Pending tab batch flow, authored files are finalized inline by `/api/upload`.
 
-**Sidebar tree carries all user content under one synthetic folder.** `__user` contains a `Personal` subfolder (mapped to `authored/personal/`) plus one folder per declared space that has user content (mapped to `users/<id>/generated/<space>/` and `users/<id>/authored/<space>/`). Shared spaces are siblings of `__user` at the tree root. The sidebar scope toggle filters which side of the tree is shown.
+**Sidebar tree carries all user content under one synthetic folder.** `__user` contains a `Personal` subfolder (mapped to `authored/personal/`) plus one folder per declared space that has user content (mapped to `users/<id>/generated/<space>/` and `users/<id>/authored/<space>/`). Shared spaces are siblings of `__user` at the tree root. The sidebar scope toggle filters which side of the tree is shown. The declared-space loop skips `personal` to avoid double-listing entries already covered by the dedicated Personal block.
+
+**Follow-up fixes shipped 2026-05-18:**
+- **Manifest write serialization (P1).** Concurrent `processSource` workers under `CURATE_CONCURRENCY > 1` were each reading the same baseline `processed.json` and the last writer was silently dropping the others' entries. The Lambda now routes the manifest's read-modify-write through the same in-process write queue as the job-JSON updates.
+- **Hash-based pending detection (P2).** `/api/curate/start` and `/api/raw` previously filtered raw keys only by manifest membership, missing re-uploads (same key, new content). Both routes now use a shared `resolvePending` helper (`web/lib/curate-pending.ts`) that hashes already-known keys in parallel and includes the modified ones. The Pending tab badge and the backend gate now agree.
+- **New-page editor bug.** Clicking "New page" while a doc was open left the previous doc in component state, so the editor pre-filled the new doc with the previous one's title and body. Saving then 409'd on the slug collision. Fixed by passing `doc={undefined}` to the Editor when `activeId === '__new'`.
+- **Editor error surfacing.** POST/PUT failures on `/api/docs` now surface the route's `detail` field in the toast instead of a generic "Failed to save" — users see the actual reason (e.g. *A page with slug "foo" already exists*).
 
 **Known gaps from the scope-refactor postmortem still open:**
 - No runtime smoke test of the user-scope path; only typecheck verified
-- Mid-job scope change is prevented by disabling the toggle while running, but the modal closing + reopening discards the in-flight job (already pre-existing behavior, but the user-scope path makes it more visible)
-- Finalize + CRUD writes are not serialized; same-scope concurrent finalize races on `index.md` writes (pre-existing)
+- Mid-job scope change is prevented by disabling the toggle while running, but the modal closing + reopening discards the in-flight job (pre-existing)
+- Finalize + CRUD writes are not serialized **across requests**; same-scope concurrent finalizes still race on `index.md` writes (in-Lambda concurrency was addressed, cross-request was not)
 - `personal` as a reserved-name vs first-class declared space is unresolved
+- Cross-deploy Lambda compatibility has no version guard; deploy Lambda before the web change
 
 ### Phase 7 — Multimodal & Audio (deferred)
 
@@ -266,6 +308,84 @@ Only after MVP 2 is stable. Exploratory — scope will be refined when Phase 5 s
 **AWS services:** Amazon Polly (TTS), Amazon Transcribe (STT), Bedrock Titan Image Generator (images).
 
 **Acceptance:** TBD — spec written when this phase is activated.
+
+### Phase 8 — HTML Publishing & Visual Artifacts (deferred)
+
+Derived presentation layer for Markdown vault content. This phase responds to the emerging AI-engineering pattern where finished human-facing deliverables are often better as HTML artifacts than raw Markdown, while preserving Vaultmark's core rule: **Markdown remains canonical; HTML is disposable and regenerable.**
+
+#### Principles
+
+- **Markdown remains source of truth.** Generated HTML must never become the authoritative editable document. Edits flow back to Markdown, not into generated HTML.
+- **HTML is a derived artifact.** It can be regenerated from Markdown, frontmatter, citations, and deterministic templates at any time.
+- **Default to deterministic rendering.** Use code-owned templates and renderers first. AI may propose layout metadata or summaries, but raw model-authored HTML is not trusted by default.
+- **Safe by default.** Sanitize generated HTML. Block arbitrary scripts in the MVP export path unless a trusted, explicit export mode is added later.
+- **Human-facing output.** Optimize for shareable reports, visual briefs, runbooks, dashboards, and article-like pages where HTML adds real value over Markdown.
+
+#### Proposed S3 layout
+
+```
+s3://<bucket>/<vault-prefix>/
+  _site/
+    shared/<space>/...      # derived HTML for shared docs
+    users/<user-id>/<space>/...  # derived HTML for user-scoped docs
+    assets/                 # copied/generated static assets for published pages
+    manifest.json           # generated artifact manifest
+```
+
+Open question before implementation: whether `_site/` should be public-shareable in OSS deployments or private-only behind the same portal access path.
+
+#### Scope
+
+- [ ] Route Handler: `POST /api/publish/html` generates HTML for one Markdown document.
+- [ ] Route Handler: `POST /api/publish/html/space` generates HTML for a declared space.
+- [ ] Route Handler or CLI command for whole-vault export, gated behind an explicit confirmation.
+- [ ] Template system for document, index, report, and generated-article pages.
+- [ ] Generated page metadata links back to canonical Markdown key, source checksum/ETag, generation timestamp, and template version.
+- [ ] HTML pages include TOC, frontmatter metadata, citation backlinks, source/provenance badge, and responsive styling.
+- [ ] Space export generates an HTML index page plus one HTML page per navigable Markdown doc.
+- [ ] Optional visual blocks: callouts, collapsible sections, tables, lightweight charts, and timeline sections derived from Markdown/frontmatter.
+- [ ] Publish manifest tracks every generated HTML artifact and its source Markdown key.
+- [ ] Regeneration invalidates stale HTML when source Markdown checksum/ETag changes.
+- [ ] Download/open affordance in the portal for generated HTML artifacts.
+- [ ] Smoke tests for XSS sanitization, broken links, source checksum drift, and responsive layout.
+
+#### AI-assisted layout
+
+Later in this phase, the ask-wiki agent may propose a page presentation plan:
+
+```json
+{
+  "template": "report",
+  "blocks": [
+    { "type": "summary", "sourceHeading": "Overview" },
+    { "type": "timeline", "sourceHeading": "History" },
+    { "type": "table", "sourceHeading": "Service Matrix" }
+  ]
+}
+```
+
+The renderer owns HTML generation. The model supplies structured intent, not executable markup.
+
+#### Acceptance Criteria
+
+1. A user can generate a static HTML page from one Markdown document without changing the source Markdown.
+2. A user can generate static HTML for a space, including an index page and all navigable docs in that space.
+3. Generated HTML lands under `_site/` and includes a manifest entry mapping it to the canonical Markdown key.
+4. Generated HTML includes canonical source metadata: source key, title, source type, checksum/ETag, generated timestamp, and template version.
+5. Search, chat, and editor read paths continue using Markdown/S3 source documents, not generated HTML.
+6. Unsafe HTML and scripts are stripped or blocked by default.
+7. Regeneration is deterministic for the same Markdown input, template version, and layout metadata.
+8. Stale HTML is detectable when the source Markdown checksum/ETag changes.
+9. Portal UI can open or download the generated HTML artifact.
+10. Visual smoke checks pass for desktop and mobile widths.
+
+#### Out of Scope For This Phase
+
+- Replacing Markdown as the editable source format.
+- Autonomous agent writes of raw HTML.
+- Public publishing workflow with custom domains, CDN invalidation, or anonymous access controls.
+- Full website builder / theme marketplace.
+- JavaScript-heavy interactive apps inside generated pages.
 
 ## Out of scope (forever, or until reconsidered)
 

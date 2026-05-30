@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ICONS } from '@/lib/icons';
 import { DEFAULT_USER_ID } from '@/lib/vault-paths';
+import type { FeatureFlags } from '@/lib/flags';
 
 export type LibraryTab = 'upload' | 'pending' | 'reindex';
 
@@ -15,6 +16,7 @@ type UploadModalProps = {
   onClose: () => void;
   onUploaded: () => void;
   showToast: (msg: string) => void;
+  flags: FeatureFlags;
 };
 
 type FileStatus = 'queued' | 'uploading' | 'indexing' | 'indexed' | 'queued-curate' | 'error';
@@ -50,7 +52,7 @@ function defaultSpace(spaces: string[]): string {
   return spaces.includes('wiki') ? 'wiki' : spaces.find((s) => s !== 'personal') ?? spaces[0] ?? 'wiki';
 }
 
-export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, showToast }: UploadModalProps) {
+export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, showToast, flags }: UploadModalProps) {
   const [tab, setTab] = useState<LibraryTab>(initialTab ?? 'upload');
   const [scope, setScope] = useState<Scope>('shared');
   const [space, setSpace] = useState(defaultSpace(spaces));
@@ -401,16 +403,22 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
 
         {/* Tabs */}
         <div className="upload-tabs">
-          <button className={'upload-tab' + (tab === 'upload' ? ' on' : '')} onClick={() => setTab('upload')}>
-            {ICONS.upload} Upload
-          </button>
-          <button className={'upload-tab' + (tab === 'pending' ? ' on' : '')} onClick={() => setTab('pending')}>
-            {ICONS.spark} Pending
-            {pendingCount > 0 && <span className="upload-tab-badge">{pendingCount}</span>}
-          </button>
-          <button className={'upload-tab' + (tab === 'reindex' ? ' on' : '')} onClick={() => setTab('reindex')}>
-            {ICONS.recent} Re-index
-          </button>
+          {flags.upload && (
+            <button className={'upload-tab' + (tab === 'upload' ? ' on' : '')} onClick={() => setTab('upload')}>
+              {ICONS.upload} Upload
+            </button>
+          )}
+          {flags.curate && (
+            <button className={'upload-tab' + (tab === 'pending' ? ' on' : '')} onClick={() => setTab('pending')}>
+              {ICONS.spark} Pending
+              {pendingCount > 0 && <span className="upload-tab-badge">{pendingCount}</span>}
+            </button>
+          )}
+          {flags.reindex && (
+            <button className={'upload-tab' + (tab === 'reindex' ? ' on' : '')} onClick={() => setTab('reindex')}>
+              {ICONS.recent} Re-index
+            </button>
+          )}
         </div>
 
         {/* Space selector */}

@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { ICONS } from '@/lib/icons';
 import type { Doc, LiveDoc } from '@/lib/types';
+import type { FeatureFlags } from '@/lib/flags';
 
 type DocToolbarProps = {
   doc: Doc;
@@ -11,13 +12,14 @@ type DocToolbarProps = {
   onEdit: () => void;
   onUpload: () => void;
   onStarToggle?: (starred: boolean, etag: string) => void;
+  flags: FeatureFlags;
 };
 
 function isLiveDoc(doc: Doc): doc is LiveDoc {
   return !doc.generated && 'kind' in doc;
 }
 
-export function DocToolbar({ doc, docId, onAskInChat, onEdit, onUpload, onStarToggle }: DocToolbarProps) {
+export function DocToolbar({ doc, docId, onAskInChat, onEdit, onUpload, onStarToggle, flags }: DocToolbarProps) {
   const live = isLiveDoc(doc) ? doc : null;
   const [starred, setStarred] = useState(live?.starred ?? false);
 
@@ -62,16 +64,18 @@ export function DocToolbar({ doc, docId, onAskInChat, onEdit, onUpload, onStarTo
         ))}
       </div>
       {sourceTag}
-      <button
-        className={'btn ghost icon-only' + (starred ? ' starred' : '')}
-        title={starred ? 'Unstar' : 'Star'}
-        onClick={toggleStar}
-        style={starred ? { color: 'var(--accent)' } : undefined}
-      >{ICONS.star}</button>
+      {flags.star && (
+        <button
+          className={'btn ghost icon-only' + (starred ? ' starred' : '')}
+          title={starred ? 'Unstar' : 'Star'}
+          onClick={toggleStar}
+          style={starred ? { color: 'var(--accent)' } : undefined}
+        >{ICONS.star}</button>
+      )}
       <button className="btn ghost icon-only" title="Share">{ICONS.share}</button>
-      <button className="btn" onClick={onUpload}>{ICONS.upload} Upload</button>
-      <button className="btn" onClick={onEdit}>{ICONS.edit} Edit</button>
-      <button className="btn primary" onClick={onAskInChat}>{ICONS.spark} Ask</button>
+      {flags.upload && <button className="btn" onClick={onUpload}>{ICONS.upload} Upload</button>}
+      {flags.editor && <button className="btn" onClick={onEdit}>{ICONS.edit} Edit</button>}
+      {flags.agent && <button className="btn primary" onClick={onAskInChat}>{ICONS.spark} Ask</button>}
       <button className="btn ghost icon-only" title="More">{ICONS.more}</button>
     </div>
   );

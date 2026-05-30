@@ -4,8 +4,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { getDoc, getTree, type ApiDoc, type ApiTreeNode } from '@/lib/api';
 import { ICONS } from '@/lib/icons';
 import { renderMarkdown } from '@/lib/markdown';
-import { type Doc, type GeneratedDoc, type LiveDoc, type SanitizedHtml, type Scope } from '@/lib/types';
+import { type Doc, type LiveDoc, type SanitizedHtml, type Scope } from '@/lib/types';
 import { DEFAULT_THEME, THEME_STORAGE_KEY, type Theme } from '@/lib/theme';
+import type { FeatureFlags } from '@/lib/flags';
 import { ChatFab } from './chat-fab';
 import { ChatPanel } from './chat-panel';
 import { DocReader } from './doc-reader';
@@ -38,45 +39,6 @@ const DEFAULT_PROMPTS = [
 const TOAST_DURATION_MS = 2200;
 const ASK_EVENT = 'wikillm:ask';
 
-function makeId(prefix: string) {
-  return prefix + Date.now();
-}
-
-function shortHash() {
-  return Math.random().toString(16).slice(2, 6) + '…' + Math.random().toString(16).slice(2, 6);
-}
-
-function buildGeneratedDocFromPrompt(prompt: string): { id: string; doc: GeneratedDoc } {
-  const isCreate = /^create a wiki page (about|on|for) /i.test(prompt);
-  const topic = isCreate
-    ? prompt.replace(/^create a wiki page (about|on|for) /i, '').trim()
-    : prompt.replace(/\?$/, '').trim();
-  const title = topic.charAt(0).toUpperCase() + topic.slice(1);
-  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48);
-  const id = makeId('doc-me-gen-');
-  const cites = [
-    { title: 'Engineering handbook', section: '§ 3.2 conventions' },
-    { title: 'Production runbook', section: '§ on-call' },
-    { title: 'Architecture overview', section: '§ services' },
-  ];
-  const answer = `Here's a synthesized overview of **${title.toLowerCase()}**, drawn from the docs your team has indexed.\n\nThis page was generated from a prompt and stitches together the most relevant passages found across the wiki. Edit it freely — your changes won't affect the original sources.`;
-  const doc: GeneratedDoc = {
-    title,
-    path: `saved / ${slug}.md`,
-    s3: `users/amllamojha/authored/personal/saved/${slug}.md`,
-    source: 'personal',
-    updated: 'just now',
-    author: 'you · via assistant',
-    tags: ['generated', 'ai'],
-    checksum: 'sha256:gen-' + shortHash(),
-    generated: true,
-    question: prompt,
-    answer,
-    cites,
-  };
-  return { id, doc };
-}
-
 /** Convert an API doc response into a LiveDoc for DocReader. */
 function apiDocToDoc(api: ApiDoc, html: SanitizedHtml): LiveDoc {
   const source = api.source_type === 'generated'
@@ -87,6 +49,7 @@ function apiDocToDoc(api: ApiDoc, html: SanitizedHtml): LiveDoc {
   return {
     generated: false,
     kind: 'live',
+    id: api.id,
     title: api.title,
     path: api.path,
     s3: api.s3_key,
@@ -105,9 +68,10 @@ function apiDocToDoc(api: ApiDoc, html: SanitizedHtml): LiveDoc {
 type AppShellProps = {
   initialTree: ApiTreeNode[];
   initialDocId?: string;
+  flags: FeatureFlags;
 };
 
-export function AppShell({ initialTree, initialDocId }: AppShellProps) {
+export function AppShell({ initialTree, initialDocId, flags }: AppShellProps) {
   const [scope, setScope] = useState<Scope>('shared');
   const [activeId, setActiveId] = useState<string>(initialDocId ?? '__home');
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -116,12 +80,12 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
   const [toast, setToast] = useState<string | null>(null);
   const [theme, setThemeState] = useState<Theme>(DEFAULT_THEME);
   const [prompts, setPrompts] = useState<string[]>(DEFAULT_PROMPTS);
-  const [generatedDocs, setGeneratedDocs] = useState<Record<string, GeneratedDoc>>({});
   const [liveDoc, setLiveDoc] = useState<LiveDoc | null>(null);
   const [docLoading, setDocLoading] = useState(false);
   const [tree, setTree] = useState<ApiTreeNode[]>(initialTree);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadTab, setUploadTab] = useState<LibraryTab>('upload');
+  const [editorDraft, setEditorDraft] = useState<{ title: string; body: string } | undefined>(undefined);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -208,13 +172,6 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
         setEditing(false);
         return;
       }
-      // Generated docs stay local (no URL)
-      if (generatedDocs[id]) {
-        setActiveId(id);
-        setLiveDoc(null);
-        setEditing(false);
-        return;
-      }
       // Real doc — update URL and fetch client-side
       setActiveId(id);
       setEditing(false);
@@ -229,7 +186,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
         .catch(() => showToast('Failed to load document'))
         .finally(() => setDocLoading(false));
     },
-    [generatedDocs, showToast],
+    [showToast],
   );
 
   const onNewPage = () => {
@@ -240,11 +197,11 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      if (flags.search && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setPaletteOpen((p) => !p);
       }
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'a') {
+      if (flags.agent && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'a') {
         e.preventDefault();
         setChatOpen((o) => !o);
       }
@@ -254,37 +211,25 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [paletteOpen]);
+  }, [paletteOpen, flags.search, flags.agent]);
 
-  const generatedDoc = generatedDocs[activeId];
-  const doc: Doc | undefined = liveDoc ?? generatedDoc;
+  const doc: Doc | undefined = liveDoc ?? undefined;
 
-  const generateFromPrompt = (prompt: string): string => {
-    const { id, doc: gen } = buildGeneratedDocFromPrompt(prompt);
-    setGeneratedDocs((prev) => ({ ...prev, [id]: gen }));
-    return id;
-  };
-
-  const handleAskPrompt = (p: string, opts?: { createPage?: boolean }) => {
-    if (opts?.createPage) {
-      const id = generateFromPrompt(p);
-      setScope('user');
-      setActiveId(id);
-      setEditing(false);
-      showToast('Generated page added to My wiki');
-      return;
-    }
+  const handleAskPrompt = (p: string) => {
     setChatOpen(true);
     window.dispatchEvent(new CustomEvent<string>(ASK_EVENT, { detail: p }));
   };
 
-  const handleSaveFromChat = (page: GeneratedDoc) => {
-    const id = makeId('doc-me-gen-');
-    setGeneratedDocs((prev) => ({ ...prev, [id]: page }));
+  /**
+   * Chat panel's post-hoc Save: open the Editor pre-filled with the agent's
+   * answer + citations as a draft. User reviews/edits and the existing
+   * Editor save flow (Phase 4) writes via POST /api/docs.
+   */
+  const handleDraftFromChat = (draft: { title: string; body: string }) => {
+    setEditorDraft(draft);
     setScope('user');
-    setActiveId(id);
-    setChatOpen(false);
-    showToast(`Saved "${page.title}" to your wiki`);
+    setActiveId('__new');
+    setEditing(true);
   };
 
   const handleEditorSave = (title: string, docId?: string) => {
@@ -304,6 +249,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
         chatOpen={chatOpen}
         theme={theme}
         setTheme={setTheme}
+        flags={flags}
       />
       <Sidebar
         scope={scope}
@@ -315,6 +261,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
         onProcessPending={() => { setUploadTab('pending'); setUploadOpen(true); }}
         onReindex={() => { setUploadTab('reindex'); setUploadOpen(true); }}
         apiTree={tree}
+        flags={flags}
       />
       <main className="main">
         {editing ? (
@@ -322,12 +269,14 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
             doc={activeId === '__new' ? undefined : doc}
             docId={activeId !== '__new' ? activeId : undefined}
             etag={liveDoc?.etag}
-            onClose={() => setEditing(false)}
-            onSave={handleEditorSave}
+            initialDraft={editorDraft}
+            onClose={() => { setEditing(false); setEditorDraft(undefined); }}
+            onSave={(title, id) => { setEditorDraft(undefined); handleEditorSave(title, id); }}
             showToast={showToast}
           />
         ) : HOME_IDS.has(activeId) ? (
           <HomeView
+            view={activeId === '__starred' ? 'starred' : activeId === '__recent' ? 'recent' : 'home'}
             onOpen={openDoc}
             onAsk={() => setChatOpen(true)}
             prompts={prompts}
@@ -336,6 +285,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
             onUpload={() => { setUploadTab('upload'); setUploadOpen(true); }}
             docCount={countTreeDocs(tree)}
             wikiCount={countTreeDocs(tree.filter(n => n.type === 'folder' && n.name.toLowerCase() === 'wiki'))}
+            flags={flags}
           />
         ) : docLoading ? (
           <div className="empty-state">
@@ -354,6 +304,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
             onStarToggle={(starred, etag) => {
               if (liveDoc) setLiveDoc({ ...liveDoc, starred, etag });
             }}
+            flags={flags}
           />
         ) : (
           <div className="empty-state">
@@ -366,21 +317,26 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
         )}
       </main>
 
-      <ChatPanel
-        open={chatOpen}
-        onClose={() => setChatOpen(false)}
-        onOpenDoc={openDoc}
-        onSavePage={handleSaveFromChat}
-        contextDoc={doc}
-      />
+      {flags.agent && (
+        <ChatPanel
+          open={chatOpen}
+          onClose={() => setChatOpen(false)}
+          onOpenDoc={openDoc}
+          onDraftFromChat={handleDraftFromChat}
+          contextDoc={doc}
+        />
+      )}
 
-      {!chatOpen && <ChatFab onClick={() => setChatOpen(true)} />}
+      {flags.agent && !chatOpen && <ChatFab onClick={() => setChatOpen(true)} />}
 
-      <SearchPalette
-        open={paletteOpen}
-        onClose={() => setPaletteOpen(false)}
-        onOpenDoc={openDoc}
-      />
+      {flags.search && (
+        <SearchPalette
+          open={paletteOpen}
+          onClose={() => setPaletteOpen(false)}
+          onOpenDoc={openDoc}
+          scope={scope}
+        />
+      )}
 
       <UploadModal
         open={uploadOpen}
@@ -389,6 +345,7 @@ export function AppShell({ initialTree, initialDocId }: AppShellProps) {
         onClose={() => setUploadOpen(false)}
         onUploaded={() => getTree().then(setTree).catch(() => showToast('Failed to refresh sidebar'))}
         showToast={showToast}
+        flags={flags}
       />
 
       <ToastStack message={toast} />

@@ -1,11 +1,11 @@
-import { objectExists, putObject } from '../s3.js';
+import { getObject, objectExists, putObject } from '../s3.js';
 
 interface InitOpts {
   space?: string;
 }
 
 const CONTEXT_FILES: Record<string, string> = {
-  'AGENTS.md': `---
+  '_system/AGENTS.md': `---
 title: Agents
 type: context
 ---
@@ -17,11 +17,11 @@ AI agents that operate on this vault.
 ## Ingest Agent
 
 Transforms raw source documents into structured wiki pages.
-- Reads from \`<space>/raw/\`
-- Writes structured pages into the same space
-- Maintains per-space and master \`index.md\`
+- Reads from \`raw/\`
+- Writes structured pages into \`generated/<space>/\`
+- Maintains \`_system/indexes/<space>.md\` and \`_system/index.md\`
 `,
-  'WIKI_RULES.md': `---
+  '_system/WIKI_RULES.md': `---
 title: Wiki Rules
 type: context
 ---
@@ -32,7 +32,7 @@ type: context
 
 Every page must have YAML frontmatter with:
 - \`title\` — page title
-- \`source_type\` — \`authored\`, \`uploaded\`, or \`generated\`
+- \`source_type\` — \`authored\`, \`uploaded\`, \`generated\`, or \`personal\`
 - \`updated\` — ISO 8601 timestamp
 
 Generated pages additionally require:
@@ -43,12 +43,13 @@ Generated pages additionally require:
 
 ## Structure
 
-- Spaces are top-level folders
-- Each space has a \`raw/\` subfolder for pending ingest
-- AI proposes page placement within the space
+- Shared raw inputs live in \`raw/\`
+- Generated pages live in \`generated/<space>/\`
+- Human-authored shared pages live in \`authored/<space>/\`
+- User content lives under \`users/<user-id>/\`
 - One topic per page
 `,
-  'SOURCES.md': `---
+  '_system/SOURCES.md': `---
 title: Sources
 type: context
 ---
@@ -60,7 +61,7 @@ Registry of raw source documents and their ingest status.
 | Space | Raw File | Status | Last Ingested |
 |-------|----------|--------|---------------|
 `,
-  'TASKS.md': `---
+  '_system/TASKS.md': `---
 title: Tasks
 type: context
 ---
@@ -76,19 +77,21 @@ type: context
 export async function init(opts: InitOpts = {}) {
   if (opts.space) {
     const space = opts.space;
-    // Create space structure: folder marker + raw/ + index.md
-    const indexKey = `${space}/index.md`;
+    // Create shared-scope space structure for the active provenance-root layout.
+    const indexKey = `_system/indexes/${space}.md`;
     const exists = await objectExists(indexKey);
     if (exists) {
       console.log(`Space "${space}" already exists.`);
       return;
     }
 
-    const indexContent = `---\ntitle: ${space.charAt(0).toUpperCase() + space.slice(1)} Index\ntype: nav\nupdated: ${new Date().toISOString()}\n---\n\n_No pages yet. Upload files to ${space}/raw/ to get started._\n`;
+    const indexContent = `---\ntitle: ${space.charAt(0).toUpperCase() + space.slice(1)} Index\ntype: nav\nupdated: ${new Date().toISOString()}\n---\n\n_No pages yet. Upload files to raw/ and process them into generated/${space}/ to get started._\n`;
     await putObject(indexKey, indexContent);
-    // Create a placeholder in raw/ so the folder exists in S3
-    await putObject(`${space}/raw/.keep`, '');
-    console.log(`✓ Space "${space}" created with raw/ and index.md`);
+    await putObject('raw/.keep', '');
+    await putObject(`generated/${space}/.keep`, '');
+    await putObject(`authored/${space}/.keep`, '');
+    await ensureStructureSpace(space);
+    console.log(`✓ Space "${space}" created with raw/, generated/${space}/, authored/${space}/, and _system index`);
     return;
   }
 
@@ -109,5 +112,60 @@ export async function init(opts: InitOpts = {}) {
     console.log('\nAll context files exist. Nothing to do.');
   } else {
     console.log(`\nCreated ${created} context file(s).`);
+  }
+}
+
+async function ensureStructureSpace(space: string): Promise<void> {
+  const key = '_system/structure.json';
+  let structure: {
+    version: 2;
+    roots: { raw: string; generated: string; authored: string; users: string; system: string };
+    defaultUser: string;
+    users: Array<{
+      id: string;
+      label: string;
+      default: boolean;
+      prefix: string;
+      root: string;
+      roots: { raw: string; generated: string; authored: string; system: string };
+    }>;
+    spaces: Array<{ name: string; label: string; indexed: boolean; generated?: boolean; authored?: boolean }>;
+  };
+  try {
+    const raw = await getObject(key);
+    structure = JSON.parse(raw);
+  } catch {
+    structure = {
+      version: 2,
+      roots: {
+        raw: 'raw/',
+        generated: 'generated/',
+        authored: 'authored/',
+        users: 'users/',
+        system: '_system/',
+      },
+      defaultUser: 'amllamojha',
+      users: [
+        {
+          id: 'amllamojha',
+          label: 'amllamojha',
+          default: true,
+          prefix: 'users/amllamojha/',
+          root: 'users/amllamojha/',
+          roots: {
+            raw: 'users/amllamojha/raw/',
+            generated: 'users/amllamojha/generated/',
+            authored: 'users/amllamojha/authored/',
+            system: 'users/amllamojha/_system/',
+          },
+        },
+      ],
+      spaces: [],
+    };
+  }
+  if (!structure.spaces.some((entry) => entry.name === space)) {
+    const label = space.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    structure.spaces.push({ name: space, label, indexed: true, generated: true, authored: true });
+    await putObject(key, JSON.stringify(structure, null, 2));
   }
 }

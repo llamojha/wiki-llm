@@ -3,14 +3,17 @@
 import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { search as apiSearch, type ApiSearchResult } from '@/lib/api';
 import { ICONS } from '@/lib/icons';
+import { DEFAULT_USER_ID } from '@/lib/vault-paths';
+import type { Scope } from '@/lib/types';
 
 type SearchPaletteProps = {
   open: boolean;
   onClose: () => void;
   onOpenDoc: (id: string) => void;
+  scope: Scope;
 };
 
-export function SearchPalette({ open, onClose, onOpenDoc }: SearchPaletteProps) {
+export function SearchPalette({ open, onClose, onOpenDoc, scope }: SearchPaletteProps) {
   const [q, setQ] = useState('');
   const [results, setResults] = useState<ApiSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -33,7 +36,10 @@ export function SearchPalette({ open, onClose, onOpenDoc }: SearchPaletteProps) 
     if (!term) { setResults([]); return; }
     debounceRef.current = setTimeout(() => {
       setLoading(true);
-      apiSearch(term)
+      apiSearch(term, {
+        scope,
+        ...(scope === 'user' ? { userId: DEFAULT_USER_ID } : {}),
+      })
         .then(setResults)
         .catch(() => setResults([]))
         .finally(() => setLoading(false));

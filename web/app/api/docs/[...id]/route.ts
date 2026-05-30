@@ -12,6 +12,7 @@ import {
 } from '@/lib/s3';
 import { invalidateSearchIndex } from '@/lib/search';
 import { displayPathForKey, sourceTypeFromKey } from '@/lib/vault-paths';
+import { flagGuard } from '@/lib/flags';
 
 type Params = { params: Promise<{ id: string[] }> };
 
@@ -62,6 +63,9 @@ export async function GET(_req: Request, { params }: Params) {
 }
 
 export async function PUT(req: Request, { params }: Params) {
+  const blocked = flagGuard('editor');
+  if (blocked) return blocked;
+
   const { id } = await params;
   const key = decodeURIComponent(id.join('/'));
   const { body: content, etag, title } = (await req.json()) as {
@@ -104,6 +108,9 @@ export async function PUT(req: Request, { params }: Params) {
 }
 
 export async function DELETE(_req: Request, { params }: Params) {
+  const blocked = flagGuard('editor');
+  if (blocked) return blocked;
+
   const { id } = await params;
   const key = decodeURIComponent(id.join('/'));
 

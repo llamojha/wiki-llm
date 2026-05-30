@@ -6,6 +6,7 @@ import { getStructure } from '@/lib/vault-structure';
 import { isDocumentKey } from '@/lib/vault-paths';
 import { resolveScope, type Scope } from '@/lib/scope';
 import { invalidateSearchIndex } from '@/lib/search';
+import { flagGuard } from '@/lib/flags';
 
 const SPACE_RE = /^[a-z0-9][a-z0-9-]*$/;
 
@@ -29,6 +30,9 @@ async function buildLine(key: string): Promise<string> {
 }
 
 export async function POST(req: Request) {
+  const blocked = flagGuard('reindex');
+  if (blocked) return blocked;
+
   const body = await req.json().catch(() => ({}));
   const { space, scope: scopeName, userId } = body as {
     space?: string;

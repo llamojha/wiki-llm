@@ -97,6 +97,13 @@ export class ConcurrencyError extends Error {
   }
 }
 
+export class ObjectAlreadyExistsError extends Error {
+  constructor(message = 'ObjectAlreadyExists') {
+    super(message);
+    this.name = 'ObjectAlreadyExistsError';
+  }
+}
+
 /** Fetch object content and its ETag for optimistic concurrency. */
 export async function getObjectWithETag(
   relKey: string,
@@ -131,6 +138,32 @@ export async function putObject(
     const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
     if (e.name === 'PreconditionFailed' || e.$metadata?.httpStatusCode === 412) {
       throw new ConcurrencyError();
+    }
+    throw err;
+  }
+}
+
+/** Create an object only if it does not already exist. Returns the new ETag. */
+export async function putObjectIfAbsent(
+  relKey: string,
+  body: string,
+): Promise<string> {
+  try {
+    const res = await client().send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: fullKey(relKey),
+        Body: body,
+        ContentType: 'text/markdown; charset=utf-8',
+        IfNoneMatch: '*',
+      }),
+    );
+    if (!res.ETag) throw new Error('S3 PutObject did not return an ETag');
+    return res.ETag;
+  } catch (err: unknown) {
+    const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
+    if (e.name === 'PreconditionFailed' || e.$metadata?.httpStatusCode === 412) {
+      throw new ObjectAlreadyExistsError();
     }
     throw err;
   }

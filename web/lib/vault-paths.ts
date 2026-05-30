@@ -69,7 +69,7 @@ export function isDocumentKey(key: string): boolean {
 
 export function sourceTypeFromKey(key: string): 'generated' | 'authored' | 'personal' {
   if (key.startsWith(`${GENERATED_ROOT}/`) || key.match(/^users\/[^/]+\/generated\//)) return 'generated';
-  if (key.startsWith(personalPrefix())) return 'personal';
+  if (key.match(/^users\/[^/]+\/authored\/personal\//)) return 'personal';
   return 'authored';
 }
 

@@ -69,6 +69,12 @@ export type ProcessedManifest = {
 };
 
 export type CurateEvent = {
+  /**
+   * Versioned web→Lambda contract. Shared-scope legacy events may omit this
+   * for backward compatibility; user-scope events must send version 2 so an
+   * incompatible Lambda fails visibly instead of writing to shared paths.
+   */
+  curateEventVersion?: 2;
   jobId: string;
   space: string;
   files: string[];

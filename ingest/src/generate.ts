@@ -3,7 +3,7 @@ import { getObject } from './s3.js';
 import type { IngestPlan, PagePlanEntry } from './plan.js';
 
 export type GeneratedPage = {
-  key: string; // Full space-relative S3 key (e.g., "articles/people/john-doe.md")
+  key: string; // Relative S3 key (e.g., "generated/articles/people/john-doe.md")
   content: string;
 };
 
@@ -90,7 +90,7 @@ async function generateOne(
   const result = await converseWithTool<PageOutput>(system, userMessage, GENERATE_TOOL);
   const frontmatter = buildFrontmatter(entry, result.tags ?? [], rawKey);
   const content = `${frontmatter}\n\n${result.body}\n`;
-  const key = `${space}/${entry.path}`;
+  const key = `generated/${space}/${entry.path}`;
 
   return { key, content };
 }

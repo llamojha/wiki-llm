@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { type ApiTreeNode } from '@/lib/api';
 import { ICONS } from '@/lib/icons';
 import { type Scope, type TreeNode as TreeNodeType } from '@/lib/types';
+import type { FeatureFlags } from '@/lib/flags';
 import { TreeNode } from './tree-node';
 
 type SidebarProps = {
@@ -16,6 +17,7 @@ type SidebarProps = {
   onProcessPending: () => void;
   onReindex: () => void;
   apiTree?: ApiTreeNode[];
+  flags: FeatureFlags;
 };
 
 const DEFAULT_OPEN_FOLDERS = new Set([
@@ -56,7 +58,7 @@ function filterByScope(nodes: TreeNodeType[], scope: Scope): TreeNodeType[] {
   return nodes.filter((n) => !(n.type === 'folder' && n.id === 'folder:__user'));
 }
 
-export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, onUpload, onProcessPending, onReindex, apiTree }: SidebarProps) {
+export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, onUpload, onProcessPending, onReindex, apiTree, flags }: SidebarProps) {
   const fullTree = apiTree && apiTree.length > 0 ? apiTreeToLocal(apiTree) : [];
   const tree = filterByScope(fullTree, scope);
   const [openFolders, setOpenFolders] = useState<Set<string>>(DEFAULT_OPEN_FOLDERS);
@@ -83,11 +85,11 @@ export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, onUpload
         <span className="nav-icon">{ICONS.home}</span>
         <span className="nav-label">Home</span>
       </button>
-      <button className="nav-row" onClick={() => onOpen('__recent')}>
+      <button className={'nav-row' + (activeId === '__recent' ? ' active' : '')} onClick={() => onOpen('__recent')}>
         <span className="nav-icon">{ICONS.recent}</span>
         <span className="nav-label">Recent</span>
       </button>
-      <button className="nav-row" onClick={() => onOpen('__starred')}>
+      <button className={'nav-row' + (activeId === '__starred' ? ' active' : '')} onClick={() => onOpen('__starred')}>
         <span className="nav-icon">{ICONS.star}</span>
         <span className="nav-label">Starred</span>
       </button>
@@ -95,8 +97,8 @@ export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, onUpload
       <div className="nav-section">
         <span>{scope === 'shared' ? 'Shared spaces' : 'My library'}</span>
         <div style={{ display: 'flex', gap: 2 }}>
-          <button onClick={onUpload} title="Upload Markdown files">{ICONS.upload}</button>
-          <button onClick={onNewPage} title="New page">{ICONS.plus}</button>
+          {flags.upload && <button onClick={onUpload} title="Upload Markdown files">{ICONS.upload}</button>}
+          {flags.editor && <button onClick={onNewPage} title="New page">{ICONS.plus}</button>}
         </div>
       </div>
 
@@ -117,12 +119,16 @@ export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, onUpload
           </div>
         </div>
         <div className="index-card-actions">
-          <button className="index-card-btn" onClick={onProcessPending} title="Curate raw files in S3">
-            {ICONS.spark} Process pending
-          </button>
-          <button className="index-card-btn" onClick={onReindex} title="Re-index everything">
-            {ICONS.recent} Re-index
-          </button>
+          {flags.curate && (
+            <button className="index-card-btn" onClick={onProcessPending} title="Curate raw files in S3">
+              {ICONS.spark} Process pending
+            </button>
+          )}
+          {flags.reindex && (
+            <button className="index-card-btn" onClick={onReindex} title="Re-index everything">
+              {ICONS.recent} Re-index
+            </button>
+          )}
         </div>
       </div>
     </aside>

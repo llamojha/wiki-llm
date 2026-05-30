@@ -1,5 +1,6 @@
 import { ICONS } from '@/lib/icons';
 import type { Doc, LiveDoc } from '@/lib/types';
+import type { FeatureFlags } from '@/lib/flags';
 import { DocToolbar } from './doc-toolbar';
 import { GeneratedDocReader } from './generated-doc-reader';
 import { TOC } from './toc';
@@ -11,20 +12,21 @@ type DocReaderProps = {
   onEdit: () => void;
   onUpload: () => void;
   onStarToggle?: (starred: boolean, etag: string) => void;
+  flags: FeatureFlags;
 };
 
 function isLiveDoc(doc: Doc): doc is LiveDoc {
   return !doc.generated && 'kind' in doc;
 }
 
-export function DocReader({ doc, docId, onAskInChat, onEdit, onUpload, onStarToggle }: DocReaderProps) {
+export function DocReader({ doc, docId, onAskInChat, onEdit, onUpload, onStarToggle, flags }: DocReaderProps) {
   if (doc.generated) {
-    return <GeneratedDocReader doc={doc} onEdit={onEdit}/>;
+    return <GeneratedDocReader doc={doc} onEdit={onEdit} flags={flags}/>;
   }
   const liveDoc = isLiveDoc(doc) ? doc : null;
 
   return <>
-    <DocToolbar doc={doc} docId={docId} onAskInChat={onAskInChat} onEdit={onEdit} onUpload={onUpload} onStarToggle={onStarToggle}/>
+    <DocToolbar doc={doc} docId={docId} onAskInChat={onAskInChat} onEdit={onEdit} onUpload={onUpload} onStarToggle={onStarToggle} flags={flags}/>
     <div className="doc-wrap">
       <article className="doc">
         <div className="doc-meta">

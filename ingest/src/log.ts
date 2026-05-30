@@ -10,21 +10,22 @@ export async function appendLog(
   path: string,
   detail: string,
 ): Promise<void> {
+  const logKey = '_system/log.md';
   let existing = '';
   try {
-    existing = await getObject('log.md');
+    existing = await getObject(logKey);
   } catch {
     // log.md doesn't exist yet
   }
 
   // Rotate if too large
   if (existing.length > MAX_LOG_SIZE) {
-    const archiveKey = `log-${new Date().toISOString().slice(0, 10)}.md`;
+    const archiveKey = `_system/log-${new Date().toISOString().slice(0, 10)}.md`;
     await putObject(archiveKey, existing);
     existing = '';
   }
 
   const line = `- ${new Date().toISOString()} | ${action} | ${path} | ${detail}`;
   const content = existing ? `${existing.trimEnd()}\n${line}\n` : `${line}\n`;
-  await putObject('log.md', content);
+  await putObject(logKey, content);
 }

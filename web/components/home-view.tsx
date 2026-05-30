@@ -2,22 +2,37 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { ICONS } from '@/lib/icons';
+import type { FeatureFlags } from '@/lib/flags';
+
+type HomeMode = 'home' | 'recent' | 'starred';
 
 type HomeViewProps = {
+  view: HomeMode;
   onOpen: (id: string) => void;
   onAsk: () => void;
-  onAskPrompt: (prompt: string, opts?: { createPage?: boolean }) => void;
+  onAskPrompt: (prompt: string) => void;
   onUpload: () => void;
   prompts: string[];
   setPrompts: (next: string[]) => void;
   docCount?: number;
   wikiCount?: number;
+  flags: FeatureFlags;
 };
 
 type Activity = { kind: 'index' | 'gen' | 'edit' | 'share'; text: ReactNode; time: string };
+type DocSummary = {
+  id: string;
+  title: string;
+  path: string;
+  source_type: string;
+  updated: string;
+  starred: boolean;
+  snippet: string;
+};
 
-export function HomeView({ onOpen, onAsk, onAskPrompt, onUpload, prompts, setPrompts, docCount = 0, wikiCount = 0 }: HomeViewProps) {
-  const recentDocs: { id: string; title: string; path: string; source: string; updated: string }[] = [];
+export function HomeView({ view, onOpen, onAsk, onAskPrompt, onUpload, prompts, setPrompts, docCount = 0, wikiCount = 0, flags }: HomeViewProps) {
+  const [listedDocs, setListedDocs] = useState<DocSummary[]>([]);
+  const [listLoading, setListLoading] = useState(false);
   const stats = [
     { label: 'Indexed docs', value: String(docCount), sub: 'in vault' },
     { label: 'You authored', value: String(wikiCount), sub: 'in authored/' },
@@ -37,7 +52,24 @@ export function HomeView({ onOpen, onAsk, onAskPrompt, onUpload, prompts, setPro
     setToday(new Date().toDateString());
   }, []);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    const listView = view === 'starred' ? 'starred' : 'recent';
+    setListLoading(true);
+    fetch(`/api/docs?view=${listView}&limit=12`, { signal: controller.signal })
+      .then((res) => res.ok ? res.json() : [])
+      .then((docs: DocSummary[]) => setListedDocs(docs))
+      .catch(() => {
+        if (!controller.signal.aborted) setListedDocs([]);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setListLoading(false);
+      });
+    return () => controller.abort();
+  }, [view]);
+
   const activity: Activity[] = [];
+  const listTitle = view === 'starred' ? 'Starred' : 'Continue reading';
 
   return <>
     <div className="doc-toolbar">
@@ -56,6 +88,7 @@ export function HomeView({ onOpen, onAsk, onAskPrompt, onUpload, prompts, setPro
       </div>
 
       {/* Hero ask-the-wiki card */}
+      {flags.agent && (
       <div className="ask-hero">
         <div className="ask-hero-bg"></div>
         <div className="ask-hero-inner">
@@ -72,14 +105,16 @@ export function HomeView({ onOpen, onAsk, onAskPrompt, onUpload, prompts, setPro
             <span className="kbd" style={{ marginLeft: 'auto' }}>⌘⇧A</span>
           </button>
           <div className="ask-hero-secondary">
-            <button className="ask-hero-secondary-btn" onClick={onUpload}>
-              {ICONS.upload}
-              <div>
-                <div className="ash-title">Upload Markdown</div>
-                <div className="ash-sub">Drop .md files — indexed in seconds</div>
-              </div>
-            </button>
-            <button className="ask-hero-secondary-btn" onClick={() => onAskPrompt('Create a wiki page about our deployment process', { createPage: true })}>
+            {flags.upload && (
+              <button className="ask-hero-secondary-btn" onClick={onUpload}>
+                {ICONS.upload}
+                <div>
+                  <div className="ash-title">Upload Markdown</div>
+                  <div className="ash-sub">Drop .md files — indexed in seconds</div>
+                </div>
+              </button>
+            )}
+            <button className="ask-hero-secondary-btn" onClick={() => onAskPrompt('Create a wiki page about our deployment process')}>
               {ICONS.spark}
               <div>
                 <div className="ash-title">Generate a page</div>
@@ -104,7 +139,7 @@ export function HomeView({ onOpen, onAsk, onAskPrompt, onUpload, prompts, setPro
                   <button
                     className="ask-hero-chip-go"
                     title={isCreate ? 'Generate page' : 'Ask'}
-                    onClick={() => onAskPrompt(p, { createPage: isCreate })}
+                    onClick={() => onAskPrompt(p)}
                   >{isCreate ? ICONS.spark : ICONS.arrow}</button>
                 </div>
               );
@@ -112,6 +147,7 @@ export function HomeView({ onOpen, onAsk, onAskPrompt, onUpload, prompts, setPro
           </div>
         </div>
       </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 36 }}>
         {stats.map(s => (
@@ -128,9 +164,17 @@ export function HomeView({ onOpen, onAsk, onAskPrompt, onUpload, prompts, setPro
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 24 }}>
         <section>
-          <h2 style={{ fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--fg-2)', margin: '0 0 12px' }}>Continue reading</h2>
+          <h2 style={{ fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--fg-2)', margin: '0 0 12px' }}>{listTitle}</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1, border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden', background: 'var(--bg-1)' }}>
-            {recentDocs.map(d => (
+            {listLoading && (
+              <div style={{ padding: '14px 16px', color: 'var(--fg-3)', fontSize: 12 }}>Loading…</div>
+            )}
+            {!listLoading && listedDocs.length === 0 && (
+              <div style={{ padding: '14px 16px', color: 'var(--fg-3)', fontSize: 12 }}>
+                {view === 'starred' ? 'No starred documents yet.' : 'No recent documents found.'}
+              </div>
+            )}
+            {!listLoading && listedDocs.map(d => (
               <button key={d.id} onClick={() => onOpen(d.id)}
                 style={{
                   display: 'grid', gridTemplateColumns: '24px 1fr auto', gap: 12, alignItems: 'center',
@@ -145,8 +189,9 @@ export function HomeView({ onOpen, onAsk, onAskPrompt, onUpload, prompts, setPro
                   <div style={{ fontSize: 11.5, color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>{d.path}</div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  {d.source === 'shared' && <span className="tag-chip shared">shared</span>}
-                  {d.source === 'personal' && <span className="tag-chip personal">private</span>}
+                  {d.source_type === 'generated' && <span className="tag-chip generated">generated</span>}
+                  {d.source_type === 'personal' && <span className="tag-chip personal">private</span>}
+                  {d.source_type === 'authored' && <span className="tag-chip shared">shared</span>}
                   <span style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: 'var(--font-mono)' }}>{d.updated}</span>
                   <span style={{ color: 'var(--fg-3)' }}>{ICONS.arrow}</span>
                 </div>
@@ -172,15 +217,19 @@ export function HomeView({ onOpen, onAsk, onAskPrompt, onUpload, prompts, setPro
             ))}
           </div>
 
-          <h2 style={{ fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--fg-2)', margin: '24px 0 12px' }}>Try asking</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {askPrompts.map(q => (
-              <button key={q} className="btn ghost" onClick={() => onAskPrompt(q)} style={{ justifyContent: 'flex-start', height: 'auto', padding: '8px 10px', fontWeight: 400, color: 'var(--fg-1)' }}>
-                <span style={{ color: 'var(--accent)' }}>{ICONS.spark}</span>
-                <span style={{ textAlign: 'left' }}>{q}</span>
-              </button>
-            ))}
-          </div>
+          {flags.agent && (
+            <>
+              <h2 style={{ fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--fg-2)', margin: '24px 0 12px' }}>Try asking</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {askPrompts.map(q => (
+                  <button key={q} className="btn ghost" onClick={() => onAskPrompt(q)} style={{ justifyContent: 'flex-start', height: 'auto', padding: '8px 10px', fontWeight: 400, color: 'var(--fg-1)' }}>
+                    <span style={{ color: 'var(--accent)' }}>{ICONS.spark}</span>
+                    <span style={{ textAlign: 'left' }}>{q}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </section>
       </div>
     </div>

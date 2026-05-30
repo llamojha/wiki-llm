@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Vaultmark Interactive Demo</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0f16;
+        --panel: #111820;
+        --panel-2: #151e2a;
+        --line: #2a3442;
+        --text: #edf2f7;
+        --muted: #9aa6b2;
+        --accent: #49a3ff;
+        --green: #48c78e;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          Inter, IBM Plex Sans, ui-sans-serif, system-ui, -apple-system,
+          BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      button {
+        font: inherit;
+      }
+
+      .app {
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: 320px 1fr;
+      }
+
+      .rail {
+        border-right: 1px solid var(--line);
+        background: var(--panel);
+        padding: 28px 22px;
+        display: flex;
+        flex-direction: column;
+        gap: 22px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .logo {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, #49a3ff, #8ee6b8);
+        color: #061018;
+        font-weight: 800;
+      }
+
+      h1,
+      h2,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: 21px;
+        letter-spacing: 0;
+      }
+
+      .sub {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.4;
+      }
+
+      .steps {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .step {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 30px 1fr;
+        gap: 10px;
+        align-items: center;
+        border: 1px solid transparent;
+        border-radius: 10px;
+        background: transparent;
+        color: var(--muted);
+        text-align: left;
+        padding: 10px;
+        cursor: pointer;
+      }
+
+      .step:hover {
+        background: #172131;
+        color: var(--text);
+      }
+
+      .step.active {
+        border-color: #2f75b7;
+        background: #122840;
+        color: var(--text);
+      }
+
+      .num {
+        width: 30px;
+        height: 30px;
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
+        background: #202b38;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .step.active .num {
+        background: var(--accent);
+        color: #061018;
+      }
+
+      .step-title {
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .step-body {
+        margin-top: 2px;
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.35;
+      }
+
+      .controls {
+        margin-top: auto;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .control {
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: var(--panel-2);
+        color: var(--text);
+        padding: 10px 12px;
+        cursor: pointer;
+      }
+
+      .control:hover {
+        border-color: #3b8bd8;
+      }
+
+      .stage {
+        min-width: 0;
+        padding: 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+
+      .topline {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+      }
+
+      .eyebrow {
+        color: var(--green);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .headline {
+        margin-top: 6px;
+        font-size: 28px;
+        line-height: 1.1;
+        letter-spacing: 0;
+      }
+
+      .caption {
+        max-width: 760px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .hint {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 8px 12px;
+        color: var(--muted);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .viewport {
+        position: relative;
+        width: min(100%, 1440px);
+        margin: 0 auto;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        overflow: hidden;
+        background: #05080d;
+        box-shadow: 0 28px 90px rgba(0, 0, 0, 0.32);
+      }
+
+      .screen {
+        display: block;
+        width: 100%;
+        aspect-ratio: 1440 / 900;
+        object-fit: contain;
+      }
+
+      .hotspot {
+        position: absolute;
+        left: var(--x);
+        top: var(--y);
+        transform: translate(-50%, -50%);
+        border: 0;
+        background: transparent;
+        padding: 0;
+        cursor: pointer;
+      }
+
+      .hotspot-dot {
+        width: 42px;
+        height: 42px;
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
+        background: rgba(73, 163, 255, 0.22);
+        outline: 2px solid rgba(73, 163, 255, 0.75);
+        box-shadow: 0 0 0 10px rgba(73, 163, 255, 0.11);
+        color: white;
+        animation: pulse 1.6s ease-in-out infinite;
+      }
+
+      .hotspot-label {
+        position: absolute;
+        left: 50%;
+        top: 52px;
+        transform: translateX(-50%);
+        min-width: 150px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: rgba(10, 15, 22, 0.94);
+        color: var(--text);
+        padding: 7px 9px;
+        font-size: 12px;
+        font-weight: 700;
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .hotspot:hover .hotspot-label,
+      .hotspot:focus-visible .hotspot-label {
+        opacity: 1;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.08);
+        }
+      }
+
+      @media (max-width: 940px) {
+        .app {
+          grid-template-columns: 1fr;
+        }
+
+        .rail {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+
+        .steps {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .topline {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <aside class="rail">
+        <div class="brand">
+          <div class="logo">V</div>
+          <div>
+            <h1>Vaultmark Demo</h1>
+            <p class="sub">Click through the real captured app screens.</p>
+          </div>
+        </div>
+
+        <div class="steps" id="steps"></div>
+
+        <div class="controls">
+          <button class="control" id="prev">Previous</button>
+          <button class="control" id="next">Next</button>
+        </div>
+      </aside>
+
+      <section class="stage">
+        <div class="topline">
+          <div>
+            <div class="eyebrow" id="eyebrow"></div>
+            <h2 class="headline" id="headline"></h2>
+            <p class="caption" id="caption"></p>
+          </div>
+          <div class="hint">Click blue targets or use arrow keys</div>
+        </div>
+
+        <div class="viewport" id="viewport">
+          <img class="screen" id="screen" src="../public/screens/home.png" alt="Vaultmark screen" />
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const screens = [
+        {
+          id: 'home',
+          title: 'Start in the vault home',
+          eyebrow: 'Populated workspace',
+          caption: 'Vaultmark loads the real S3-backed vault: indexed counts, authored pages, shared spaces, and recent generated docs.',
+          image: '../public/screens/home.png',
+          hotspots: [
+            { x: '91%', y: '3%', label: 'Open Ask-Wiki', next: 'ask' },
+            { x: '49%', y: '44%', label: 'Ask from home', next: 'ask' },
+            { x: '40%', y: '50%', label: 'Upload Markdown', next: 'upload' },
+            { x: '48%', y: '3%', label: 'Search docs', next: 'search' },
+          ],
+        },
+        {
+          id: 'ask',
+          title: 'Open Ask-Wiki',
+          eyebrow: 'AI assistant',
+          caption: 'The chat panel is a real app state with scope controls, context, suggestions, and a save-as-page path.',
+          image: '../public/screens/ask-wiki.png',
+          hotspots: [
+            { x: '88%', y: '93%', label: 'Send a question', next: 'search' },
+            { x: '78%', y: '35%', label: 'Save as page', next: 'editor' },
+            { x: '69%', y: '14%', label: 'Switch scope', next: 'ask' },
+          ],
+        },
+        {
+          id: 'upload',
+          title: 'Upload Markdown',
+          eyebrow: 'Ingest flow',
+          caption: 'The library modal lets users send Markdown to raw curation or authored storage, scoped to shared or personal content.',
+          image: '../public/screens/upload.png',
+          hotspots: [
+            { x: '50%', y: '53%', label: 'Choose Markdown', next: 'upload' },
+            { x: '49%', y: '31%', label: 'Pick a space', next: 'upload' },
+            { x: '68%', y: '64%', label: 'Upload file', next: 'home' },
+          ],
+        },
+        {
+          id: 'search',
+          title: 'Search real vault docs',
+          eyebrow: 'Command palette',
+          caption: 'Search results come from the populated vault and show matching generated and authored Markdown pages.',
+          image: '../public/screens/search.png',
+          hotspots: [
+            { x: '49%', y: '21%', label: 'Open first result', next: 'home' },
+            { x: '35%', y: '15%', label: 'Change query', next: 'search' },
+          ],
+        },
+        {
+          id: 'editor',
+          title: 'Review and save a page',
+          eyebrow: 'Personal wiki',
+          caption: 'The editor keeps Markdown visible beside a preview so AI-assisted drafts remain user-reviewed before writes.',
+          image: '../public/screens/editor.png',
+          hotspots: [
+            { x: '95%', y: '8%', label: 'Save page', next: 'home' },
+            { x: '32%', y: '22%', label: 'Edit Markdown', next: 'editor' },
+            { x: '66%', y: '22%', label: 'Preview output', next: 'editor' },
+          ],
+        },
+      ];
+
+      const byId = Object.fromEntries(screens.map((screen, index) => [screen.id, { screen, index }]));
+      let index = 0;
+
+      const stepsEl = document.getElementById('steps');
+      const viewportEl = document.getElementById('viewport');
+      const screenEl = document.getElementById('screen');
+      const eyebrowEl = document.getElementById('eyebrow');
+      const headlineEl = document.getElementById('headline');
+      const captionEl = document.getElementById('caption');
+
+      function renderSteps() {
+        stepsEl.innerHTML = '';
+        screens.forEach((screen, i) => {
+          const button = document.createElement('button');
+          button.className = `step${i === index ? ' active' : ''}`;
+          button.type = 'button';
+          button.innerHTML = `
+            <span class="num">${i + 1}</span>
+            <span>
+              <span class="step-title">${screen.title}</span>
+              <span class="step-body">${screen.eyebrow}</span>
+            </span>
+          `;
+          button.addEventListener('click', () => go(i));
+          stepsEl.appendChild(button);
+        });
+      }
+
+      function renderHotspots(screen) {
+        viewportEl.querySelectorAll('.hotspot').forEach((el) => el.remove());
+        for (const spot of screen.hotspots) {
+          const button = document.createElement('button');
+          button.className = 'hotspot';
+          button.type = 'button';
+          button.style.setProperty('--x', spot.x);
+          button.style.setProperty('--y', spot.y);
+          button.setAttribute('aria-label', spot.label);
+          button.innerHTML = `
+            <span class="hotspot-dot">+</span>
+            <span class="hotspot-label">${spot.label}</span>
+          `;
+          button.addEventListener('click', () => {
+            const target = byId[spot.next];
+            if (target) go(target.index);
+          });
+          viewportEl.appendChild(button);
+        }
+      }
+
+      function go(nextIndex) {
+        index = (nextIndex + screens.length) % screens.length;
+        const screen = screens[index];
+        screenEl.src = screen.image;
+        screenEl.alt = `Vaultmark ${screen.title}`;
+        eyebrowEl.textContent = screen.eyebrow;
+        headlineEl.textContent = screen.title;
+        captionEl.textContent = screen.caption;
+        renderSteps();
+        renderHotspots(screen);
+      }
+
+      document.getElementById('prev').addEventListener('click', () => go(index - 1));
+      document.getElementById('next').addEventListener('click', () => go(index + 1));
+      window.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowRight') go(index + 1);
+        if (event.key === 'ArrowLeft') go(index - 1);
+      });
+
+      go(0);
+    </script>
+  </body>
+</html>

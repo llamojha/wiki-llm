@@ -7,6 +7,7 @@ import {
 } from '@/lib/index-gen';
 import { invalidateSearchIndex } from '@/lib/search';
 import { resolveScope, type Scope } from '@/lib/scope';
+import { flagGuard } from '@/lib/flags';
 
 /**
  * Post-ingest finalization step.
@@ -20,6 +21,9 @@ import { resolveScope, type Scope } from '@/lib/scope';
  * the current job without re-running the regeneration.
  */
 export async function POST(req: Request) {
+  const blocked = flagGuard('curate');
+  if (blocked) return blocked;
+
   const body = await req.json().catch(() => ({}));
   const { jobId, scope: scopeName, userId } = body as {
     jobId?: string;

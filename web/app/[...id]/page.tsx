@@ -1,6 +1,7 @@
 import { AppShell } from '@/components/app-shell';
 import { type ApiTreeNode } from '@/lib/api';
 import { getTree } from '@/lib/vault-tree';
+import { FLAGS } from '@/lib/flags';
 
 export default async function DocPage({
   params,
@@ -17,5 +18,5 @@ export default async function DocPage({
     // S3 not reachable
   }
 
-  return <AppShell initialTree={initialTree} initialDocId={docId} />;
+  return <AppShell initialTree={initialTree} initialDocId={docId} flags={FLAGS} />;
 }
