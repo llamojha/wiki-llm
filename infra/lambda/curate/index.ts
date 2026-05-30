@@ -4,7 +4,8 @@ import type { CurateEvent, FileStage, JobState } from './types.js';
 import { processSource, loadPlacementHints } from './ingest.js';
 import { getJob, updateJob } from './job.js';
 import { getGeneratedSpace } from './structure.js';
-import { resolveScope } from './scope.js';
+import { resolveScope, type ScopePaths } from './scope.js';
+import { runSynthesis } from './synthesis.js';
 
 const TIMEOUT_BUFFER_MS = 30_000;
 const DEFAULT_CONCURRENCY = Math.max(
@@ -51,6 +52,12 @@ export async function handler(event: CurateEvent, context: Context): Promise<voi
     scope: event.scope ?? 'shared',
     userId: event.userId,
   });
+
+  // Dispatch on action. Default 'EXTRACT' keeps existing invocations unchanged.
+  if (event.action === 'SYNTHESIZE') {
+    await runSynthesisJob(event, scope);
+    return;
+  }
 
   if (event.scope === 'user' && event.curateEventVersion !== 2) {
     const message = 'Unsupported curate event contract for user scope. Deploy the scope-aware web and Lambda together.';
@@ -200,4 +207,46 @@ export async function handler(event: CurateEvent, context: Context): Promise<voi
     phase: undefined,
     chainedAt: undefined,
   });
+
+  // Opt-in auto-chain into synthesis once the extraction batch is fully done.
+  // Per specs/synthesis-pipeline.md — gated by the caller's FEATURE_CURATE_AUTOSYNTH
+  // flag, which the web route propagates via event.autoSynthesize.
+  if (event.autoSynthesize) {
+    const synthJobId = `synth-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    console.log(`[${jobId}] autoSynthesize=on — chaining synthesis job ${synthJobId}`);
+    await lambdaClient.send(new InvokeCommand({
+      FunctionName: context.functionName,
+      InvocationType: InvocationType.Event,
+      Payload: new TextEncoder().encode(JSON.stringify({
+        curateEventVersion: 2,
+        action: 'SYNTHESIZE',
+        jobId: synthJobId,
+        space,
+        files: [],
+        bucket,
+        prefix,
+        scope: event.scope ?? 'shared',
+        userId: event.userId,
+      } satisfies CurateEvent)),
+    }));
+  }
+}
+
+/**
+ * Synthesis dispatch — see specs/synthesis-pipeline.md. Runs to completion in
+ * one Lambda invocation (no chaining today: with the current ~30-cluster
+ * expectation each call is well under the 5-minute timeout). If clustering
+ * scales past that, this is the place to add the same chain-on-timeout logic
+ * the extraction path uses.
+ */
+async function runSynthesisJob(event: CurateEvent, scope: ScopePaths): Promise<void> {
+  const { jobId, space, bucket, prefix } = event;
+  console.log(`[${jobId}] SYNTHESIZE scope=${scope.scope}${scope.userId ? `:${scope.userId}` : ''} space=${space}`);
+  try {
+    const stats = await runSynthesis(bucket, prefix, scope, space, jobId);
+    console.log(`[${jobId}] synthesis stats: ${JSON.stringify(stats)}`);
+  } catch (err) {
+    console.error(`[${jobId}] synthesis failed:`, err);
+    throw err;
+  }
 }
