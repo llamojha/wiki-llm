@@ -115,4 +115,12 @@ export type SourceCard = {
   suggestedSpaces: string[];
   suggestedPages: string[];
   tags: string[];
+  /**
+   * Sub-folder under `sources/` where the rendered page lives. Set deterministically
+   * by `placementFromRawKey(rawKey)` in the ingest pipeline, not by the LLM.
+   * Optional because legacy cards written before this field exists may lack it;
+   * readers should treat `undefined` as "card pre-dates foldering" and re-derive
+   * from `rawKey` if a path is needed.
+   */
+  placement?: string;
 };

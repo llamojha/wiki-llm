@@ -54,6 +54,18 @@ export async function GET(req: Request) {
   // UI's "Pending: N" badge doesn't lie about re-uploaded files (it gates
   // the Process batch button via disabled={count === 0}).
   const pending = await resolvePending(keys, manifest);
+
+  // Most-recent processedAt for the queried space, used by the sidebar's
+  // "Last curated <relative>" badge. Null when nothing has been processed yet.
+  let lastProcessedAt: string | null = null;
+  for (const entry of Object.values(manifest.files)) {
+    if (entry.space !== policy.space) continue;
+    if (!entry.processedAt) continue;
+    if (!lastProcessedAt || entry.processedAt > lastProcessedAt) {
+      lastProcessedAt = entry.processedAt;
+    }
+  }
+
   return NextResponse.json({
     space: policy.space,
     count: pending.length,
@@ -61,5 +73,6 @@ export async function GET(req: Request) {
     total: keys.length,
     scope: scope.scope,
     userId: scope.userId,
+    lastProcessedAt,
   });
 }

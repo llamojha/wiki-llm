@@ -56,6 +56,16 @@ export default defineConfig({
         VAULT_PREFIX: '',
         VAULT_REGION: 'us-east-1',
         VAULT_ID: 'default',
+        // The default code profile ships most features OFF (see lib/flags.ts).
+        // The e2e suite exercises every feature, so turn them all ON here.
+        FEATURE_AGENT: 'on',
+        FEATURE_UPLOAD: 'on',
+        FEATURE_CURATE: 'on',
+        FEATURE_REINDEX: 'on',
+        FEATURE_EDITOR: 'on',
+        FEATURE_SEARCH: 'on',
+        FEATURE_STAR: 'on',
+        FEATURE_PUBLISHING: 'on',
       },
     },
     {

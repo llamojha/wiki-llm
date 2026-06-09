@@ -3,7 +3,7 @@ import { InvokeCommand, InvocationType, LambdaClient } from '@aws-sdk/client-lam
 import type { CurateEvent, FileStage, JobState } from './types.js';
 import { processSource, loadPlacementHints } from './ingest.js';
 import { getJob, updateJob } from './job.js';
-import { getGeneratedSpace } from './structure.js';
+import { getGeneratedSpace, getGeneratedSpaces } from './structure.js';
 import { resolveScope, type ScopePaths } from './scope.js';
 import { runSynthesis } from './synthesis.js';
 
@@ -81,9 +81,10 @@ export async function handler(event: CurateEvent, context: Context): Promise<voi
 
   // Pass A — load placement hints **once** per invocation, not per file.
   const ingestSpace = await getGeneratedSpace(bucket, prefix);
+  const generatedSpaces = await getGeneratedSpaces(bucket, prefix);
   const hintsStart = Date.now();
   const hints = await loadPlacementHints(bucket, prefix, scope, ingestSpace);
-  console.log(`[${jobId}] Loaded ${hints.length} placement hint(s) in ${Date.now() - hintsStart}ms`);
+  console.log(`[${jobId}] Loaded ${hints.length} placement hint(s) in ${Date.now() - hintsStart}ms; allowed spaces=[${generatedSpaces.join(',')}]`);
 
   // All job-JSON writes flow through this queue (Pass B).
   const enqueueWrite = createWriteQueue();
@@ -125,7 +126,7 @@ export async function handler(event: CurateEvent, context: Context): Promise<voi
     });
 
     try {
-      const pages = await processSource(bucket, prefix, space, rawKey, hints, scope, jobId, reportStage, enqueueWrite);
+      const pages = await processSource(bucket, prefix, space, rawKey, hints, scope, generatedSpaces, jobId, reportStage, enqueueWrite);
       console.log(`[${jobId}] Done ${rawKey}: ${pages.length} page(s) written`);
       const finishedAt = new Date().toISOString();
       await enqueueWrite(async () => {

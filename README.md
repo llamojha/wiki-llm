@@ -111,7 +111,30 @@ Deployment configuration is intentionally kept out of this repo to support self-
 
 **Vercel:** Connect the repo, set env vars in the dashboard, deploy. Zero config.
 
-**Docker:** `docker build -t vaultmark web/` — pass env vars via `--env-file`.
+**Docker:** the app is a pnpm workspace, so the image **must be built from the repo root** (the lockfile lives there), not from `web/`:
+
+```bash
+# Build (Dockerfile lives in web/, context is the repo root)
+docker build -f web/Dockerfile -t vaultmark .
+
+# Run — pass vault config + AWS credentials via env
+docker run -p 3000:3000 \
+  -e VAULT_BUCKET=your-bucket -e VAULT_REGION=eu-central-1 \
+  -e AWS_ACCESS_KEY_ID=... -e AWS_SECRET_ACCESS_KEY=... \
+  vaultmark
+# or load a file: docker run -p 3000:3000 --env-file web/.env.local vaultmark
+```
+
+Or use Compose, which builds from the root and wires env from `infra/.env`:
+
+```bash
+cp infra/.env.example infra/.env   # fill in vault + AWS values
+docker compose -f infra/docker-compose.yml up --build
+```
+
+The image ships only the `web` app (the `ingest` and `video` workspace packages are excluded) as a standalone Next.js server running as a non-root user on port 3000. The baked-in feature profile is agent-on / ingest-processing-off; override any feature with its `FEATURE_*` env var.
+
+> **Note:** Vaultmark has no built-in authentication. Only expose port 3000 on trusted networks — put a reverse proxy with auth in front before any public deployment.
 
 Required environment variables are documented in `infra/.env.example`.
 
