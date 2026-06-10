@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { IBM_Plex_Sans, IBM_Plex_Serif, JetBrains_Mono } from 'next/font/google';
-import { THEME_BOOTSTRAP_SCRIPT } from '@/lib/theme';
+import { themeBootstrapScript } from '@/lib/theme';
+import { getThemeRegistry } from '@/lib/theme-registry';
 import './globals.css';
 
 const sans = IBM_Plex_Sans({
@@ -43,10 +44,23 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const { themes, defaultTheme, css } = getThemeRegistry();
   return (
-    <html lang="en" data-theme="dark" className={`${sans.variable} ${serif.variable} ${mono.variable}`}>
+    <html
+      lang="en"
+      data-theme={defaultTheme.id}
+      data-base={defaultTheme.base === 'dark' ? 'dark' : undefined}
+      className={`${sans.variable} ${serif.variable} ${mono.variable}`}
+      // The bootstrap script swaps data-theme/data-base before hydration
+      // when the visitor has a stored preference.
+      suppressHydrationWarning
+    >
       <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
+        {/* Theme plugin CSS comes from operator-controlled files on disk
+            (lib/theme-registry.ts), not user content; `</` is neutralized
+            before inlining so the block cannot be closed early. */}
+        {css && <style dangerouslySetInnerHTML={{ __html: css }} />}
+        <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript(themes) }} />
       </head>
       <body>{children}</body>
     </html>

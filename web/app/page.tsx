@@ -2,6 +2,7 @@ import { AppShell } from '@/components/app-shell';
 import { type ApiTreeNode } from '@/lib/api';
 import { getTree } from '@/lib/vault-tree';
 import { FLAGS } from '@/lib/flags';
+import { getThemeRegistry } from '@/lib/theme-registry';
 
 // Render per-request, never prerender. The tree comes from S3 and the flags
 // from the runtime environment — a build-time snapshot would bake in whatever
@@ -16,5 +17,6 @@ export default async function Home() {
   } catch {
     // S3 not reachable — AppShell renders with empty tree
   }
-  return <AppShell initialTree={initialTree} flags={FLAGS} />;
+  const { themes, defaultTheme } = getThemeRegistry();
+  return <AppShell initialTree={initialTree} flags={FLAGS} themes={themes} defaultTheme={defaultTheme.id} />;
 }

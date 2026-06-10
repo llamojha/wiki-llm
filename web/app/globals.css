@@ -48,7 +48,10 @@
   --rightbar-w: 220px;
 }
 
-[data-theme="dark"] {
+/* `data-base="dark"` lets theme plugins (see docs/theming.md) inherit the
+   dark palette and override only the variables they care about. */
+[data-theme="dark"],
+[data-base="dark"] {
   --bg: oklch(16% 0.01 250);
   --bg-1: oklch(18% 0.012 250);
   --bg-2: oklch(21% 0.014 250);
@@ -202,6 +205,33 @@ input, textarea { font: inherit; color: inherit; }
   background: var(--red);
   border: 1.5px solid var(--bg-1);
 }
+
+/* Theme picker menu (shown when theme plugins are installed) */
+.theme-picker { position: relative; }
+.theme-menu {
+  position: absolute;
+  top: calc(100% + 6px); right: 0;
+  min-width: 160px;
+  padding: 4px;
+  display: flex; flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+  z-index: 30;
+}
+.theme-menu button {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 6px 8px;
+  border: 0; background: transparent;
+  border-radius: var(--r-sm);
+  font-size: 12.5px;
+  text-align: left;
+  color: var(--fg-1);
+}
+.theme-menu button:hover { background: var(--hover); color: var(--fg); }
+.theme-menu button.active { color: var(--fg); font-weight: 500; }
+.theme-menu-check { display: inline-flex; color: var(--accent); }
 
 /* Prominent Ask button in the topbar */
 .ask-btn {

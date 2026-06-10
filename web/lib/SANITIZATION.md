@@ -46,7 +46,8 @@ All other unlisted tags are **dropped entirely** (tag and content removed).
 | File | Source | Safe? |
 |---|---|---|
 | `components/doc-reader.tsx` | `liveDoc._html` — branded `SanitizedHtml` type, produced only by `renderMarkdown()` | ✅ |
-| `app/layout.tsx` | `THEME_BOOTSTRAP_SCRIPT` — hardcoded developer string, not user content | ✅ |
+| `app/layout.tsx` (script) | `themeBootstrapScript()` — developer template; the only interpolated data is the server-side theme registry (operator files on disk), JSON-encoded with `<` escaped | ✅ |
+| `app/layout.tsx` (style) | Theme plugin CSS from `lib/theme-registry.ts` — operator-controlled files on the server's disk (same trust level as the codebase), never user/vault content; `</` is neutralized so the `<style>` tag cannot be closed early | ✅ |
 
 ## Editor Preview
 

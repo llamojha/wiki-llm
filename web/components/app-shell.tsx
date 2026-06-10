@@ -5,7 +5,7 @@ import { getDoc, getTree, type ApiDoc, type ApiTreeNode } from '@/lib/api';
 import { ICONS } from '@/lib/icons';
 import { renderMarkdown } from '@/lib/markdown';
 import { type Doc, type LiveDoc, type SanitizedHtml, type Scope } from '@/lib/types';
-import { DEFAULT_THEME, THEME_STORAGE_KEY, type Theme } from '@/lib/theme';
+import { setDocumentTheme, THEME_STORAGE_KEY, type Theme, type ThemeInfo } from '@/lib/theme';
 import type { FeatureFlags } from '@/lib/flags';
 import { ChatFab } from './chat-fab';
 import { ChatPanel } from './chat-panel';
@@ -69,16 +69,20 @@ type AppShellProps = {
   initialTree: ApiTreeNode[];
   initialDocId?: string;
   flags: FeatureFlags;
+  /** Selectable themes (built-ins + plugins) from the server registry. */
+  themes: ThemeInfo[];
+  /** Theme id rendered on the server (registry default). */
+  defaultTheme: Theme;
 };
 
-export function AppShell({ initialTree, initialDocId, flags }: AppShellProps) {
+export function AppShell({ initialTree, initialDocId, flags, themes, defaultTheme }: AppShellProps) {
   const [scope, setScope] = useState<Scope>('shared');
   const [activeId, setActiveId] = useState<string>(initialDocId ?? '__home');
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [theme, setThemeState] = useState<Theme>(DEFAULT_THEME);
+  const [theme, setThemeState] = useState<Theme>(defaultTheme);
   const [prompts, setPrompts] = useState<string[]>(DEFAULT_PROMPTS);
   const [liveDoc, setLiveDoc] = useState<LiveDoc | null>(null);
   const [docLoading, setDocLoading] = useState(false);
@@ -89,8 +93,10 @@ export function AppShell({ initialTree, initialDocId, flags }: AppShellProps) {
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const initial = (document.documentElement.dataset.theme as Theme | undefined) ?? DEFAULT_THEME;
+    // The bootstrap script may have applied a stored theme before hydration.
+    const initial = document.documentElement.dataset.theme ?? defaultTheme;
     setThemeState(initial);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load the initial doc if navigated to via URL
@@ -109,8 +115,10 @@ export function AppShell({ initialTree, initialDocId, flags }: AppShellProps) {
   }, [initialDocId]);
 
   const setTheme = (t: Theme) => {
+    const info = themes.find((x) => x.id === t);
+    if (!info) return;
     setThemeState(t);
-    document.documentElement.dataset.theme = t;
+    setDocumentTheme(info);
     try {
       localStorage.setItem(THEME_STORAGE_KEY, t);
     } catch {
@@ -249,6 +257,7 @@ export function AppShell({ initialTree, initialDocId, flags }: AppShellProps) {
         chatOpen={chatOpen}
         theme={theme}
         setTheme={setTheme}
+        themes={themes}
         flags={flags}
       />
       <Sidebar

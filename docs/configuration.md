@@ -73,6 +73,16 @@ Every product feature has a `FEATURE_*` env var. All features are **on by
 default**; set a var to `off` (or `false`/`0`/`no`/`disabled`) to disable.
 See [`feature-flags.md`](feature-flags.md) for the full reference.
 
+## Theming
+
+Themes are drop-in CSS plugin files — see [`theming.md`](theming.md) for the
+authoring guide and variable reference.
+
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `THEME_DIR` | no | `<app cwd>/themes` (= `web/themes/`) | Directory scanned for `*.css` theme plugin files. |
+| `THEME_DEFAULT` | no | `dark` | Theme id rendered before a visitor picks one (`light`, `dark`, or a plugin's filename slug). |
+
 ## Debugging
 
 | Variable | Default | Purpose |

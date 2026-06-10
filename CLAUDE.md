@@ -93,6 +93,7 @@ docker compose -f infra/docker-compose.yml up
 ```
 
 Configuration reference: [`docs/configuration.md`](docs/configuration.md).
+Theming (drop-in CSS theme plugins in `web/themes/`): [`docs/theming.md`](docs/theming.md).
 Deployment guides (Docker, Kubernetes, ECS Fargate): [`docs/deploy/`](docs/deploy/).
 
 ## Feature flags

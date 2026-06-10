@@ -35,6 +35,10 @@ ENV HOSTNAME=0.0.0.0
 COPY --from=builder /app/web/.next/standalone ./
 COPY --from=builder /app/web/.next/static ./web/.next/static
 COPY --from=builder /app/web/public ./web/public
+# Theme plugin directory — bake themes into the image by adding .css files
+# under web/themes/ before building, or mount a volume here at runtime
+# (or point THEME_DIR somewhere else). See docs/theming.md.
+COPY --from=builder /app/web/themes ./web/themes
 
 # Drop root privileges (the `node` user ships with the base image).
 USER node
