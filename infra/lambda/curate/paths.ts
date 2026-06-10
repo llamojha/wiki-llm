@@ -1,4 +1,4 @@
-export const DEFAULT_USER_ID = process.env.VAULT_USER_ID ?? 'amllamojha';
+export const DEFAULT_USER_ID = process.env.VAULT_USER_ID ?? 'default';
 export const USER_ROOT = `users/${DEFAULT_USER_ID}`;
 export const RAW_PREFIX = 'raw/';
 export const GENERATED_ROOT = 'generated';

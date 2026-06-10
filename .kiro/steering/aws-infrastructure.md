@@ -5,27 +5,27 @@ inclusion: always
 
 # AWS Infrastructure
 
-## Account
+Deployment-specific values (account ID, bucket name, region) are **not**
+checked into this repo. Each deployment supplies its own via environment
+variables — see [`docs/configuration.md`](../../docs/configuration.md).
 
-- Account ID: `858650446023`
-- IAM User: `llamojha-local-cli`
-- Default Region: `eu-central-1`
+## Required AWS resources
 
-## S3
+- An S3 bucket for the vault (one vault = one bucket + one prefix).
+- Bedrock model access for `amazon.nova-2-lite-v1:0` (or a cross-region
+  inference profile such as `eu.amazon.nova-2-lite-v1:0`) in your region.
+- An IAM principal (user, instance role, ECS task role, or IRSA role) with
+  least-privilege access to the bucket/prefix and `bedrock:InvokeModel*`.
 
-- Vault Bucket: `vaultmark`
-- Region: `eu-central-1`
-- Prefix: (none — root of bucket)
-
-## Environment Variables
+## Environment variables
 
 ```
-VAULT_BUCKET=vaultmark
-VAULT_PREFIX=
-VAULT_REGION=eu-central-1
+VAULT_BUCKET=<your-s3-bucket>
+VAULT_PREFIX=<optional-key-prefix>
+VAULT_REGION=<aws-region>
+BEDROCK_MODEL=amazon.nova-2-lite-v1:0
+BEDROCK_REGION=<aws-region>
 ```
 
-## Bedrock
-
-- Model: `amazon.nova-2-lite-v1:0`
-- Region: `eu-central-1`
+Credentials come from the standard AWS credential chain (env vars, shared
+config, instance/task role). Never hardcode keys or account IDs in the repo.

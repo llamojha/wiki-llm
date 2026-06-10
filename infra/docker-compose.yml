@@ -17,8 +17,9 @@ services:
 
   web:
     build:
-      context: ../web
-      dockerfile: Dockerfile
+      # Repo root context — the pnpm workspace lockfile lives there
+      context: ..
+      dockerfile: web/Dockerfile
     ports:
       - "3000:3000"
     env_file: .env

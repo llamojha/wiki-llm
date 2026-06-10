@@ -4,6 +4,8 @@ interface InitOpts {
   space?: string;
 }
 
+const DEFAULT_USER_ID = process.env.VAULT_USER_ID ?? 'default';
+
 const CONTEXT_FILES: Record<string, string> = {
   '_system/AGENTS.md': `---
 title: Agents
@@ -144,19 +146,19 @@ async function ensureStructureSpace(space: string): Promise<void> {
         users: 'users/',
         system: '_system/',
       },
-      defaultUser: 'amllamojha',
+      defaultUser: DEFAULT_USER_ID,
       users: [
         {
-          id: 'amllamojha',
-          label: 'amllamojha',
+          id: DEFAULT_USER_ID,
+          label: DEFAULT_USER_ID,
           default: true,
-          prefix: 'users/amllamojha/',
-          root: 'users/amllamojha/',
+          prefix: `users/${DEFAULT_USER_ID}/`,
+          root: `users/${DEFAULT_USER_ID}/`,
           roots: {
-            raw: 'users/amllamojha/raw/',
-            generated: 'users/amllamojha/generated/',
-            authored: 'users/amllamojha/authored/',
-            system: 'users/amllamojha/_system/',
+            raw: `users/${DEFAULT_USER_ID}/raw/`,
+            generated: `users/${DEFAULT_USER_ID}/generated/`,
+            authored: `users/${DEFAULT_USER_ID}/authored/`,
+            system: `users/${DEFAULT_USER_ID}/_system/`,
           },
         },
       ],
