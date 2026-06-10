@@ -1,0 +1,30 @@
+# Adjust ingressClassName + annotations for your controller.
+# Vaultmark has NO built-in auth — put an auth layer here (oauth2-proxy,
+# IAP, basic auth) before exposing it beyond a trusted network.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vaultmark
+  namespace: vaultmark
+  annotations:
+    # nginx example:
+    # nginx.ingress.kubernetes.io/auth-url: "https://oauth2-proxy.example.com/oauth2/auth"
+    # AWS Load Balancer Controller example:
+    # alb.ingress.kubernetes.io/scheme: internal
+    # alb.ingress.kubernetes.io/target-type: ip
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: wiki.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: vaultmark
+                port:
+                  name: http
+  # tls:
+  #   - hosts: [wiki.example.com]
+  #     secretName: vaultmark-tls

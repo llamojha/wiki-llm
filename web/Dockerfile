@@ -1,27 +1,40 @@
+# Build from the repo root so the pnpm workspace lockfile is in context:
+#   docker build -f web/Dockerfile -t vaultmark .
 FROM node:22-alpine AS base
 RUN corepack enable pnpm
 
-# Install dependencies
+# Install dependencies (workspace-aware — lockfile lives at the repo root)
 FROM base AS deps
 WORKDIR /app
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY web/package.json web/
+COPY ingest/package.json ingest/
+COPY video/package.json video/
+RUN pnpm install --frozen-lockfile --filter @vaultmark/web
 
 # Build
 FROM base AS builder
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-RUN pnpm build
+COPY --from=deps /app .
+COPY web web
+# NEXT_PUBLIC_* vars are inlined at build time
+ARG NEXT_PUBLIC_VAULT_USER_ID
+ENV NEXT_PUBLIC_VAULT_USER_ID=$NEXT_PUBLIC_VAULT_USER_ID
+# Placeholder only — `next build` evaluates route modules, which require a
+# bucket at import time. The real value comes from the runtime environment.
+ENV VAULT_BUCKET=build-placeholder
+RUN pnpm --filter @vaultmark/web build
 
-# Runtime — standalone output
-FROM base AS runner
+# Runtime — Next.js standalone output (mirrors the workspace layout)
+FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
 
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public 2>/dev/null || true
+COPY --from=builder /app/web/.next/standalone ./
+COPY --from=builder /app/web/.next/static ./web/.next/static
+COPY --from=builder /app/web/public ./web/public
 
 EXPOSE 3000
-CMD ["node", "server.js"]
+CMD ["node", "web/server.js"]

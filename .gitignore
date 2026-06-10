@@ -59,3 +59,6 @@ parity-visual/
 
 # Deployment infra (kept out of repo for open source)
 infra-cdk/
+
+# Private working notes (never publish)
+.memory/
