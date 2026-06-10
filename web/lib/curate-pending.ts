@@ -2,7 +2,17 @@ import { createHash } from 'node:crypto';
 
 import { getObject } from '@/lib/s3';
 
-export type ProcessedManifest = { files: Record<string, { hash: string }> };
+export type ProcessedFileEntry = {
+  hash: string;
+  /** ISO timestamp set by the Lambda when this file was curated. */
+  processedAt?: string;
+  /** Space the file was routed into (e.g. "wiki"). */
+  space?: string;
+  /** Generated page paths produced by this entry. */
+  pages?: string[];
+};
+
+export type ProcessedManifest = { files: Record<string, ProcessedFileEntry> };
 
 export function computeHash(content: string): string {
   return 'sha256:' + createHash('sha256').update(content).digest('hex');

@@ -3,6 +3,8 @@ import {
   GetObjectCommand,
   PutObjectCommand,
   ListObjectsV2Command,
+  CopyObjectCommand,
+  DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 
 const region = process.env.S3_REGION ?? process.env.VAULT_REGION ?? 'us-east-1';
@@ -49,6 +51,21 @@ export async function putJson(bucket: string, prefix: string, key: string, data:
     Key: fullKey(prefix, key),
     Body: JSON.stringify(data, null, 2),
     ContentType: 'application/json',
+  }));
+}
+
+export async function copyObject(bucket: string, prefix: string, srcKey: string, dstKey: string): Promise<void> {
+  await client().send(new CopyObjectCommand({
+    Bucket: bucket,
+    CopySource: encodeURIComponent(`${bucket}/${fullKey(prefix, srcKey)}`),
+    Key: fullKey(prefix, dstKey),
+  }));
+}
+
+export async function deleteObject(bucket: string, prefix: string, key: string): Promise<void> {
+  await client().send(new DeleteObjectCommand({
+    Bucket: bucket,
+    Key: fullKey(prefix, key),
   }));
 }
 

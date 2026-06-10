@@ -14,13 +14,17 @@
     "parity:step3": "node scripts/parity-step3.mjs",
     "parity:step4": "node scripts/parity-step4.mjs",
     "parity": "pnpm parity:step1 && pnpm parity:step2 && pnpm parity:step3 && pnpm parity:step4",
-    "visual": "node scripts/parity-visual.mjs"
+    "visual": "node scripts/parity-visual.mjs",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@types/pixelmatch": "^5.2.6",
     "@types/pngjs": "^6.0.5",
     "pixelmatch": "^7.2.0",
-    "playwright": "^1.59.1",
+    "playwright": "^1.60.0",
     "pngjs": "^7.0.0"
   }
 }

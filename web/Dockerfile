@@ -12,7 +12,7 @@ COPY ingest/package.json ingest/
 COPY video/package.json video/
 RUN pnpm install --frozen-lockfile --filter @vaultmark/web
 
-# Build
+# ─── builder: compile the Next.js standalone output ───────────────────────
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app .
@@ -35,6 +35,9 @@ ENV HOSTNAME=0.0.0.0
 COPY --from=builder /app/web/.next/standalone ./
 COPY --from=builder /app/web/.next/static ./web/.next/static
 COPY --from=builder /app/web/public ./web/public
+
+# Drop root privileges (the `node` user ships with the base image).
+USER node
 
 EXPOSE 3000
 CMD ["node", "web/server.js"]

@@ -13,13 +13,18 @@ type VaultStructure = {
   spaces: SpaceEntry[];
 };
 
-export async function getGeneratedSpace(bucket: string, prefix: string): Promise<string> {
+async function loadStructure(bucket: string, prefix: string): Promise<VaultStructure | null> {
   const raw = await getObjectOrNull(bucket, prefix, systemKey('structure.json'))
     ?? await getObjectOrNull(bucket, prefix, '_system/structure.json')
     ?? await getObjectOrNull(bucket, prefix, 'structure.json');
-  if (!raw) return DEFAULT_INGEST_SPACE;
+  if (!raw) return null;
+  return JSON.parse(raw) as VaultStructure;
+}
 
-  const structure = JSON.parse(raw) as VaultStructure;
+export async function getGeneratedSpace(bucket: string, prefix: string): Promise<string> {
+  const structure = await loadStructure(bucket, prefix);
+  if (!structure) return DEFAULT_INGEST_SPACE;
+
   const explicit = structure.spaces.find((space) => space.generated === true);
   if (explicit) return explicit.name;
 
@@ -30,4 +35,16 @@ export async function getGeneratedSpace(bucket: string, prefix: string): Promise
   if (wiki) return wiki.name;
 
   throw new Error('structure.json does not declare a generated wiki space');
+}
+
+/**
+ * Returns all spaces with `generated: true`, in declaration order.
+ * The first entry is the default fallback (matches `getGeneratedSpace`).
+ * Empty list means no structure.json — caller should treat `[DEFAULT_INGEST_SPACE]` as the fallback.
+ */
+export async function getGeneratedSpaces(bucket: string, prefix: string): Promise<string[]> {
+  const structure = await loadStructure(bucket, prefix);
+  if (!structure) return [DEFAULT_INGEST_SPACE];
+  const generated = structure.spaces.filter((s) => s.generated === true).map((s) => s.name);
+  return generated.length > 0 ? generated : [DEFAULT_INGEST_SPACE];
 }

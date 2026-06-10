@@ -3,10 +3,16 @@ import { NextResponse } from 'next/server';
 /**
  * Feature flags — per-feature, env-controlled. Single source of truth.
  *
- * Each flag is read once at module load from a `FEATURE_*` env var. A feature
- * is ON unless its env var is explicitly set to a falsy token
- * (`off` / `false` / `0` / `no` / `disabled`). An absent var ⇒ ON, so every
- * shipped feature keeps working with no env changes — flags default enabled.
+ * Each flag is read once at module load from a `FEATURE_*` env var. When the
+ * env var is present it wins: the feature is ON unless the value is a falsy
+ * token (`off` / `false` / `0` / `no` / `disabled`). When the env var is
+ * ABSENT the feature falls back to its built-in default in
+ * `DEFAULT_BY_FEATURE` below.
+ *
+ * The default profile is "plain Markdown + Bedrock ask-wiki agent, no ingest
+ * processing": `agent` defaults ON; every other feature defaults OFF. Set the
+ * matching `FEATURE_*` var (e.g. `FEATURE_EDITOR=on`) to opt a feature back
+ * in. Read/browse routes are never gated, so content viewing always works.
  *
  * Flags gate BOTH layers:
  *   1. UI — `FLAGS` is passed from the root server component into the client
@@ -47,16 +53,33 @@ const ENV_BY_FEATURE: Record<FeatureName, string> = {
 /** Tokens that turn a feature off. Anything else (or absent) leaves it on. */
 const OFF_TOKENS = new Set(['off', 'false', '0', 'no', 'disabled']);
 
-function parseFlag(envVar: string): boolean {
+/**
+ * Built-in default for each feature when its `FEATURE_*` env var is absent.
+ * Default profile: plain Markdown browsing + Bedrock ask-wiki agent, with the
+ * ingest/processing pipeline and other optional surfaces off. An explicit env
+ * var always overrides the default.
+ */
+const DEFAULT_BY_FEATURE: Record<FeatureName, boolean> = {
+  agent: true,
+  upload: false,
+  curate: false,
+  reindex: false,
+  editor: false,
+  search: false,
+  star: false,
+  publishing: false,
+};
+
+function parseFlag(envVar: string, defaultValue: boolean): boolean {
   const raw = process.env[envVar];
-  if (raw == null) return true; // default ON — shipped features stay live
+  if (raw == null) return defaultValue; // absent ⇒ feature's built-in default
   return !OFF_TOKENS.has(raw.trim().toLowerCase());
 }
 
 function computeFlags(): FeatureFlags {
   const out = {} as FeatureFlags;
   for (const feature of Object.keys(ENV_BY_FEATURE) as FeatureName[]) {
-    out[feature] = parseFlag(ENV_BY_FEATURE[feature]);
+    out[feature] = parseFlag(ENV_BY_FEATURE[feature], DEFAULT_BY_FEATURE[feature]);
   }
   return out;
 }

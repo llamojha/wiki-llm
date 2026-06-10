@@ -1,0 +1,48 @@
+# Build context is the repo root, but only web/ ships. Keep the context small
+# and never leak local secrets or build artifacts into the image.
+
+# Dependencies and build output (reinstalled/rebuilt inside the image)
+**/node_modules
+web/.next
+ingest/dist
+**/*.tsbuildinfo
+
+# Workspace packages not part of the web runtime: exclude their contents but
+# keep package.json so `pnpm install --frozen-lockfile` can resolve the graph.
+ingest/*
+!ingest/package.json
+video/*
+!video/package.json
+
+# Archived / reference code — never deployed
+api/
+portal/
+legacy/
+infra-cdk/
+
+# Local env and secrets
+**/.env
+**/.env.local
+**/.env.*.local
+
+# Tests, tooling, and CI
+tests/
+test-results/
+playwright-report/
+.github/
+scripts/
+
+# VCS and editor / OS noise
+.git
+.gitignore
+**/.DS_Store
+.kiro/
+.claude/
+.agents/
+.memory/
+.vscode/
+.idea/
+
+# Docs (not needed at runtime)
+*.md
+!web/**/*.md

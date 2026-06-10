@@ -1,3 +1,12 @@
+/**
+ * S3 client facade — dispatches to either the real AWS S3 implementation or
+ * the in-memory mock (`s3-mock.ts`) based on `MOCK_S3=1`.
+ *
+ * The mock path is used by Playwright e2e tests so the full Next.js + API
+ * route stack can be exercised without touching AWS. In all other contexts
+ * (dev, prod) this re-exports the real boto3-backed implementation.
+ */
+
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -7,9 +16,15 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 
-if (!process.env.VAULT_BUCKET) throw new Error('VAULT_BUCKET env var required');
+import * as mock from './s3-mock';
 
-const bucket = process.env.VAULT_BUCKET;
+const useMock = process.env.MOCK_S3 === '1' || process.env.MOCK_S3 === 'true';
+
+if (!useMock && !process.env.VAULT_BUCKET) {
+  throw new Error('VAULT_BUCKET env var required');
+}
+
+const bucket = process.env.VAULT_BUCKET ?? 'mock-bucket';
 const prefix = process.env.VAULT_PREFIX ?? '';
 const region = process.env.VAULT_REGION ?? 'us-east-1';
 
@@ -28,6 +43,7 @@ function fullKey(relKey: string): string {
 
 /** List top-level folders (spaces) in the vault. */
 export async function listSpaces(): Promise<string[]> {
+  if (useMock) return mock.listSpaces();
   const res = await client().send(
     new ListObjectsV2Command({
       Bucket: bucket,
@@ -46,6 +62,7 @@ export async function listSpaces(): Promise<string[]> {
 
 /** List all .md keys under the vault prefix. Returns keys relative to prefix. */
 export async function listObjects(subPrefix = ''): Promise<string[]> {
+  if (useMock) return mock.listObjects(subPrefix);
   const searchPrefix = subPrefix
     ? `${prefix}/${subPrefix}`.replace(/^\//, '')
     : prefix;
@@ -76,6 +93,7 @@ export async function listObjects(subPrefix = ''): Promise<string[]> {
 
 /** Fetch a single object by relative key. Returns UTF-8 content. */
 export async function getObject(relKey: string): Promise<string> {
+  if (useMock) return mock.getObject(relKey);
   const res = await client().send(
     new GetObjectCommand({ Bucket: bucket, Key: fullKey(relKey) }),
   );
@@ -84,6 +102,7 @@ export async function getObject(relKey: string): Promise<string> {
 
 /** Fetch object metadata by relative key. */
 export async function headObject(relKey: string): Promise<{ lastModified: Date | null }> {
+  if (useMock) return mock.headObject(relKey);
   const res = await client().send(
     new HeadObjectCommand({ Bucket: bucket, Key: fullKey(relKey) }),
   );
@@ -108,6 +127,7 @@ export class ObjectAlreadyExistsError extends Error {
 export async function getObjectWithETag(
   relKey: string,
 ): Promise<{ content: string; etag: string }> {
+  if (useMock) return mock.getObjectWithETag(relKey);
   const res = await client().send(
     new GetObjectCommand({ Bucket: bucket, Key: fullKey(relKey) }),
   );
@@ -122,6 +142,14 @@ export async function putObject(
   body: string,
   ifMatch?: string,
 ): Promise<string> {
+  if (useMock) {
+    try {
+      return await mock.putObject(relKey, body, ifMatch);
+    } catch (err) {
+      if (err instanceof mock.ConcurrencyError) throw new ConcurrencyError();
+      throw err;
+    }
+  }
   try {
     const res = await client().send(
       new PutObjectCommand({
@@ -148,6 +176,14 @@ export async function putObjectIfAbsent(
   relKey: string,
   body: string,
 ): Promise<string> {
+  if (useMock) {
+    try {
+      return await mock.putObjectIfAbsent(relKey, body);
+    } catch (err) {
+      if (err instanceof mock.ObjectAlreadyExistsError) throw new ObjectAlreadyExistsError();
+      throw err;
+    }
+  }
   try {
     const res = await client().send(
       new PutObjectCommand({
@@ -171,6 +207,7 @@ export async function putObjectIfAbsent(
 
 /** Delete an object from S3. */
 export async function deleteObject(relKey: string): Promise<void> {
+  if (useMock) return mock.deleteObject(relKey);
   await client().send(
     new DeleteObjectCommand({ Bucket: bucket, Key: fullKey(relKey) }),
   );
