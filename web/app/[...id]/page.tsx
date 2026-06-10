@@ -3,6 +3,8 @@ import { type ApiTreeNode } from '@/lib/api';
 import { getTree } from '@/lib/vault-tree';
 import { FLAGS } from '@/lib/flags';
 
+export const dynamic = 'force-dynamic';
+
 export default async function DocPage({
   params,
 }: {

@@ -47,6 +47,11 @@ next-env.d.ts
 # Visual parity artifacts
 parity-visual/
 
+# Playwright e2e artifacts
+test-results/
+playwright-report/
+.playwright/
+
 # Logs and temp
 *.log
 *.tmp

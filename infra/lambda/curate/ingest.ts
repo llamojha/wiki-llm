@@ -2,11 +2,10 @@ import { getObject, getObjectOrNull, putJson, putObject, listObjects } from './s
 import { converse } from './bedrock.js';
 import { buildExtractionSystemPrompt, buildExtractionUserPrompt } from './prompt.js';
 import { getManifest, saveManifest, addToManifest, computeHash } from './manifest.js';
-import { getGeneratedSpace } from './structure.js';
+import { placementFromRawKey, sourcePageKey } from './paths.js';
 import {
   parseSourceCard,
   renderSourcePage,
-  spaceFromRawKey,
   sourceSlug,
 } from './source-card.js';
 import type { ScopePaths } from './scope.js';
@@ -71,6 +70,15 @@ export async function processSource(
   rawKey: string,
   hints: string[],
   scope: ScopePaths,
+  /**
+   * Allowed generated spaces, in priority order. The first entry is the
+   * fallback used when the source card's `suggestedSpaces` is empty or
+   * names nothing in this list.
+   *
+   * Required: without it, every file lands in the same space regardless of
+   * what the LLM suggested (see the 2026-05-31 backup-bucket reprocess).
+   */
+  generatedSpaces: string[],
   jobId?: string,
   onStage?: StageReporter,
   /**
@@ -92,12 +100,16 @@ export async function processSource(
   const hash = computeHash(sourceContent);
   logTiming(jobId, rawKey, 'read-source', startedAt);
 
-  const ingestSpace = await getGeneratedSpace(bucket, prefix);
+  if (generatedSpaces.length === 0) {
+    throw new Error('processSource called with empty generatedSpaces — caller must supply at least one fallback');
+  }
+  const defaultSpace = generatedSpaces[0];
 
   // 2. Extract one compact source card. Index/log/global synthesis happen later.
   const system = buildExtractionSystemPrompt();
   const user = buildExtractionUserPrompt({
-    space: ingestSpace,
+    space: defaultSpace,
+    allowedSpaces: generatedSpaces,
     rawKey,
     sourceContent,
     existingPageSummaries: hints.join('\n'),
@@ -108,14 +120,19 @@ export async function processSource(
   const response = await converse(system, user);
   logTiming(jobId, rawKey, 'bedrock-extract', startedAt);
 
-  const card = parseSourceCard(response, rawKey);
-  const sourceSpace = spaceFromRawKey(rawKey);
-  if (sourceSpace && sourceSpace !== ingestSpace) {
-    console.warn(`[${jobId ?? 'curate'}] ${rawKey} is scoped to ${sourceSpace}, but generated output is forced to ${ingestSpace}`);
+  const parsedCard = parseSourceCard(response, rawKey);
+  const allowed = new Set(generatedSpaces);
+  const suggested = parsedCard.suggestedSpaces.find((s) => allowed.has(s));
+  const outputSpace = suggested ?? defaultSpace;
+  if (!suggested && parsedCard.suggestedSpaces.length > 0) {
+    console.warn(`[${jobId ?? 'curate'}] ${rawKey} suggestedSpaces=[${parsedCard.suggestedSpaces.join(',')}] not in allowed=[${generatedSpaces.join(',')}] — falling back to ${defaultSpace}`);
   }
-  const outputSpace = ingestSpace;
+  // Placement (sub-folder under sources/) is derived deterministically from rawKey —
+  // mirrors raw/ layout, keeps page URLs stable across re-extractions. See specs/sources-foldering.md.
+  const placement = placementFromRawKey(rawKey);
+  const card = { ...parsedCard, placement };
   const cardKey = sourceCardKey(scope, hash);
-  const pagePath = `${scope.generatedPrefix(outputSpace)}sources/${sourceSlug(card, rawKey, hash)}.md`;
+  const pagePath = sourcePageKey(scope.generatedPrefix(outputSpace), placement, sourceSlug(card, rawKey, hash));
   const pageContent = renderSourcePage(card, rawKey, hash);
 
   // 4. Deterministically write the durable card and source page.

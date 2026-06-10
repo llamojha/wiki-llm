@@ -17,6 +17,19 @@ function lambdaClient(): LambdaClient {
   return _lambda;
 }
 
+/**
+ * FEATURE_CURATE_AUTOSYNTH — opt-in chain hook into synthesis after the
+ * extraction batch completes. Default OFF (consistent with the resolved
+ * decision in specs/synthesis-pipeline.md). Not in flags.ts because it has
+ * no UI surface — it's a server-side runtime toggle, not a portal feature.
+ */
+function isAutosynthEnabled(): boolean {
+  const raw = process.env.FEATURE_CURATE_AUTOSYNTH;
+  if (raw == null) return false;
+  const v = raw.trim().toLowerCase();
+  return v === 'on' || v === '1' || v === 'true' || v === 'yes';
+}
+
 
 export async function POST(req: Request) {
   const blocked = flagGuard('curate');
@@ -108,6 +121,9 @@ export async function POST(req: Request) {
   await putObject(jobKey, JSON.stringify(job, null, 2));
 
   // Lambda payload carries scope so the Lambda can resolve the same paths.
+  // FEATURE_CURATE_AUTOSYNTH (default off) opts the batch into auto-chaining
+  // a SYNTHESIZE invocation after extraction completes — see
+  // specs/synthesis-pipeline.md (resolved decision #3).
   const payload = {
     curateEventVersion: 2,
     jobId,
@@ -117,6 +133,7 @@ export async function POST(req: Request) {
     prefix: PREFIX,
     scope: scope.scope,
     userId: scope.userId,
+    autoSynthesize: isAutosynthEnabled(),
   };
   try {
     await lambdaClient().send(new InvokeCommand({

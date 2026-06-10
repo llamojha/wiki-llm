@@ -29,14 +29,20 @@ export function buildExtractionSystemPrompt(): string {
 
 export function buildExtractionUserPrompt(opts: {
   space: string;
+  allowedSpaces?: string[];
   rawKey: string;
   sourceContent: string;
   existingPageSummaries: string;
 }): string {
   const date = new Date().toISOString().split('T')[0];
+  const allowed = opts.allowedSpaces && opts.allowedSpaces.length > 0
+    ? opts.allowedSpaces
+    : [opts.space];
 
   return `Today's date: ${date}
-Space: ${opts.space}
+Default space: ${opts.space}
+Allowed spaces (suggestedSpaces MUST be chosen from this list — first match wins; unknown values fall back to "${opts.space}"):
+${allowed.map((s) => `- ${s}`).join('\n')}
 
 Source file: ${opts.rawKey}
 --- SOURCE START ---

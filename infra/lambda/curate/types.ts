@@ -77,6 +77,7 @@ export type CurateEvent = {
   curateEventVersion?: 2;
   jobId: string;
   space: string;
+  /** Per-file list for EXTRACT. Empty/absent for SYNTHESIZE (which reads source-cards instead). */
   files: string[];
   bucket: string;
   prefix: string;
@@ -85,6 +86,18 @@ export type CurateEvent = {
   scope?: 'shared' | 'user';
   /** Required when `scope === 'user'`. */
   userId?: string;
+  /**
+   * Lambda action. Defaults to 'EXTRACT' when absent so existing extraction
+   * invocations remain unchanged. 'SYNTHESIZE' runs the rollup pass over the
+   * scope's source-cards — see specs/synthesis-pipeline.md.
+   */
+  action?: 'EXTRACT' | 'SYNTHESIZE';
+  /**
+   * EXTRACT-only hint: when true, the Lambda self-invokes with
+   * action='SYNTHESIZE' after the extraction batch completes. Set by the
+   * web route when `FEATURE_CURATE_AUTOSYNTH=on`.
+   */
+  autoSynthesize?: boolean;
 };
 
 export type SourceCardClaim = {
@@ -102,4 +115,12 @@ export type SourceCard = {
   suggestedSpaces: string[];
   suggestedPages: string[];
   tags: string[];
+  /**
+   * Sub-folder under `sources/` where the rendered page lives. Set deterministically
+   * by `placementFromRawKey(rawKey)` in the ingest pipeline, not by the LLM.
+   * Optional because legacy cards written before this field exists may lack it;
+   * readers should treat `undefined` as "card pre-dates foldering" and re-derive
+   * from `rawKey` if a path is needed.
+   */
+  placement?: string;
 };

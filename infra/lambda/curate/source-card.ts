@@ -107,13 +107,14 @@ export function renderSourcePage(card: SourceCard, rawKey: string, hash: string)
   const entities = card.entities.length ? card.entities.map((e) => `- [[${e}]]`).join('\n') : '- None identified.';
   const concepts = card.concepts.length ? card.concepts.map((c) => `- [[${c}]]`).join('\n') : '- None identified.';
 
+  const placementLine = card.placement ? `\nplacement: ${yamlString(card.placement)}` : '';
   return `---
 title: ${yamlString(card.title)}
 type: source
 source_type: generated
 sources: ${yamlArray([rawKey])}
 raw_key: ${yamlString(rawKey)}
-raw_hash: ${yamlString(hash)}
+raw_hash: ${yamlString(hash)}${placementLine}
 tags: ${yamlArray(card.tags)}
 created: ${now}
 updated: ${now}

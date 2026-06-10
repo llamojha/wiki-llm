@@ -99,4 +99,37 @@ describe('source cards', () => {
     expect(spaceFromRawKey('personal/raw/source.md')).toBe('personal');
     expect(spaceFromRawKey('raw/source.md')).toBeNull();
   });
+
+  it('renders placement in frontmatter when set', () => {
+    const card = parseSourceCard(JSON.stringify({
+      title: 'Tracing Guide',
+      summary: 'A guide.',
+      claims: [],
+      entities: [],
+      concepts: [],
+      suggestedSpaces: [],
+      suggestedPages: [],
+      tags: [],
+    }), 'raw/projects/CodeMMORPG/tracing.md');
+
+    const withPlacement = { ...card, placement: 'projects/codemmorpg' };
+    const rendered = renderSourcePage(withPlacement, 'raw/projects/CodeMMORPG/tracing.md', 'sha256:abc123');
+    expect(rendered).toContain('placement: "projects/codemmorpg"');
+  });
+
+  it('omits the placement frontmatter line when placement is undefined', () => {
+    const card = parseSourceCard(JSON.stringify({
+      title: 'Legacy Card',
+      summary: 'Pre-placement card.',
+      claims: [],
+      entities: [],
+      concepts: [],
+      suggestedSpaces: [],
+      suggestedPages: [],
+      tags: [],
+    }), 'raw/legacy.md');
+
+    const rendered = renderSourcePage(card, 'raw/legacy.md', 'sha256:abc123');
+    expect(rendered).not.toContain('placement:');
+  });
 });
