@@ -34,9 +34,9 @@ Lambda (5 min timeout) → for each raw file: single Bedrock call → parse <fil
 
 ### Current deployment state
 
-- **Lambda deployed:** `arn:aws:lambda:eu-central-1:858650446023:function:vaultmark-curate`
+- **Lambda deployed:** `arn:aws:lambda:eu-central-1:<account-id>:function:vaultmark-curate`
 - **IAM granted:** `vaultmark-vercel` user has `lambda:InvokeFunction` on the Lambda
-- **Vercel env var needed:** `CURATE_LAMBDA_ARN=arn:aws:lambda:eu-central-1:858650446023:function:vaultmark-curate`
+- **Vercel env var needed:** `CURATE_LAMBDA_ARN=arn:aws:lambda:eu-central-1:<account-id>:function:vaultmark-curate`
 - **Lambda needs redeployment** after code review fixes: `cd infra-cdk && npx cdk deploy`
 
 ### What's NOT done yet
@@ -90,7 +90,7 @@ These are "always include" context files that Kiro loads automatically:
 - `tech-stack.md` — Pinned versions, explicit out-of-scope list
 - `development-standards.md` — Frontend/backend standards, rendering, mock data rules
 - `conventions.md` — Naming, imports, API patterns, git conventions
-- `aws-infrastructure.md` — Account 858650446023, bucket `vaultmark`, region `eu-central-1`
+- `aws-infrastructure.md` — Account <account-id>, bucket `vaultmark`, region `eu-central-1`
 
 ### Source precedence (from AGENTS.md)
 

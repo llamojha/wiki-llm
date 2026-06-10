@@ -1,0 +1,48 @@
+{
+  "family": "vaultmark",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "executionRoleArn": "arn:aws:iam::<account-id>:role/vaultmark-execution",
+  "taskRoleArn": "arn:aws:iam::<account-id>:role/vaultmark-task",
+  "containerDefinitions": [
+    {
+      "name": "web",
+      "image": "<account-id>.dkr.ecr.<region>.amazonaws.com/vaultmark:latest",
+      "essential": true,
+      "portMappings": [{ "containerPort": 3000, "protocol": "tcp" }],
+      "environment": [
+        { "name": "VAULT_BUCKET", "value": "my-vault-bucket" },
+        { "name": "VAULT_PREFIX", "value": "" },
+        { "name": "VAULT_REGION", "value": "us-east-1" },
+        { "name": "VAULT_ID", "value": "default" },
+        { "name": "BEDROCK_MODEL", "value": "us.amazon.nova-2-lite-v1:0" },
+        { "name": "BEDROCK_REGION", "value": "us-east-1" },
+        { "name": "FEATURE_CURATE", "value": "off" }
+      ],
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "wget -q -O /dev/null http://localhost:3000/api/vaults || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 15
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/vaultmark",
+          "awslogs-region": "<region>",
+          "awslogs-stream-prefix": "web"
+        }
+      }
+    }
+  ]
+}

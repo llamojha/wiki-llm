@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: vaultmark
+  namespace: vaultmark
+  labels:
+    app: vaultmark
+spec:
+  type: ClusterIP
+  selector:
+    app: vaultmark
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

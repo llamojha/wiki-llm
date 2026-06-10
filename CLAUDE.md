@@ -15,86 +15,85 @@ This repo builds **Vaultmark**, an S3-backed Markdown knowledge portal for indiv
 @.kiro/steering/aws-infrastructure.md
 @.kiro/steering/philosophy.md
 
-## Current state (May 2026)
+## Current state (June 2026)
 
-The repo is mid-pivot from `wiki-llm` (a CLI + Bedrock wiki maintainer) to Vaultmark (a portal product).
+Phases 0-5 are implemented. After Phase 2 the architecture pivoted to a
+**single Next.js app** — Route Handlers replaced the FastAPI backend, and
+in-memory Fuse.js search replaced Postgres FTS for the MVP.
 
 | Path | Status |
 |---|---|
 | `prd_vaultmark_markdown_llm_wiki.md` | Authoritative product spec |
-| `portal/` | Babel-in-browser React prototype — design reference for the Next.js port. Do not extend; port instead |
-| `legacy/` | Archived `wiki-llm` (Bedrock CLI + curated `wiki/` tree). Frozen reference. See [`legacy/README.md`](legacy/README.md). Earmarked for revival as the `generated/` ingest pipeline (PRD §11) |
-| `web/`, `api/`, `infra/` | Not yet created. Target layout below |
-| `README.md` | Still describes wiki-llm; pending Vaultmark rewrite |
+| `web/` | **Active app** — Next.js 16.2 portal + API route handlers |
+| `ingest/` | TypeScript CLI for vault init + batch ingest |
+| `infra/lambda/curate/` | AI curation Lambda (deployed out-of-band) |
+| `infra/k8s/`, `infra/ecs/` | Deployment manifests — see `docs/deploy/` |
+| `docs/` | Configuration, feature-flag, and deployment docs |
+| `api/` | **Archived** FastAPI backend from the pre-pivot shape. Reference only; may be revived for Phase 6 SaaS |
+| `portal/`, `portal-archive/` | Babel-in-browser prototype — design reference, parity signed off. Do not extend |
+| `legacy/` | Archived `wiki-llm` (Bedrock CLI + curated `wiki/` tree). Frozen reference. See [`legacy/README.md`](legacy/README.md) |
 
-## Target architecture
+## Repo layout
 
 ```
 wiki-llm/                  (repo root; product name is Vaultmark)
-├── web/                   Next.js portal (frontend)
-├── api/                   FastAPI backend
+├── web/                   Next.js portal (frontend + API route handlers)
+├── ingest/                TypeScript ingest CLI
 ├── infra/
-│   ├── docker-compose.yml Local dev stack (Postgres, MinIO, api, web)
-│   └── eks/               Optional Kubernetes manifests
+│   ├── docker-compose.yml Local dev stack
+│   ├── lambda/curate/     AI curation Lambda
+│   ├── k8s/               Kubernetes manifests
+│   └── ecs/               ECS Fargate task definition + IAM policy
+├── docs/                  Configuration, feature flags, deployment guides
+├── specs/                 Phase acceptance specs
+├── api/                   Archived FastAPI backend (reference)
 ├── legacy/                Archived wiki.py + Bedrock pipeline (frozen reference)
 └── prd_vaultmark_markdown_llm_wiki.md
 ```
 
 ## Stack (pinned to 2026)
 
-**Frontend (`web/`)**
+**App (`web/`) — the active product**
 - Next.js **16.2** (App Router, Turbopack, React Server Components)
 - React **19**
 - TypeScript **5.7+**, `strict: true`
-- Plain CSS — port `portal/styles.css` as-is for pixel parity. No Tailwind, no UI lib
-- `next/font` for IBM Plex Sans/Serif and JetBrains Mono (replace the prototype's Google Fonts CDN link)
-- Package manager: pnpm
-
-**Backend (`api/`)**
-- Python **3.13** (free-threaded build acceptable; see FastAPI 0.136 GIL notes)
-- FastAPI **0.136+**
-- Pydantic **2.x**
-- SQLAlchemy 2.x + Alembic for migrations
-- `boto3` for S3 and Bedrock (or `aioboto3` if we go async on storage)
-- Ruff for lint+format, Pyright for typecheck
-- Package manager: uv
+- Plain CSS (ported from `portal/styles.css`). No Tailwind, no UI lib
+- API: Next.js Route Handlers under `web/app/api/`
+- Search: in-memory Fuse.js built from S3
+- Package manager: pnpm (workspace: `web`, `ingest`, `video`)
 
 **LLM**
-- **Amazon Bedrock — Nova 2 Lite** (`amazon.nova-2-lite-v1:0`) for the ask-wiki agent
-- Use `us.amazon.nova-2-lite-v1:0` cross-region inference profile when the home region requires it
+- **Amazon Bedrock — Nova 2 Lite** (`amazon.nova-2-lite-v1:0`) for the ask-wiki agent and curation
+- Use the cross-region inference profile (`us.`/`eu.` prefix) when the home region requires it; configured via `BEDROCK_MODEL`
 - 1M token context — keep `index.md` and the active scope in the prompt; reach for full-doc reads via the agent's tools rather than dumping the vault
 - Out of scope: Claude API, vector retrieval, multi-agent orchestration
 
 **Data**
-- Postgres **17** for metadata + full-text search (MVP 1)
-- SQLite acceptable for single-user local mode
-- S3 (or MinIO/R2 — open question per PRD §16) for Markdown blobs
-- Search: Postgres FTS first; OpenSearch/Meilisearch only when SaaS scope demands it
+- S3 for Markdown blobs — the source of truth (decisions log: S3 only, no MinIO/R2 abstraction)
+- Postgres FTS belongs to the archived `api/` shape; revisit for Phase 6 SaaS
 
-**Runtime**
-- Local dev: Docker Compose (Postgres + MinIO + api + web)
-- Future SaaS: EKS
+**Archived backend (`api/`)** — Python 3.13, FastAPI 0.136+, SQLAlchemy 2.x, managed with uv. Reference only; CI still runs its tests.
 
 ## Development
 
-Commands below are the **target** shape. Most don't exist yet — flag if you reach for one and it's missing.
-
 ```bash
-# Frontend
-pnpm --filter web dev          # Next.js dev server on :3000
-pnpm --filter web build
-pnpm --filter web lint
-pnpm --filter web typecheck
+pnpm install
+cp infra/.env.example web/.env.local   # set VAULT_BUCKET etc.
 
-# Backend
-uv run --project api fastapi dev   # FastAPI on :8000
-uv run --project api pytest
-uv run --project api ruff check
-uv run --project api pyright
+pnpm dev          # Next.js dev server on :3000
+pnpm typecheck
+pnpm build        # needs VAULT_BUCKET set (placeholder ok)
+pnpm ingest -- --help
 
-# Full stack
+# Curate Lambda
+cd infra/lambda/curate && npm run build && npm test
+
+# Local container stack
 docker compose -f infra/docker-compose.yml up
 ```
+
+Configuration reference: [`docs/configuration.md`](docs/configuration.md).
+Deployment guides (Docker, Kubernetes, ECS Fargate): [`docs/deploy/`](docs/deploy/).
 
 ## Feature flags
 
@@ -121,10 +120,13 @@ Hiding the button alone is not control — the route guard is the enforcement.
 Document read paths (`GET /api/docs`, tree, raw) are never gated — the portal
 stays browsable with every feature off.
 
+Full per-flag documentation (UI surfaces, dependencies, recipes):
+[`docs/feature-flags.md`](docs/feature-flags.md).
+
 ## Conventions
 
-- **Pixel parity with the prototype.** While porting `portal/` to `web/`, keep visual output identical. The prototype is the design source of truth until the port is signed off; only deviate where a Next.js idiom forces it (e.g. `<Link>` over `<a>`, `next/image` over raw `<img>`).
-- **Markdown is the source of truth.** Document content lives in S3 as `.md` files. Postgres stores metadata + search index only — never authoritative content.
+- **The prototype is design reference.** Parity with `portal/` is signed off; consult it for design intent but don't extend it or import from it.
+- **Markdown is the source of truth.** Document content lives in S3 as `.md` files. Search indexes and metadata stores are never authoritative content.
 - **Sanitize all rendered Markdown.** Use a vetted pipeline (e.g. `remark` + `rehype-sanitize`) on the server. Never `dangerouslySetInnerHTML` raw user content.
 - **Server Components by default.** Use Client Components only where interactivity demands it (sidebar tree, search palette, editor, chat panel).
 - **One vault, one bucket, one prefix.** The `vault_id → (bucket, prefix)` mapping is the boundary between user content and infra. Code should never assume a global bucket.
@@ -139,7 +141,8 @@ PRD §12 lists `AGENTS.md`, `WIKI_RULES.md`, `INDEX.md`, `LOG.md`, `SOURCES.md`,
 
 ## Operating notes for Claude
 
-- Confirm before large structural moves (creating `web/`, `api/`, archiving `legacy/`, deleting the prototype). Reversible local edits are fine without confirmation.
+- Confirm before large structural moves (deleting `portal/` or `api/`, restructuring `infra/`). Reversible local edits are fine without confirmation.
+- **No deployment-specific values in the repo.** Account IDs, personal bucket names, and user ids stay in env vars — the repo is public.
 - Don't revive the Bedrock pipeline unprompted. `legacy/` is frozen reference; reach into it only when explicitly porting code out, and prefer rewriting against the new architecture over importing from it.
 - When a PRD open question (§16) blocks a decision, surface it rather than guessing.
 - Prefer editing existing files over creating new ones. The prototype already encodes most product decisions — read it before re-deriving.

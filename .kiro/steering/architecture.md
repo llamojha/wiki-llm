@@ -5,6 +5,12 @@ inclusion: always
 
 # Vaultmark Architecture
 
+> **Status note (June 2026):** this doc describes the original two-service
+> FastAPI/Postgres design. After Phase 2 the deployed architecture pivoted to
+> a **single Next.js app** (Route Handlers + S3 + in-memory search) — see
+> `ROADMAP.md` and `CLAUDE.md` for current state. Keep this design in mind
+> for Phase 6 (SaaS), where a separate backend may return.
+
 ## System Overview
 
 ```

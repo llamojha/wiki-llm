@@ -12,14 +12,18 @@ Early MVP. Phases 0-5 are implemented in the single Next.js app shape tracked by
 
 - **Product spec:** [`prd_vaultmark_markdown_llm_wiki.md`](prd_vaultmark_markdown_llm_wiki.md)
 - **Engineering plan:** [`ROADMAP.md`](ROADMAP.md)
-- **Codebase guide:** [`CLAUDE.md`](CLAUDE.md)
+- **Documentation:** [`docs/`](docs/) — configuration, feature flags, deployment
+- **Contributing:** [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
 ## What it does
 
 - **Vault:** Markdown stored in an S3 bucket and prefix you own. Source of truth lives in object storage, not a database.
 - **Portal:** browse, render, and search your vault from a clean Next.js UI.
 - **Personal wiki:** create and maintain your own pages alongside project or team content.
-- **Ask-wiki agent (Phase 5):** a Bedrock Nova 2 Lite agent that reads your vault, cites sources, and proposes new pages — every write is user-confirmed.
+- **AI curation:** upload raw sources and let a Lambda-backed Bedrock pipeline turn them into structured wiki pages.
+- **Ask-wiki agent:** a Bedrock Nova 2 Lite agent that reads your vault, cites sources, and proposes new pages — every write is user-confirmed.
+
+Every feature is individually toggleable via [feature flags](docs/feature-flags.md), down to a fully read-only published wiki.
 
 ## Stack
 
@@ -30,19 +34,24 @@ Early MVP. Phases 0-5 are implemented in the single Next.js app shape tracked by
 | Storage | AWS S3 (Markdown blobs) |
 | Search | In-memory fuzzy search (Fuse.js) |
 | LLM | Amazon Bedrock — Nova 2 Lite (`amazon.nova-2-lite-v1:0`) |
-| Deploy | Vercel, Docker, or any Node.js host |
+| Deploy | Docker, Kubernetes, ECS Fargate, Vercel, or any Node.js host |
 
 ## Repo layout
 
 ```
 wiki-llm/
 ├── web/          Next.js portal (frontend + API route handlers)
-├── api/          FastAPI backend (archived — replaced by Route Handlers)
-├── infra/        Docker Compose for local dev
+├── ingest/       TypeScript CLI for vault init + batch ingest
+├── infra/
+│   ├── lambda/curate/   AI curation Lambda
+│   ├── k8s/             Kubernetes manifests
+│   ├── ecs/             ECS Fargate task definition + IAM policy
+│   └── docker-compose.yml
+├── docs/         Configuration, feature flags, deployment guides
 ├── specs/        Phase acceptance specs
+├── api/          FastAPI backend (archived — replaced by Route Handlers)
 ├── legacy/       Archived wiki-llm CLI (frozen reference)
 ├── ROADMAP.md    Engineering plan — phases are the contract
-├── CLAUDE.md     Codebase guide for contributors
 └── prd_vaultmark_markdown_llm_wiki.md   Product spec
 ```
 
@@ -51,7 +60,8 @@ wiki-llm/
 ### Prerequisites
 
 - Node.js 22+ and pnpm
-- AWS credentials with S3 access
+- An S3 bucket you own, and AWS credentials with access to it
+- (Optional, for AI features) Amazon Bedrock model access for Nova 2 Lite
 
 ### Local dev
 
@@ -67,18 +77,19 @@ cp infra/.env.example web/.env.local
 pnpm dev   # http://localhost:3000
 ```
 
-### Environment variables
-
-Create `web/.env.local`:
+Minimum configuration:
 
 ```
 VAULT_BUCKET=your-s3-bucket
 VAULT_PREFIX=your-prefix
 VAULT_REGION=us-east-1
-BEDROCK_MODEL=amazon.nova-2-lite-v1:0
 ```
 
-AWS credentials are picked up from the standard chain (`~/.aws/credentials`, instance role, env vars). No hardcoding.
+AWS credentials are picked up from the standard chain (`~/.aws/credentials`, instance role, env vars). No hardcoding. The full environment reference — Bedrock models, curation Lambda, per-user paths, debugging — is in [`docs/configuration.md`](docs/configuration.md).
+
+### Feature flags
+
+Every feature ships **on** and can be disabled per deployment with `FEATURE_*` env vars (`FEATURE_AGENT`, `FEATURE_UPLOAD`, `FEATURE_CURATE`, `FEATURE_REINDEX`, `FEATURE_EDITOR`, `FEATURE_SEARCH`, `FEATURE_STAR`, `FEATURE_PUBLISHING`). Flags gate both the UI and the API routes. See [`docs/feature-flags.md`](docs/feature-flags.md).
 
 ## S3 vault layout
 
@@ -107,41 +118,24 @@ pnpm ingest -- --help
 
 ## Deployment
 
-Deployment configuration is intentionally kept out of this repo to support self-hosting and open source use. The app is a standard Next.js application — deploy to any platform that supports it.
+The app is a standard Next.js server — one stateless container, S3 as the only state.
 
-**Vercel:** Connect the repo, set env vars in the dashboard, deploy. Zero config.
+| Target | Guide |
+|---|---|
+| Docker / Compose | [`docs/deploy/docker.md`](docs/deploy/docker.md) |
+| Kubernetes (incl. EKS) | [`docs/deploy/kubernetes.md`](docs/deploy/kubernetes.md) |
+| ECS Fargate | [`docs/deploy/ecs-fargate.md`](docs/deploy/ecs-fargate.md) |
+| Vercel | Connect the repo, set env vars in the dashboard, deploy. |
 
-**Docker:** the app is a pnpm workspace, so the image **must be built from the repo root** (the lockfile lives there), not from `web/`:
-
-```bash
-# Build (Dockerfile lives in web/, context is the repo root)
-docker build -f web/Dockerfile -t vaultmark .
-
-# Run — pass vault config + AWS credentials via env
-docker run -p 3000:3000 \
-  -e VAULT_BUCKET=your-bucket -e VAULT_REGION=eu-central-1 \
-  -e AWS_ACCESS_KEY_ID=... -e AWS_SECRET_ACCESS_KEY=... \
-  vaultmark
-# or load a file: docker run -p 3000:3000 --env-file web/.env.local vaultmark
-```
-
-Or use Compose, which builds from the root and wires env from `infra/.env`:
-
-```bash
-cp infra/.env.example infra/.env   # fill in vault + AWS values
-docker compose -f infra/docker-compose.yml up --build
-```
-
-The image ships only the `web` app (the `ingest` and `video` workspace packages are excluded) as a standalone Next.js server running as a non-root user on port 3000. The baked-in feature profile is agent-on / ingest-processing-off; override any feature with its `FEATURE_*` env var.
-
-> **Note:** Vaultmark has no built-in authentication. Only expose port 3000 on trusted networks — put a reverse proxy with auth in front before any public deployment.
-
-Required environment variables are documented in `infra/.env.example`.
+> **Security note:** Vaultmark has no built-in authentication. Put an auth layer (reverse proxy, ALB OIDC, VPN) in front of any deployment that isn't on a trusted network. See [`SECURITY.md`](SECURITY.md).
 
 ## Contributing
 
-Read the PRD and ROADMAP before opening an issue or PR. The roadmap phases are the contract — deviations need a conversation.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md). Read the PRD and ROADMAP before opening an issue or PR — the roadmap phases are the contract, and deviations need a conversation.
+
+- Security reports: [`SECURITY.md`](SECURITY.md) (please don't open public issues for vulnerabilities)
+- Community standards: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
 
 ## License
 
-TBD.
+[MIT](LICENSE)

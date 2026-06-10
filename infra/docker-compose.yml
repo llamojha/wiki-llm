@@ -12,6 +12,7 @@
 services:
   web:
     build:
+      # Repo root context — the pnpm workspace lockfile lives there
       context: ..
       dockerfile: web/Dockerfile
     ports:

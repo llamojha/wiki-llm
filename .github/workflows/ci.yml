@@ -23,11 +23,16 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: web/pnpm-lock.yaml
+          # Workspace lockfile lives at the repo root
+          cache-dependency-path: pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm build
+        env:
+          # Placeholder — route modules require a bucket at import time during
+          # `next build`. Real deployments set this at runtime.
+          VAULT_BUCKET: build-placeholder
 
   api:
     name: api — lint / typecheck / test

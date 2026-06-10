@@ -1,5 +1,7 @@
 export const USERS_ROOT = 'users';
-export const DEFAULT_USER_ID = 'amllamojha';
+// Inlined at build time (NEXT_PUBLIC_*) so server routes and client
+// components agree on the same value. Rebuild after changing it.
+export const DEFAULT_USER_ID = process.env.NEXT_PUBLIC_VAULT_USER_ID ?? 'default';
 export const DEFAULT_USER_ROOT = `${USERS_ROOT}/${DEFAULT_USER_ID}`;
 export const RAW_PREFIX = 'raw/';
 export const GENERATED_ROOT = 'generated';

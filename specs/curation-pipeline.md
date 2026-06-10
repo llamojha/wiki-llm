@@ -27,19 +27,19 @@ Generated curation output is controlled by `_system/structure.json` for shared i
     { "name": "articles", "label": "Articles", "indexed": true, "generated": false, "authored": true },
     { "name": "vaultmark", "label": "Vaultmark", "indexed": true, "generated": true, "authored": true }
   ],
-  "defaultUser": "amllamojha",
+  "defaultUser": "demo-user",
   "users": [
     {
-      "id": "amllamojha",
-      "label": "amllamojha",
+      "id": "demo-user",
+      "label": "demo-user",
       "default": true,
-      "prefix": "users/amllamojha/",
-      "root": "users/amllamojha/",
+      "prefix": "users/demo-user/",
+      "root": "users/demo-user/",
       "roots": {
-        "raw": "users/amllamojha/raw/",
-        "generated": "users/amllamojha/generated/",
-        "authored": "users/amllamojha/authored/",
-        "system": "users/amllamojha/_system/"
+        "raw": "users/demo-user/raw/",
+        "generated": "users/demo-user/generated/",
+        "authored": "users/demo-user/authored/",
+        "system": "users/demo-user/_system/"
       }
     }
   ]
@@ -350,7 +350,7 @@ infra/lambda/curate/
 Lambda execution role:
 - `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject`, `s3:ListBucket` on `arn:aws:s3:::vaultmark` and `arn:aws:s3:::vaultmark/*`
 - `bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream` on:
-  - `arn:aws:bedrock:eu-central-1:858650446023:inference-profile/eu.amazon.nova-2-lite-v1:0`
+  - `arn:aws:bedrock:eu-central-1:<account-id>:inference-profile/eu.amazon.nova-2-lite-v1:0`
   - `arn:aws:bedrock:*::foundation-model/amazon.nova-2-lite-v1:0`
 
 Vercel IAM user (`vaultmark-vercel`):
