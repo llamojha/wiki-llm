@@ -31,6 +31,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+# Pin the theme plugin directory to the bundled path rather than relying on
+# the standalone server.js chdir-ing into /app/web (a Next internal).
+ENV THEME_DIR=/app/web/themes
 
 COPY --from=builder /app/web/.next/standalone ./
 COPY --from=builder /app/web/.next/static ./web/.next/static
