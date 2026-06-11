@@ -17,6 +17,16 @@ export const PROVENANCE_ROOTS = new Set([
   SYSTEM_ROOT,
 ]);
 
+/**
+ * Vault name for the top-bar pill (server-side; pass to clients as a prop).
+ * `VAULT_ID` doubles as the display name; null (unset or the 'default'
+ * sentinel) hides the pill.
+ */
+export function vaultDisplayName(): string | null {
+  const id = (process.env.VAULT_ID ?? '').trim();
+  return id && id !== 'default' ? id : null;
+}
+
 export function generatedPrefix(space: string): string {
   return `${GENERATED_ROOT}/${space}/`;
 }

@@ -13,9 +13,11 @@ type TopBarProps = {
   setTheme: (t: Theme) => void;
   themes: ThemeInfo[];
   flags: FeatureFlags;
+  /** Vault name pill next to the brand; null/undefined hides it. */
+  vaultName?: string | null;
 };
 
-export function TopBar({ onSearch, onToggleChat, chatOpen, theme, setTheme, themes, flags }: TopBarProps) {
+export function TopBar({ onSearch, onToggleChat, chatOpen, theme, setTheme, themes, flags, vaultName }: TopBarProps) {
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
 
@@ -41,7 +43,7 @@ export function TopBar({ onSearch, onToggleChat, chatOpen, theme, setTheme, them
       <div className="brand">
         <div className="brand-mark">w</div>
         <div className="brand-name">WikiLLM <span>/ knowledge</span></div>
-        <span className="tenant-pill">acme</span>
+        {vaultName && <span className="tenant-pill">{vaultName}</span>}
       </div>
       <div className="topbar-search">
         {flags.search && (

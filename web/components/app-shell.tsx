@@ -73,9 +73,11 @@ type AppShellProps = {
   themes: ThemeInfo[];
   /** Theme id rendered on the server (registry default). */
   defaultTheme: Theme;
+  /** Vault name for the top-bar pill (from VAULT_ID); null hides it. */
+  vaultName?: string | null;
 };
 
-export function AppShell({ initialTree, initialDocId, flags, themes, defaultTheme }: AppShellProps) {
+export function AppShell({ initialTree, initialDocId, flags, themes, defaultTheme, vaultName }: AppShellProps) {
   const [scope, setScope] = useState<Scope>('shared');
   const [activeId, setActiveId] = useState<string>(initialDocId ?? '__home');
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -258,6 +260,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
         theme={theme}
         setTheme={setTheme}
         themes={themes}
+        vaultName={vaultName}
         flags={flags}
       />
       <Sidebar

@@ -16,7 +16,7 @@ The vault is the S3 location that holds your Markdown. One vault = one bucket
 | `VAULT_BUCKET` | **yes** | — | S3 bucket holding the vault. The app refuses to start without it. |
 | `VAULT_PREFIX` | no | `""` (bucket root) | Key prefix inside the bucket, e.g. `team-vault`. No leading/trailing slash. |
 | `VAULT_REGION` | no | `us-east-1` | AWS region of the bucket. |
-| `VAULT_ID` | no | `default` | Display id/name of the vault in the UI and `/api/vaults`. |
+| `VAULT_ID` | no | `default` | Display id/name of the vault — shown as the top-bar pill and in `/api/vaults`. The pill is hidden while the value is unset/`default`. |
 
 ## AWS credentials
 
