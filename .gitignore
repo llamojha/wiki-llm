@@ -67,3 +67,6 @@ infra-cdk/
 
 # Private working notes (never publish)
 .memory/
+
+# Theme plugins are local config, not codebase (keep README + .example tracked)
+web/themes/*.css

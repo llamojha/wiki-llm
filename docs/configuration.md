@@ -16,7 +16,7 @@ The vault is the S3 location that holds your Markdown. One vault = one bucket
 | `VAULT_BUCKET` | **yes** | — | S3 bucket holding the vault. The app refuses to start without it. |
 | `VAULT_PREFIX` | no | `""` (bucket root) | Key prefix inside the bucket, e.g. `team-vault`. No leading/trailing slash. |
 | `VAULT_REGION` | no | `us-east-1` | AWS region of the bucket. |
-| `VAULT_ID` | no | `default` | Display id/name of the vault in the UI and `/api/vaults`. |
+| `VAULT_ID` | no | `default` | Display id/name of the vault — shown as the top-bar pill and in `/api/vaults`. The pill is hidden while the value is unset/`default`. |
 
 ## AWS credentials
 
@@ -72,6 +72,16 @@ If you don't deploy the Lambda, disable the feature with `FEATURE_CURATE=off`.
 Every product feature has a `FEATURE_*` env var. All features are **on by
 default**; set a var to `off` (or `false`/`0`/`no`/`disabled`) to disable.
 See [`feature-flags.md`](feature-flags.md) for the full reference.
+
+## Theming
+
+Themes are drop-in CSS plugin files — see [`theming.md`](theming.md) for the
+authoring guide and variable reference.
+
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `THEME_DIR` | no | `<app cwd>/themes` (= `web/themes/`) | Directory scanned for `*.css` theme plugin files. |
+| `THEME_DEFAULT` | no | `dark` | Theme id rendered before a visitor picks one (`light`, `dark`, or a plugin's filename slug). |
 
 ## Debugging
 

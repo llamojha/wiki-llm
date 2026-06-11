@@ -48,7 +48,10 @@
   --rightbar-w: 220px;
 }
 
-[data-theme="dark"] {
+/* `data-base="dark"` lets theme plugins (see docs/theming.md) inherit the
+   dark palette and override only the variables they care about. */
+[data-theme="dark"],
+[data-base="dark"] {
   --bg: oklch(16% 0.01 250);
   --bg-1: oklch(18% 0.012 250);
   --bg-2: oklch(21% 0.014 250);
@@ -182,7 +185,7 @@ input, textarea { font: inherit; color: inherit; }
   border-radius: 4px;
   box-shadow: 0 1px 0 var(--line);
 }
-[data-theme="dark"] .kbd { background: var(--bg-3); }
+[data-theme="dark"] .kbd, [data-base="dark"] .kbd { background: var(--bg-3); }
 
 .topbar-actions { display: flex; align-items: center; gap: 4px; }
 .icon-btn {
@@ -202,6 +205,33 @@ input, textarea { font: inherit; color: inherit; }
   background: var(--red);
   border: 1.5px solid var(--bg-1);
 }
+
+/* Theme picker menu (shown when theme plugins are installed) */
+.theme-picker { position: relative; }
+.theme-menu {
+  position: absolute;
+  top: calc(100% + 6px); right: 0;
+  min-width: 160px;
+  padding: 4px;
+  display: flex; flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+  z-index: 30;
+}
+.theme-menu button {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 6px 8px;
+  border: 0; background: transparent;
+  border-radius: var(--r-sm);
+  font-size: 12.5px;
+  text-align: left;
+  color: var(--fg-1);
+}
+.theme-menu button:hover { background: var(--hover); color: var(--fg); }
+.theme-menu button.active { color: var(--fg); font-weight: 500; }
+.theme-menu-check { display: inline-flex; color: var(--accent); }
 
 /* Prominent Ask button in the topbar */
 .ask-btn {
@@ -458,9 +488,9 @@ input, textarea { font: inherit; color: inherit; }
 .tag-chip.shared { background: oklch(62% 0.14 150 / 0.12); color: oklch(45% 0.12 150); }
 .tag-chip.personal { background: oklch(60% 0.14 240 / 0.12); color: oklch(48% 0.14 240); }
 .tag-chip.generated { background: oklch(70% 0.15 70 / 0.18); color: oklch(48% 0.13 60); }
-[data-theme="dark"] .tag-chip.shared { color: oklch(75% 0.14 150); }
-[data-theme="dark"] .tag-chip.personal { color: oklch(72% 0.14 240); }
-[data-theme="dark"] .tag-chip.generated { color: oklch(78% 0.14 70); }
+[data-theme="dark"] .tag-chip.shared, [data-base="dark"] .tag-chip.shared { color: oklch(75% 0.14 150); }
+[data-theme="dark"] .tag-chip.personal, [data-base="dark"] .tag-chip.personal { color: oklch(72% 0.14 240); }
+[data-theme="dark"] .tag-chip.generated, [data-base="dark"] .tag-chip.generated { color: oklch(78% 0.14 70); }
 
 .btn {
   display: inline-flex; align-items: center; gap: 6px;
@@ -665,7 +695,7 @@ input, textarea { font: inherit; color: inherit; }
   z-index: 100;
   animation: fade-in 0.12s ease-out;
 }
-[data-theme="dark"] .palette-overlay { background: rgba(0, 0, 0, 0.55); }
+[data-theme="dark"] .palette-overlay, [data-base="dark"] .palette-overlay { background: rgba(0, 0, 0, 0.55); }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pop { from { opacity: 0; transform: translateY(-6px) scale(0.99); } to { opacity: 1; transform: none; } }
 
@@ -760,7 +790,7 @@ input, textarea { font: inherit; color: inherit; }
   padding: 0 2px;
   border-radius: 2px;
 }
-[data-theme="dark"] .palette-row .res-snippet mark { background: oklch(60% 0.16 80 / 0.4); }
+[data-theme="dark"] .palette-row .res-snippet mark, [data-base="dark"] .palette-row .res-snippet mark { background: oklch(60% 0.16 80 / 0.4); }
 
 .palette-foot {
   padding: 7px 14px;
@@ -1075,7 +1105,7 @@ input, textarea { font: inherit; color: inherit; }
   display: flex; align-items: center; gap: 8px;
   animation: pop 0.18s ease-out;
 }
-[data-theme="dark"] .toast { background: oklch(96% 0.005 250); color: oklch(18% 0.01 250); }
+[data-theme="dark"] .toast, [data-base="dark"] .toast { background: oklch(96% 0.005 250); color: oklch(18% 0.01 250); }
 
 /* ───── Hero "Ask the wiki" card on Home ───── */
 .ask-hero {
