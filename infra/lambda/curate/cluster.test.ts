@@ -75,20 +75,20 @@ describe('clusterSourceCards', () => {
       ),
       entry(
         card({
-          rawKey: 'raw/projects/aivaro/PRD.md',
-          title: 'AIvaro PRD',
-          suggestedPages: ['GitHub Integration with Backstage', 'AIvaro Workflow Automation'],
-          entities: ['Backstage', 'AIvaro'],
-          tags: ['aivaro', 'github'],
+          rawKey: 'raw/projects/atlas/PRD.md',
+          title: 'Atlas PRD',
+          suggestedPages: ['GitHub Integration with Backstage', 'Atlas Workflow Automation'],
+          entities: ['Backstage', 'Atlas'],
+          tags: ['atlas', 'github'],
         }),
         'a2',
       ),
       entry(
         card({
-          rawKey: 'raw/projects/aivaro/roadmap.md',
-          title: 'AIvaro Roadmap',
-          suggestedPages: ['AIvaro Workflow Automation', 'AIvaro Architecture'],
-          tags: ['aivaro'],
+          rawKey: 'raw/projects/atlas/roadmap.md',
+          title: 'Atlas Roadmap',
+          suggestedPages: ['Atlas Workflow Automation', 'Atlas Architecture'],
+          tags: ['atlas'],
         }),
         'a3',
       ),
@@ -97,10 +97,10 @@ describe('clusterSourceCards', () => {
     const clusters = clusterSourceCards(cards);
 
     // "GitHub Integration with Backstage" → 2 contributors → kept
-    // "AIvaro Workflow Automation" → 2 contributors → kept
-    // singletons (Backstage Plugin Configuration, AIvaro Architecture) → dropped
+    // "Atlas Workflow Automation" → 2 contributors → kept
+    // singletons (Backstage Plugin Configuration, Atlas Architecture) → dropped
     expect(clusters.map((c) => c.title).sort()).toEqual([
-      'AIvaro Workflow Automation',
+      'Atlas Workflow Automation',
       'GitHub Integration with Backstage',
     ]);
   });

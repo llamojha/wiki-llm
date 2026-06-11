@@ -44,7 +44,7 @@ function placementFromRawKey(rawKey: string): string {
 
 Examples:
 - `raw/projects/CodeMMORPG/PRD.md` → `projects/codemmorpg`
-- `raw/projects/AIvaro/roadmap.md` → `projects/aivaro`
+- `raw/projects/Atlas/roadmap.md` → `projects/atlas`
 - `raw/people/john.md` → `people`
 - `raw/random-note.md` → `inbox`
 

@@ -15,9 +15,7 @@ When docs conflict, use this order:
 2. `ROADMAP.md` for active phase, architecture state, and locked decisions.
 3. `prd_vaultmark_markdown_llm_wiki.md` for product intent and data model.
 4. `.kiro/steering/*.md` for durable engineering principles.
-5. `.kiro/specs/*` and `.kiro/prompts/*` as reference only.
-
-Important: `.kiro/roadmap.md` is deprecated. Several `.kiro/specs/`, `.kiro/prompts/`, and `.kiro/agents/` files mention AIvaro, VibeSprint, or DeploySim. Treat those as carried-over planning references, not active Vaultmark scope, unless `ROADMAP.md` explicitly maps them into a Vaultmark phase.
+5. `.kiro/prompts/*` as reference only.
 
 ## Current state (May 2026)
 
@@ -162,12 +160,6 @@ Use `.kiro/steering/` as the most relevant Kiro folder:
 - `aws-infrastructure.md`: local/default AWS bucket, region, and Bedrock model context.
 
 Use `.kiro/prompts/` and `.kiro/agents/` only as workflow inspiration. They describe roles such as Config & Security, GitHub Integration, Documentation, Core, CLI/DevX, and review/consultant agents, but they are not binding product architecture.
-
-Use `.kiro/specs/` cautiously:
-
-- `obsidian-integration` overlaps conceptually with Vaultmark's Markdown/vault direction, but it mentions semantic/vector search and local Obsidian behavior that are not current Vaultmark scope.
-- `audio-support` maps loosely to deferred Phase 7 multimodal ideas.
-- `github-repo-management`, `workflow-automation-migration`, `discord-threads`, and `smart-reminders-proactive-agent` are AIvaro/VibeSprint-oriented and not active Vaultmark work unless explicitly requested.
 
 ## Vault content vs codebase
 

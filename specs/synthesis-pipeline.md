@@ -154,7 +154,7 @@ A cluster is re-synthesized iff its `clusterHash` (deterministic from the sorted
 This is the first-run scenario. No special migration needed — the synthesis pass operates on whatever source-cards exist. On first invocation:
 
 1. Read all 160 cards.
-2. Cluster. Expected: ~20-40 clusters based on the diversity of `suggestedPages` across the current sources (sample inspection: Backstage, GitHub Integration, Amplify, AIvaro, Kiro, etc. — clearly clustered topics).
+2. Cluster. Expected: ~20-40 clusters based on the diversity of `suggestedPages` across the current sources (sample inspection: Backstage, GitHub Integration, Amplify, Atlas, Kiro, etc. — clearly clustered topics).
 3. Synthesize each cluster ≥ `MIN_CLUSTER_SIZE`.
 4. Write to `generated/wiki/{concepts,features,projects}/`.
 5. The 9 fossil pages from the legacy pipeline: leave alone if their titles don't collide with a new cluster; overwrite if they do (cluster-hash mismatch).
@@ -195,7 +195,7 @@ Decisions taken `2026-05-30` (locked in before implementation):
 - [ ] 4. Wire a Lambda handler entry (`SYNTHESIZE` action) alongside the existing extraction action.
 - [ ] 5. Add `web/app/api/synthesize/route.ts` mirroring the curate route's job-launch shape, gated by `FEATURE_CURATE`. Add the `FEATURE_CURATE_AUTOSYNTH` chain hook to `/api/curate/start` so it fires synthesis after the batch completes when enabled.
 - [ ] 6. Add `_system/synthesis-manifest.json` read/write helpers in `manifest.ts`.
-- [ ] 7. Tests: clustering on a fixture of 10 source-cards (Backstage + AIvaro + GitHub overlap), idempotency on second run, cluster-hash invalidation when a contributing card is removed.
+- [ ] 7. Tests: clustering on a fixture of 10 source-cards (Backstage + Atlas + GitHub overlap), idempotency on second run, cluster-hash invalidation when a contributing card is removed.
 - [ ] 8. After first successful run, regenerate `_system/index.md` via the existing reindex endpoint and verify the new rollup pages appear in the agent catalog.
 
 ## Gates

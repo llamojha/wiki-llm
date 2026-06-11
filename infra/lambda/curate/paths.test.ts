@@ -4,7 +4,7 @@ import { placementFromRawKey, sourcePageKey } from './paths.js';
 describe('placementFromRawKey', () => {
   it('routes raw/projects/<X>/... → projects/<x>', () => {
     expect(placementFromRawKey('raw/projects/CodeMMORPG/PRD.md')).toBe('projects/codemmorpg');
-    expect(placementFromRawKey('raw/projects/AIvaro/docs/roadmap.md')).toBe('projects/aivaro');
+    expect(placementFromRawKey('raw/projects/Atlas/docs/roadmap.md')).toBe('projects/atlas');
   });
 
   it('handles user-scoped raw keys (users/<id>/raw/projects/...)', () => {

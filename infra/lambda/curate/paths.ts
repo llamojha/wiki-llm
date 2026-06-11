@@ -28,7 +28,7 @@ function segmentSlug(name: string): string {
  *
  * Examples:
  *   raw/projects/CodeMMORPG/PRD.md            → projects/codemmorpg
- *   raw/projects/AIvaro/docs/roadmap.md       → projects/aivaro
+ *   raw/projects/Atlas/docs/roadmap.md       → projects/atlas
  *   users/amllamojha/raw/projects/X/notes.md  → projects/x
  *   raw/people/john.md                        → people
  *   raw/random-note.md                        → inbox  (no sub-folder)

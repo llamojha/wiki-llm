@@ -1,15 +1,6 @@
 # Custom Prompts
 
-This directory contains Kiro CLI prompts for DeploySim development.
-
-## Project-Specific Prompts
-
-| Prompt | Purpose |
-|--------|---------|
-| `DEVLOG.md` | Session tracking with timestamps, duration, and Kiro credit usage |
-| `code-review-hackathon.md` | Review against official Kiro Hackathon judging criteria |
-| `dispatcher-debug.md` | Debug VibeSprint issues |
-| `dispatcher-extend.md` | Extend VibeSprint with new executor |
+This directory contains Kiro CLI prompts used as workflow tooling for this repo.
 
 ## Development Workflow Prompts
 

@@ -121,11 +121,4 @@ kiro chat "Delegate to codex-consultant agent: [describe review task]"
 4. **Combine approaches** - steering for ongoing feedback, manual for deep dives
 5. **Review Codex feedback critically** - it's advisory, not authoritative
 
-## Integration with VibeSprint
-
-The Codex review system integrates seamlessly with VibeSprint's issue-to-PR workflow:
-- Steering provides automatic review during code generation
-- Manual prompts enable review of existing code before changes
-- Agent delegation supports comprehensive pre-implementation analysis
-
-All three approaches respect the "memory only" requirement - feedback is displayed during execution but not persisted to files or issues.
+Feedback is displayed during execution but not persisted to files or issues.

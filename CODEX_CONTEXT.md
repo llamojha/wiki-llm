@@ -98,7 +98,7 @@ These are "always include" context files that Kiro loads automatically:
 2. `ROADMAP.md` for active phase and locked decisions
 3. `prd_vaultmark_markdown_llm_wiki.md` for product intent
 4. `.kiro/steering/*.md` for engineering principles
-5. `.kiro/specs/*` and `.kiro/prompts/*` as reference only
+5. `.kiro/prompts/*` as reference only
 
 ### Skills (`.kiro/skills/`)
 
