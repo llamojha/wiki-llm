@@ -1,7 +1,9 @@
 # Build from the repo root so the pnpm workspace lockfile is in context:
 #   docker build -f web/Dockerfile -t vaultmark .
-FROM node:22-alpine AS base
-RUN corepack enable pnpm
+FROM node:26-alpine AS base
+# Node 26 no longer bundles corepack, so install the pinned pnpm directly.
+# Keep this version in sync with `packageManager` in the root package.json.
+RUN npm install -g pnpm@10.5.0
 
 # Install dependencies (workspace-aware — lockfile lives at the repo root)
 FROM base AS deps
@@ -26,8 +28,12 @@ ENV VAULT_BUCKET=build-placeholder
 RUN pnpm --filter @vaultmark/web build
 
 # Runtime — Next.js standalone output (mirrors the workspace layout)
-FROM node:22-alpine AS runner
+FROM node:26-alpine AS runner
 WORKDIR /app
+# Patch OS packages that lag the node:26-alpine base — clears the openssl
+# (libcrypto3/libssl3) HIGH advisories the Trivy gate flags until the base
+# image catches up. Keep until node:26-alpine ships the fixed alpine release.
+RUN apk upgrade --no-cache libcrypto3 libssl3
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0

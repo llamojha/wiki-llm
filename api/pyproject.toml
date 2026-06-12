@@ -5,7 +5,7 @@ description = "Vaultmark FastAPI backend"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "fastapi[standard]>=0.136.0",
+    "fastapi[standard]>=0.136.3",
     "uvicorn[standard]>=0.34.0",
     "pydantic>=2.11.0",
     "pydantic-settings>=2.9.0",
