@@ -1,6 +1,6 @@
 # Build from the repo root so the pnpm workspace lockfile is in context:
 #   docker build -f web/Dockerfile -t vaultmark .
-FROM node:22-alpine AS base
+FROM node:26-alpine AS base
 RUN corepack enable pnpm
 
 # Install dependencies (workspace-aware — lockfile lives at the repo root)
@@ -26,7 +26,7 @@ ENV VAULT_BUCKET=build-placeholder
 RUN pnpm --filter @vaultmark/web build
 
 # Runtime — Next.js standalone output (mirrors the workspace layout)
-FROM node:22-alpine AS runner
+FROM node:26-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
