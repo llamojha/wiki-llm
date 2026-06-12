@@ -17,6 +17,7 @@
       "essential": true,
       "portMappings": [{ "containerPort": 3000, "protocol": "tcp" }],
       "environment": [
+        { "name": "HOSTNAME", "value": "0.0.0.0" },
         { "name": "VAULT_BUCKET", "value": "my-vault-bucket" },
         { "name": "VAULT_PREFIX", "value": "" },
         { "name": "VAULT_REGION", "value": "us-east-1" },

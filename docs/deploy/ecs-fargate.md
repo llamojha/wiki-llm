@@ -12,7 +12,24 @@ Reference files:
 Replace `<account-id>`, `<region>`, and `<bucket>`/`<prefix>` placeholders
 throughout.
 
-## 1. Build and push the image to ECR
+## 1. Get the image
+
+You have two options.
+
+**Option A — use the published image from GHCR (simplest).** Every push to
+`main` publishes a multi-arch (amd64 + arm64) image to
+`ghcr.io/<owner>/<repo>:latest` via `.github/workflows/release-image.yml`.
+Because the package is public it pulls anonymously, so Fargate needs no
+registry credentials — just reference it directly in the task definition:
+
+```
+"image": "ghcr.io/<owner>/wiki-llm:latest"
+```
+
+Skip to step 2. (If the GHCR package is private, attach pull credentials with
+`repositoryCredentials` or use Option B.)
+
+**Option B — build and push to your own ECR repo:**
 
 ```bash
 aws ecr create-repository --repository-name vaultmark
@@ -77,6 +94,17 @@ Environment variables are documented in
 Lambda is deployed. For secrets you'd rather not put in plain env vars, use
 the task definition's `secrets` block with SSM Parameter Store or Secrets
 Manager.
+
+> **Required: `HOSTNAME=0.0.0.0`.** The Next.js standalone server binds to
+> whatever `HOSTNAME` is set to. In `awsvpc` network mode (Fargate) ECS injects
+> the task's private DNS name into `HOSTNAME`, so without an override the server
+> binds only to the ENI IP — and the container health check
+> (`wget http://127.0.0.1:3000/api/vaults`) gets "connection refused" on
+> loopback. The container then reports **UNHEALTHY** and, behind a service, ECS
+> kills and replaces it in a loop so the deployment never stabilizes. Setting
+> `HOSTNAME=0.0.0.0` (already in `task-definition.example.json`) makes it bind
+> to all interfaces, satisfying both the loopback health check and the ALB
+> target on the ENI IP.
 
 ## 4. Create the service behind an ALB
 
