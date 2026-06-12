@@ -59,7 +59,7 @@ wiki-llm/
 
 ### Prerequisites
 
-- Node.js 22+ and pnpm
+- Node.js 26+ (Active LTS) and pnpm
 - An S3 bucket you own, and AWS credentials with access to it
 - (Optional, for AI features) Amazon Bedrock model access for Nova 2 Lite
 

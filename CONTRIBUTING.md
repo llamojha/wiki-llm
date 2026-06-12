@@ -12,7 +12,7 @@ Read these in order; they explain what the project is and where it's going:
 
 ## Development setup
 
-Prerequisites: Node.js 22+, pnpm 10+, and AWS credentials with access to an S3 bucket (any bucket you own works for development).
+Prerequisites: Node.js 26+, pnpm 10+, and AWS credentials with access to an S3 bucket (any bucket you own works for development).
 
 ```bash
 pnpm install
