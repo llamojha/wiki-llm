@@ -69,9 +69,13 @@ If you don't deploy the Lambda, disable the feature with `FEATURE_CURATE=off`.
 
 ## Feature flags
 
-Every product feature has a `FEATURE_*` env var. All features are **on by
-default**; set a var to `off` (or `false`/`0`/`no`/`disabled`) to disable.
-See [`feature-flags.md`](feature-flags.md) for the full reference.
+Every product feature has a `FEATURE_*` env var, changeable at runtime
+(restart required, no rebuild). Defaults: **`FEATURE_AGENT` on, every other
+feature off**. Set a var to `off` (or `false`/`0`/`no`/`disabled`) to
+disable, or to `on` to enable. The container image bakes the defaults in as
+`ENV` values and [`infra/.env.example`](../infra/.env.example) lists every
+flag, so the full tunable surface is visible per deployment. See
+[`feature-flags.md`](feature-flags.md) for the full reference.
 
 ## Theming
 

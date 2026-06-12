@@ -18,8 +18,9 @@ spec:
       serviceAccountName: vaultmark
       containers:
         - name: web
-          # Push the image built from web/Dockerfile to your registry
-          image: <registry>/vaultmark:latest
+          # CI publishes this image to GHCR (see .github/workflows/release-image.yml);
+          # pin a version tag (ghcr.io/<owner>/<repo>:1.2.3) for production.
+          image: ghcr.io/<owner>/<repo>:latest
           ports:
             - containerPort: 3000
               name: http

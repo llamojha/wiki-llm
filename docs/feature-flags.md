@@ -9,9 +9,16 @@ Implementation: [`web/lib/flags.ts`](../web/lib/flags.ts).
 
 ## How flags work
 
-- A feature is **ON unless** its env var is set to one of the off-tokens:
-  `off`, `false`, `0`, `no`, `disabled` (case-insensitive). An absent var
-  means **on** — everything ships enabled with no env changes.
+- When a flag's env var is **set**, it wins: the feature is ON unless the
+  value is one of the off-tokens `off`, `false`, `0`, `no`, `disabled`
+  (case-insensitive).
+- When the var is **absent**, the feature falls back to its built-in default
+  (`DEFAULT_BY_FEATURE` in `web/lib/flags.ts`): **`FEATURE_AGENT` is on,
+  every other feature is off** — plain Markdown browsing plus the ask-wiki
+  agent, with the ingest/processing surfaces opt-in. The published container
+  image bakes these same defaults in as `ENV` values, and
+  [`infra/.env.example`](../infra/.env.example) lists every flag explicitly,
+  so what a deployment can change is always visible.
 - Flags are read **once at server start** (module load). Changing a flag
   requires a restart (or redeploy); these are not runtime toggles.
 - Each flag gates **both layers**:

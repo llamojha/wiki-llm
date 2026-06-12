@@ -4,6 +4,29 @@ Vaultmark ships as a single Next.js server. The image is built from
 [`web/Dockerfile`](../../web/Dockerfile) using Next.js standalone output —
 the final image contains only the compiled server, not the toolchain.
 
+## Pull from GitHub Container Registry
+
+CI publishes a multi-arch (amd64 + arm64) image to GHCR on every push to
+`main` and on `v*` version tags — see
+[`.github/workflows/release-image.yml`](../../.github/workflows/release-image.yml).
+Each image is Trivy-scanned before publishing; fixable HIGH/CRITICAL
+vulnerabilities block the release.
+
+```bash
+docker pull ghcr.io/<owner>/<repo>:latest    # tip of main
+docker pull ghcr.io/<owner>/<repo>:1.2.3     # a tagged release
+docker pull ghcr.io/<owner>/<repo>:sha-a1b2c3d   # exact build, for rollbacks
+```
+
+While the repository is private the package is too — authenticate with
+`docker login ghcr.io` using a token that has `read:packages`.
+
+All configuration is **runtime environment variables** (the one exception:
+`NEXT_PUBLIC_*` values are inlined at build time). The image bakes in the
+feature-flag defaults as `ENV` values, so `docker inspect` shows the full
+tunable surface; [`infra/.env.example`](../../infra/.env.example) is the
+copyable reference.
+
 ## Build
 
 The build context must be the **repo root** (the pnpm workspace lockfile

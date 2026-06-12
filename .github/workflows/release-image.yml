@@ -1,0 +1,105 @@
+name: Release image
+
+# Builds the web image, scans it with Trivy, and publishes it to GitHub
+# Container Registry as ghcr.io/<owner>/<repo>. The image name follows the
+# repository automatically, so a repo rename needs no workflow change.
+#
+# Tags published:
+#   latest          — every push to main
+#   vX.Y.Z / X.Y    — on version tags (git tag v1.2.3 && git push --tags)
+#   sha-<short>     — every published build, for exact rollbacks
+#
+# Pull requests build + scan the amd64 image but never push.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    paths:
+      - web/**
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - ingest/package.json
+      - video/package.json
+      - .github/workflows/release-image.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  image:
+    name: build / scan / push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image metadata (tags + OCI labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+          labels: |
+            org.opencontainers.image.title=Vaultmark
+            org.opencontainers.image.description=S3-backed Markdown knowledge portal
+
+      # Build the native-arch image locally first so Trivy can scan exactly
+      # what we are about to publish. The gha cache makes the multi-arch
+      # build below reuse these layers.
+      - name: Build amd64 image for scanning
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: web/Dockerfile
+          load: true
+          tags: vaultmark-scan-target:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Gate publishing on the scan: fixable HIGH/CRITICAL vulns fail the job.
+      # (SARIF upload to the Security tab needs GitHub code scanning, which is
+      # free once the repo is public — switch format to 'sarif' then.)
+      - name: Trivy scan (vulnerabilities)
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          image-ref: vaultmark-scan-target:ci
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: Push multi-arch image
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: web/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

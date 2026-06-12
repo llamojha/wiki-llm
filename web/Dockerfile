@@ -35,6 +35,19 @@ ENV HOSTNAME=0.0.0.0
 # the standalone server.js chdir-ing into /app/web (a Next internal).
 ENV THEME_DIR=/app/web/themes
 
+# Feature-flag defaults, baked in so `docker inspect` shows every runtime
+# tunable. Values mirror DEFAULT_BY_FEATURE in web/lib/flags.ts — keep in
+# sync. Override any of them with -e / env_file at runtime; off-tokens are
+# off/false/0/no/disabled. See docs/feature-flags.md.
+ENV FEATURE_AGENT=on \
+    FEATURE_UPLOAD=off \
+    FEATURE_CURATE=off \
+    FEATURE_REINDEX=off \
+    FEATURE_EDITOR=off \
+    FEATURE_SEARCH=off \
+    FEATURE_STAR=off \
+    FEATURE_PUBLISHING=off
+
 COPY --from=builder /app/web/.next/standalone ./
 COPY --from=builder /app/web/.next/static ./web/.next/static
 COPY --from=builder /app/web/public ./web/public
@@ -47,4 +60,10 @@ COPY --from=builder /app/web/themes ./web/themes
 USER node
 
 EXPOSE 3000
+
+# /api/vaults answers 200 once the server is up and configured (it is a
+# read path, so it works with every feature flag off).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD wget -qO /dev/null "http://127.0.0.1:${PORT}/api/vaults" || exit 1
+
 CMD ["node", "web/server.js"]

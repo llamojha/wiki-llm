@@ -1,0 +1,58 @@
+# Dependabot — dependency update PRs + security alerts.
+# Docs: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
+
+version: 2
+updates:
+  # pnpm workspace (web, ingest, video) — lockfile at the repo root
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      # One PR for routine minor/patch bumps; majors stay individual
+      minor-and-patch:
+        update-types: [minor, patch]
+    # Framework pins are deliberate (see .kiro/steering/tech-stack.md) —
+    # majors need a steering-doc update first, so don't auto-PR them.
+    ignore:
+      - dependency-name: next
+        update-types: [version-update:semver-major]
+      - dependency-name: react
+        update-types: [version-update:semver-major]
+      - dependency-name: react-dom
+        update-types: [version-update:semver-major]
+
+  # Curate Lambda (own package.json, deployed out-of-band)
+  - package-ecosystem: npm
+    directory: /infra/lambda/curate
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  # Archived FastAPI backend — CI still runs its tests, so keep it patched,
+  # but monthly to limit noise on archived code.
+  - package-ecosystem: uv
+    directory: /api
+    schedule:
+      interval: monthly
+
+  # Base images in Dockerfiles
+  - package-ecosystem: docker
+    directory: /web
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /api
+    schedule:
+      interval: monthly
+
+  # GitHub Actions pins
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']

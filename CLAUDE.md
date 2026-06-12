@@ -99,8 +99,11 @@ Deployment guides (Docker, Kubernetes, ECS Fargate): [`docs/deploy/`](docs/deplo
 ## Feature flags
 
 Per-feature toggles live in `web/lib/flags.ts` (single source of truth, read
-once from `FEATURE_*` env vars). A feature is **ON unless** its var is set to
-`off`/`false`/`0`/`no`/`disabled` — absent ⇒ on, so everything ships enabled.
+once from `FEATURE_*` env vars). A set var wins: ON unless its value is
+`off`/`false`/`0`/`no`/`disabled`. An absent var falls back to
+`DEFAULT_BY_FEATURE` — **agent on, everything else off**. The container image
+bakes these defaults in as `ENV` (keep `web/Dockerfile` in sync with
+`flags.ts`), and `infra/.env.example` lists every flag explicitly.
 
 Each flag gates **both layers**: `FLAGS` is passed from the root server
 component into the client `AppShell` (which hides the entry point), and

@@ -14,7 +14,15 @@ infra/k8s/
 └── ingress.yaml            ingress (bring your own controller + auth)
 ```
 
-## 1. Build and push the image
+## 1. Get the image
+
+CI publishes a multi-arch image to GHCR (see
+[`docker.md`](docker.md#pull-from-github-container-registry)) — use
+`ghcr.io/<owner>/<repo>:latest` (or a pinned version tag) directly in
+`deployment.yaml`. While the package is private, add an `imagePullSecrets`
+with a `read:packages` token.
+
+To build and push yourself instead:
 
 ```bash
 docker build -f web/Dockerfile -t <registry>/vaultmark:latest .
