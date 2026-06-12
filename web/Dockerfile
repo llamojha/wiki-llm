@@ -1,7 +1,9 @@
 # Build from the repo root so the pnpm workspace lockfile is in context:
 #   docker build -f web/Dockerfile -t vaultmark .
 FROM node:26-alpine AS base
-RUN corepack enable pnpm
+# Node 26 no longer bundles corepack, so install the pinned pnpm directly.
+# Keep this version in sync with `packageManager` in the root package.json.
+RUN npm install -g pnpm@10.5.0
 
 # Install dependencies (workspace-aware — lockfile lives at the repo root)
 FROM base AS deps
