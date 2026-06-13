@@ -22,7 +22,7 @@ export default async function DocPage({
     // S3 not reachable
   }
 
-  const { themes, defaultTheme } = getThemeRegistry();
+  const { themes, defaultTheme } = await getThemeRegistry();
   return (
     <AppShell
       initialTree={initialTree}

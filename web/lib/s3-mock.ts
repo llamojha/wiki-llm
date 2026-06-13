@@ -80,6 +80,16 @@ export async function listObjects(subPrefix = ''): Promise<string[]> {
   return out;
 }
 
+export async function listCssObjects(subPrefix = ''): Promise<string[]> {
+  const out: string[] = [];
+  for (const key of store().objects.keys()) {
+    if ((!subPrefix || key.startsWith(subPrefix)) && key.endsWith('.css')) {
+      out.push(key);
+    }
+  }
+  return out;
+}
+
 export async function getObject(relKey: string): Promise<string> {
   const v = store().objects.get(relKey);
   if (v == null) throw new NoSuchKeyError(relKey);

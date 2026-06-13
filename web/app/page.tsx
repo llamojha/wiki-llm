@@ -18,7 +18,7 @@ export default async function Home() {
   } catch {
     // S3 not reachable — AppShell renders with empty tree
   }
-  const { themes, defaultTheme } = getThemeRegistry();
+  const { themes, defaultTheme } = await getThemeRegistry();
   return (
     <AppShell
       initialTree={initialTree}

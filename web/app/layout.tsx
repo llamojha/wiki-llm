@@ -43,8 +43,8 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const { themes, defaultTheme, css } = getThemeRegistry();
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const { themes, defaultTheme, css } = await getThemeRegistry();
   return (
     <html
       lang="en"
