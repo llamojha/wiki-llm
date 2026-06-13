@@ -11,7 +11,7 @@ import {
   putObject,
 } from '@/lib/s3';
 import { invalidateSearchIndex } from '@/lib/search';
-import { displayPathForKey, sourceTypeFromKey } from '@/lib/vault-paths';
+import { displayPathForKey, isDocumentKey, sourceTypeFromKey } from '@/lib/vault-paths';
 import { flagGuard } from '@/lib/flags';
 
 type Params = { params: Promise<{ id: string[] }> };
@@ -68,6 +68,18 @@ export async function PUT(req: Request, { params }: Params) {
 
   const { id } = await params;
   const key = decodeURIComponent(id.join('/'));
+
+  // The editor may only write real documents. Without this, an arbitrary key
+  // (e.g. `_themes/evil.css`) could be PUT with arbitrary content — which the
+  // theme loader would then inline as a theme, defeating the "operator-only"
+  // guarantee of THEME_VAULT_PREFIX. See docs/theming.md.
+  if (!isDocumentKey(key)) {
+    return NextResponse.json(
+      { detail: `Not an editable document key: ${key}` },
+      { status: 400 },
+    );
+  }
+
   const { body: content, etag, title } = (await req.json()) as {
     body: string;
     etag?: string;
@@ -113,6 +125,15 @@ export async function DELETE(_req: Request, { params }: Params) {
 
   const { id } = await params;
   const key = decodeURIComponent(id.join('/'));
+
+  // Same restriction as PUT: the editor only touches real documents, never
+  // system objects or operator-controlled theme files.
+  if (!isDocumentKey(key)) {
+    return NextResponse.json(
+      { detail: `Not an editable document key: ${key}` },
+      { status: 400 },
+    );
+  }
 
   // Read title before deleting for the log entry
   let title = keyToTitle(key);

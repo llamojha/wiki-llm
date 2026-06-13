@@ -16,7 +16,8 @@ import { BUILT_IN_THEMES, type ThemeBase, type ThemeInfo } from './theme';
  *   2. An S3 prefix in the vault bucket (`THEME_VAULT_PREFIX`, opt-in) —
  *      lets a built container self-load themes on start with no rebuild or
  *      mount. Only `.css` keys are read, and no portal write route can ever
- *      create a `.css` key (every write forces `.md`), so this prefix is
+ *      create a `.css` key (writes are restricted to `.md` document keys —
+ *      the editor enforces `isDocumentKey`), so this prefix is
  *      not reachable by portal users; it is operator-only at the S3/IAM
  *      level. See the security note in `docs/theming.md`.
  * On an id collision the first source to claim the id wins (disk before S3).
@@ -119,8 +120,9 @@ async function loadRegistry(): Promise<ThemeRegistry> {
   }
 
   // Source 2: S3 prefix in the vault bucket (opt-in via THEME_VAULT_PREFIX).
-  // `.css` keys only; unreachable by portal write routes (all force `.md`),
-  // so it is operator-controlled at the S3 level. See docs/theming.md.
+  // `.css` keys only; unreachable by portal write routes (restricted to `.md`
+  // document keys), so it is operator-controlled at the S3 level. See
+  // docs/theming.md.
   const vaultPrefix = process.env.THEME_VAULT_PREFIX;
   if (vaultPrefix) {
     try {

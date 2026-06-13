@@ -113,11 +113,13 @@ themes (the id is the object's basename).
 > mode re-reads on every request, so this only bites deployed images.)
 
 **Why this is safe even though the bucket is the user's vault:** the loader
-reads **only `.css` keys**, and *no portal route can ever write a `.css`
-object* — every write path (upload, editor, curate) forces a `.md`
-extension, and the content lister (`listObjects`) is `.md`-only. So portal
-users cannot plant a theme. The prefix is operator-controlled at the
-S3/IAM level — the same trust boundary as a file on disk. Keep it that way:
+reads **only `.css` keys**, and *no portal route can write a `.css`
+object*. Upload and page-create force a `.md` basename; the editor's
+`PUT`/`DELETE` reject any key that isn't a real document
+(`isDocumentKey` — `.md` under a `generated/`/`authored/` root, never a
+system or theme key); curate only writes JSON job state. So portal users
+cannot plant a theme. The prefix is operator-controlled at the S3/IAM
+level — the same trust boundary as a file on disk. Keep it that way:
 **do not grant portal users (or any untrusted principal) write access to
 this prefix**, and prefer a dedicated prefix (e.g. `_themes/`) over the
 document tree.
@@ -148,9 +150,10 @@ Theme CSS is inlined into `<head>`, so a theme file is **operator-controlled
 code** — the same trust level as the codebase itself. Two sources are
 allowed, both operator-controlled: files on the server's disk (`THEME_DIR`)
 and `.css` objects under `THEME_VAULT_PREFIX` in the vault bucket. The S3
-source is safe because **no portal route can write a `.css` object** (every
-write forces `.md`), so portal users cannot plant a theme — but it relies on
-that prefix not being writable by untrusted principals at the S3/IAM level.
+source is safe because **no portal route can write a `.css` object** (writes
+are restricted to `.md` document keys — the editor enforces `isDocumentKey`),
+so portal users cannot plant a theme — but it relies on that prefix not being
+writable by untrusted principals at the S3/IAM level.
 Theme files are never sourced from user input, and the loader neutralizes
 `</` sequences so a file cannot break out of its inline `<style>` tag. Keep
 it that way: do not wire `THEME_DIR` or `THEME_VAULT_PREFIX` to anything
