@@ -81,11 +81,48 @@ values, the `[data-theme="dark"], [data-base="dark"]` block = dark values).
 | Variable | Default | Purpose |
 |---|---|---|
 | `THEME_DIR` | `<app cwd>/themes` (= `web/themes/`) | Directory scanned for `*.css` theme plugins. |
+| `THEME_VAULT_PREFIX` | — (off) | Optional S3 prefix in the **vault bucket** scanned for `*.css` themes. Lets a built container self-load themes on start — no rebuild, no volume. See [Loading themes from S3](#loading-themes-from-s3). |
 | `THEME_DEFAULT` | `dark` | Theme rendered before a visitor has picked one. Any theme id, including a plugin's. |
 
-Both are runtime variables — no rebuild needed. In production the registry is
-read once at process start; restart after adding themes. In dev it re-reads
-on every request.
+All three are runtime variables — no rebuild needed. In production the
+registry is read once at process start; restart after adding themes. In dev it
+re-reads on every request. When the same theme id comes from both the
+directory and S3, the directory wins.
+
+## Loading themes from S3
+
+Set `THEME_VAULT_PREFIX` to a key prefix inside the vault bucket
+(`VAULT_BUCKET` / `VAULT_PREFIX`) and the container scans it for `*.css` on
+start — alongside `THEME_DIR`. This is the zero-mount path for a built
+release image: ship the image as-is, drop theme files in S3, restart.
+
+```bash
+# operator uploads a theme to the vault bucket (direct S3 — not the portal)
+aws s3 cp forest.css s3://$VAULT_BUCKET/$VAULT_PREFIX/_themes/forest.css
+
+docker run -e THEME_VAULT_PREFIX=_themes/ -e THEME_DEFAULT=forest vaultmark
+```
+
+The file format, metadata block, and id rules are identical to directory
+themes (the id is the object's basename).
+
+> **Themes are not hot-reloaded.** In production the registry is read **once**
+> at process start (this applies to both `THEME_DIR` and `THEME_VAULT_PREFIX`).
+> Adding, changing, or removing a theme in S3 has no effect on a running
+> container until it is **restarted** — there is no re-scan endpoint. (Dev
+> mode re-reads on every request, so this only bites deployed images.)
+
+**Why this is safe even though the bucket is the user's vault:** the loader
+reads **only `.css` keys**, and *no portal route can write a `.css`
+object*. Upload and page-create force a `.md` basename; the editor's
+`PUT`/`DELETE` reject any key that isn't a real document
+(`isDocumentKey` — `.md` under a `generated/`/`authored/` root, never a
+system or theme key); curate only writes JSON job state. So portal users
+cannot plant a theme. The prefix is operator-controlled at the S3/IAM
+level — the same trust boundary as a file on disk. Keep it that way:
+**do not grant portal users (or any untrusted principal) write access to
+this prefix**, and prefer a dedicated prefix (e.g. `_themes/`) over the
+document tree.
 
 ## Deployment
 
@@ -109,8 +146,15 @@ volumes: [{ name: themes, configMap: { name: vaultmark-themes } }]
 
 ## Security note
 
-Theme files are **operator-controlled code on the server's disk** — the same
-trust level as the codebase itself. They are never sourced from the vault
-(S3) or from user input, and the loader neutralizes `</` sequences so a file
-cannot break out of its inline `<style>` tag. Keep it that way: do not wire
-`THEME_DIR` to anything users can write to.
+Theme CSS is inlined into `<head>`, so a theme file is **operator-controlled
+code** — the same trust level as the codebase itself. Two sources are
+allowed, both operator-controlled: files on the server's disk (`THEME_DIR`)
+and `.css` objects under `THEME_VAULT_PREFIX` in the vault bucket. The S3
+source is safe because **no portal route can write a `.css` object** (writes
+are restricted to `.md` document keys — the editor enforces `isDocumentKey`),
+so portal users cannot plant a theme — but it relies on that prefix not being
+writable by untrusted principals at the S3/IAM level.
+Theme files are never sourced from user input, and the loader neutralizes
+`</` sequences so a file cannot break out of its inline `<style>` tag. Keep
+it that way: do not wire `THEME_DIR` or `THEME_VAULT_PREFIX` to anything
+users can write to.

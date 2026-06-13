@@ -91,6 +91,46 @@ export async function listObjects(subPrefix = ''): Promise<string[]> {
   return keys;
 }
 
+/**
+ * List `.css` keys under a sub-prefix. Returns keys relative to the vault
+ * prefix.
+ *
+ * Deliberately separate from `listObjects` (which is `.md`-only): theme
+ * plugins are `.css`, and no portal write route can ever create a `.css`
+ * key — every write forces `.md`. That keeps the theme source and the
+ * user-writable content tree from overlapping. See `theme-registry.ts` and
+ * the security note in `docs/theming.md`.
+ */
+export async function listCssObjects(subPrefix = ''): Promise<string[]> {
+  if (useMock) return mock.listCssObjects(subPrefix);
+  const searchPrefix = subPrefix
+    ? `${prefix}/${subPrefix}`.replace(/^\//, '')
+    : prefix;
+
+  const keys: string[] = [];
+  let token: string | undefined;
+
+  do {
+    const res = await client().send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: searchPrefix,
+        ContinuationToken: token,
+      }),
+    );
+    for (const obj of res.Contents ?? []) {
+      const key = obj.Key ?? '';
+      const rel = key.startsWith(prefix)
+        ? key.slice(prefix.length).replace(/^\//, '')
+        : key;
+      if (rel.endsWith('.css')) keys.push(rel);
+    }
+    token = res.NextContinuationToken;
+  } while (token);
+
+  return keys;
+}
+
 /** Fetch a single object by relative key. Returns UTF-8 content. */
 export async function getObject(relKey: string): Promise<string> {
   if (useMock) return mock.getObject(relKey);
