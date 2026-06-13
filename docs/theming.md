@@ -104,8 +104,13 @@ docker run -e THEME_VAULT_PREFIX=_themes/ -e THEME_DEFAULT=forest vaultmark
 ```
 
 The file format, metadata block, and id rules are identical to directory
-themes (the id is the object's basename). Themes are read **once** at process
-start, so restart the container after changing them.
+themes (the id is the object's basename).
+
+> **Themes are not hot-reloaded.** In production the registry is read **once**
+> at process start (this applies to both `THEME_DIR` and `THEME_VAULT_PREFIX`).
+> Adding, changing, or removing a theme in S3 has no effect on a running
+> container until it is **restarted** — there is no re-scan endpoint. (Dev
+> mode re-reads on every request, so this only bites deployed images.)
 
 **Why this is safe even though the bucket is the user's vault:** the loader
 reads **only `.css` keys**, and *no portal route can ever write a `.css`
