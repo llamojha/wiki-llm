@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { type ApiTreeNode } from '@/lib/api';
 import { ICONS } from '@/lib/icons';
+import { withBasePath } from '@/lib/base-path';
 import { type Scope, type TreeNode as TreeNodeType } from '@/lib/types';
 import type { FeatureFlags } from '@/lib/flags';
 import { TreeNode } from './tree-node';
@@ -35,7 +36,7 @@ function useCurateStatus(scope: Scope): CurateStatus | null {
   useEffect(() => {
     const ctrl = new AbortController();
     const scopeQuery = scope === 'user' ? '&scope=user' : '&scope=shared';
-    fetch(`/api/raw?space=${CURATE_SPACE}${scopeQuery}`, { signal: ctrl.signal })
+    fetch(withBasePath(`/api/raw?space=${CURATE_SPACE}${scopeQuery}`), { signal: ctrl.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!data) return;

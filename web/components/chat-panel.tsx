@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { ICONS } from '@/lib/icons';
+import { withBasePath } from '@/lib/base-path';
 import { SUGGESTIONS } from '@/lib/canned-replies';
 import { renderMarkdown } from '@/lib/markdown';
 import type { Cite, Doc, SanitizedHtml } from '@/lib/types';
@@ -215,7 +216,7 @@ export function ChatPanel({ open, onClose, onOpenDoc, onDraftFromChat, contextDo
       setThinking(true);
 
       try {
-        const res = await fetch('/api/chat', {
+        const res = await fetch(withBasePath('/api/chat'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -376,7 +377,7 @@ export function ChatPanel({ open, onClose, onOpenDoc, onDraftFromChat, contextDo
       if (!msg.proposal) return;
       setSaving((s) => new Set(s).add(msg.id));
       try {
-        const res = await fetch('/api/docs', {
+        const res = await fetch(withBasePath('/api/docs'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

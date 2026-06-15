@@ -67,6 +67,31 @@ If you don't deploy the Lambda, disable the feature with `FEATURE_CURATE=off`.
 |---|---|---|---|
 | `NEXT_PUBLIC_VAULT_USER_ID` | no | `default` | The portal's default user id for personal-space paths (`users/<id>/…`). **Inlined at build time** — set it before `pnpm build` / image build, and keep it in sync with the Lambda's `VAULT_USER_ID`. |
 
+## Serving under a sub-path (base path)
+
+By default the portal is served at the root (`/`). To host it under a sub-path
+in a shared cluster — e.g. behind an ingress that routes `/wiki` to Vaultmark —
+set `NEXT_BASE_PATH`.
+
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `NEXT_BASE_PATH` | no | `""` (root) | Sub-path the app is served under, e.g. `/wiki`. **Build-time** — Next.js `basePath` is baked into the build, so this must be set before `pnpm build` / the image build. Use a leading slash and no trailing slash (`/wiki`). |
+
+This sets Next.js `basePath`/`assetPrefix` and is inlined as
+`NEXT_PUBLIC_BASE_PATH` so client fetches, history navigation, and asset URLs
+all resolve under the prefix. Pages, API routes, and assets then live under the
+prefix (the home page is `/wiki`, the API is `/wiki/api/...`).
+
+Build a prefixed image with the Docker build-arg:
+
+```bash
+docker build -f web/Dockerfile -t vaultmark:wiki --build-arg NEXT_BASE_PATH=/wiki .
+```
+
+The container healthcheck reads the same value, so it probes
+`/wiki/api/vaults` automatically. There is no runtime override — serving under
+a different prefix requires a rebuild.
+
 ## Feature flags
 
 Every product feature has a `FEATURE_*` env var, changeable at runtime
@@ -97,5 +122,5 @@ authoring guide and variable reference.
 
 Most variables are read at **runtime** by the Node server, so you can change
 them per environment without rebuilding. The exceptions are `NEXT_PUBLIC_*`
-variables, which Next.js inlines into the build — changing those requires a
-rebuild of the app/image.
+variables and `NEXT_BASE_PATH`, which Next.js inlines into the build — changing
+those requires a rebuild of the app/image.

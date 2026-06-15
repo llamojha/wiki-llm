@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { ICONS } from '@/lib/icons';
+import { withBasePath } from '@/lib/base-path';
 import type { FeatureFlags } from '@/lib/flags';
 
 type HomeMode = 'home' | 'recent' | 'starred';
@@ -56,7 +57,7 @@ export function HomeView({ view, onOpen, onAsk, onAskPrompt, onUpload, prompts, 
     const controller = new AbortController();
     const listView = view === 'starred' ? 'starred' : 'recent';
     setListLoading(true);
-    fetch(`/api/docs?view=${listView}&limit=12`, { signal: controller.signal })
+    fetch(withBasePath(`/api/docs?view=${listView}&limit=12`), { signal: controller.signal })
       .then((res) => res.ok ? res.json() : [])
       .then((docs: DocSummary[]) => setListedDocs(docs))
       .catch(() => {

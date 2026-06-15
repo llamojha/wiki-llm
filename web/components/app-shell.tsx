@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getDoc, getTree, type ApiDoc, type ApiTreeNode } from '@/lib/api';
+import { stripBasePath, withBasePath } from '@/lib/base-path';
 import { ICONS } from '@/lib/icons';
 import { renderMarkdown } from '@/lib/markdown';
 import { type Doc, type LiveDoc, type SanitizedHtml, type Scope } from '@/lib/types';
@@ -143,7 +144,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
   // Sync activeId/liveDoc when browser Back/Forward changes the URL
   useEffect(() => {
     const onPopState = () => {
-      const path = window.location.pathname.replace(/^\//, '');
+      const path = stripBasePath(window.location.pathname).replace(/^\//, '');
       if (!path) {
         setActiveId('__home');
         setLiveDoc(null);
@@ -173,7 +174,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
         setActiveId(id);
         setLiveDoc(null);
         setEditing(false);
-        window.history.pushState(null, '', '/');
+        window.history.pushState(null, '', withBasePath('/'));
         return;
       }
       if (id.startsWith('__')) {
@@ -187,7 +188,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
       setEditing(false);
       setDocLoading(true);
       setLiveDoc(null);
-      window.history.pushState(null, '', `/${id}`);
+      window.history.pushState(null, '', withBasePath(`/${id}`));
       getDoc(id)
         .then(async (api) => {
           const html = await renderMarkdown(api.raw_markdown);

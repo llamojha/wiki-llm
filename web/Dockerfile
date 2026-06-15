@@ -22,6 +22,13 @@ COPY web web
 # NEXT_PUBLIC_* vars are inlined at build time
 ARG NEXT_PUBLIC_VAULT_USER_ID
 ENV NEXT_PUBLIC_VAULT_USER_ID=$NEXT_PUBLIC_VAULT_USER_ID
+# Optional sub-path the portal is served under in a shared cluster (e.g.
+# "/wiki"). `basePath` is build-time in Next.js, so CI must pass this build-arg
+# to the builder for a prefixed image. Leave empty to serve at the root.
+# Use a leading-slash, no-trailing-slash value (e.g. "/wiki"). See
+# web/next.config.ts.
+ARG NEXT_BASE_PATH=""
+ENV NEXT_BASE_PATH=$NEXT_BASE_PATH
 # Placeholder only — `next build` evaluates route modules, which require a
 # bucket at import time. The real value comes from the runtime environment.
 ENV VAULT_BUCKET=build-placeholder
@@ -37,6 +44,12 @@ RUN apk upgrade --no-cache libcrypto3 libssl3
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+# Base path the app was built with. Build args don't cross stages, so this is
+# re-declared here purely so the healthcheck can target the right path; a
+# single `--build-arg NEXT_BASE_PATH=/wiki` applies to every stage that
+# declares it. This does NOT change the served path (that's baked at build).
+ARG NEXT_BASE_PATH=""
+ENV NEXT_BASE_PATH=$NEXT_BASE_PATH
 # Pin the theme plugin directory to the bundled path rather than relying on
 # the standalone server.js chdir-ing into /app/web (a Next internal).
 ENV THEME_DIR=/app/web/themes
@@ -68,8 +81,9 @@ USER node
 EXPOSE 3000
 
 # /api/vaults answers 200 once the server is up and configured (it is a
-# read path, so it works with every feature flag off).
+# read path, so it works with every feature flag off). NEXT_BASE_PATH prefixes
+# the route when the image is built for a sub-path (e.g. /wiki/api/vaults).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD wget -qO /dev/null "http://127.0.0.1:${PORT}/api/vaults" || exit 1
+  CMD wget -qO /dev/null "http://127.0.0.1:${PORT}${NEXT_BASE_PATH}/api/vaults" || exit 1
 
 CMD ["node", "web/server.js"]

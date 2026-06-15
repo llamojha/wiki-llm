@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useState } from 'react';
 import { ICONS } from '@/lib/icons';
+import { withBasePath } from '@/lib/base-path';
 import type { Doc, LiveDoc } from '@/lib/types';
 import type { FeatureFlags } from '@/lib/flags';
 
@@ -32,7 +33,7 @@ export function DocToolbar({ doc, docId, onAskInChat, onEdit, onUpload, onStarTo
     const prev = starred;
     setStarred(!prev);
     try {
-      const res = await fetch(`/api/star/${encodeURIComponent(docId)}`, {
+      const res = await fetch(withBasePath(`/api/star/${encodeURIComponent(docId)}`), {
         method: 'PATCH',
       });
       if (res.ok) {

@@ -1,4 +1,9 @@
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
+import { BASE_PATH } from './base-path';
+
+// API origin/prefix. NEXT_PUBLIC_API_URL (if set) wins for an absolute origin;
+// otherwise fall back to the base path so requests hit the sub-path the app is
+// served under (e.g. /wiki/api/...).
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? BASE_PATH;
 
 export type ApiTreeNode =
   | { type: 'doc'; id: string; name: string }

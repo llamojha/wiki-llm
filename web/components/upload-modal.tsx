@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ICONS } from '@/lib/icons';
+import { withBasePath } from '@/lib/base-path';
 import { DEFAULT_USER_ID } from '@/lib/vault-paths';
 import type { FeatureFlags } from '@/lib/flags';
 
@@ -128,7 +129,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
       return;
     }
     const ctrl = new AbortController();
-    fetch(`/api/raw?space=${encodeURIComponent(space)}${scopeQuery(scope)}`, { signal: ctrl.signal })
+    fetch(withBasePath(`/api/raw?space=${encodeURIComponent(space)}${scopeQuery(scope)}`), { signal: ctrl.signal })
       .then(r => r.json())
       .then(d => setPendingCount(d.count ?? 0))
       .catch(() => { if (!ctrl.signal.aborted) setPendingCount(0); });
@@ -161,7 +162,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
     if (currentScope === 'user') form.append('userId', DEFAULT_USER_ID);
     if (currentDestination === 'authored') form.append('space', currentSpace);
     try {
-      const res = await fetch('/api/upload', { method: 'POST', body: form });
+      const res = await fetch(withBasePath('/api/upload'), { method: 'POST', body: form });
       if (!res.ok) {
         const data = await res.json().catch(() => ({ detail: 'Upload failed' }));
         updateFile(entry.id, { status: 'error', error: data.detail || 'Upload failed' });
@@ -208,7 +209,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
     try {
       const limit = pendingLimit === 'all' ? undefined : Number.parseInt(pendingLimit, 10);
       // Start the Lambda job
-      const startRes = await fetch('/api/curate/start', {
+      const startRes = await fetch(withBasePath('/api/curate/start'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ space, ...(limit ? { limit } : {}), ...scopePayload() }),
@@ -231,7 +232,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
           await new Promise(r => setTimeout(r, 1200));
           if (ctrl.signal.aborted) return;
 
-          const statusRes = await fetch(`/api/curate/status?job=${encodeURIComponent(jobId)}${scopeQuery()}`, { signal: ctrl.signal });
+          const statusRes = await fetch(withBasePath(`/api/curate/status?job=${encodeURIComponent(jobId)}${scopeQuery()}`), { signal: ctrl.signal });
           if (!statusRes.ok) continue;
           const job = await statusRes.json() as {
             status: string;
@@ -285,7 +286,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
             if (job.status === 'done') {
               setPendingFinalizing(true);
               try {
-                const finalizeRes = await fetch('/api/curate/finalize', {
+                const finalizeRes = await fetch(withBasePath('/api/curate/finalize'), {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ jobId, ...scopePayload() }),
@@ -315,7 +316,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
 
   const cancelPending = async () => {
     if (jobIdRef.current) {
-      fetch('/api/curate/cancel', {
+      fetch(withBasePath('/api/curate/cancel'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jobId: jobIdRef.current, ...scopePayload() }),
@@ -329,7 +330,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
   const startReindex = async () => {
     setReindexRunning(true); setReindexDone(false); setReindexTotal(0); setReindexIndexed(0); setReindexRawCount(0);
     try {
-      const res = await fetch('/api/reindex', {
+      const res = await fetch(withBasePath('/api/reindex'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...(space === '__all' ? {} : { space }), ...scopePayload() }),

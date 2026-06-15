@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { ICONS } from '@/lib/icons';
+import { withBasePath } from '@/lib/base-path';
 import { RenderedMarkdown } from '@/lib/markdown-preview';
 import type { Doc } from '@/lib/types';
 
@@ -43,7 +44,7 @@ export function Editor({ doc, docId, etag, initialDraft, onClose, onSave, showTo
     try {
       if (docId && !docId.startsWith('__')) {
         // Update existing doc — server syncs title into frontmatter
-        const res = await fetch(`/api/docs/${encodeURIComponent(docId)}`, {
+        const res = await fetch(withBasePath(`/api/docs/${encodeURIComponent(docId)}`), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ body, title, etag }),
@@ -62,7 +63,7 @@ export function Editor({ doc, docId, etag, initialDraft, onClose, onSave, showTo
         onSave(title, docId);
       } else {
         // Create new doc
-        const res = await fetch('/api/docs', {
+        const res = await fetch(withBasePath('/api/docs'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ title, body }),

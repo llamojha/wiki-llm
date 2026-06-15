@@ -92,6 +92,13 @@ kubectl -n vaultmark port-forward svc/vaultmark 3000:80   # smoke test
 
 ## Notes
 
+- **Sub-path routing:** to share a host with other apps and route a prefix
+  (e.g. `/wiki`) to Vaultmark, build a prefixed image with
+  `--build-arg NEXT_BASE_PATH=/wiki` and route the matching path in
+  `ingress.yaml`. `basePath` is baked into the build (and the healthcheck), so
+  the ingress prefix must match the build value — do **not** strip the prefix
+  before the app. See
+  [Serving under a sub-path](../configuration.md#serving-under-a-sub-path-base-path).
 - **Authentication:** Vaultmark has no built-in auth. Keep the ingress
   internal, or front it with oauth2-proxy / your IdP — there's a commented
   `auth-url` example in `ingress.yaml`. See [`SECURITY.md`](../../SECURITY.md).

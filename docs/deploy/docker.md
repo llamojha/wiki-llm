@@ -45,6 +45,17 @@ docker build -f web/Dockerfile \
   -t vaultmark .
 ```
 
+To serve the portal under a sub-path in a shared cluster (e.g. `/wiki`), pass
+`NEXT_BASE_PATH` at build time. It is baked into the build and the healthcheck:
+
+```bash
+docker build -f web/Dockerfile \
+  --build-arg NEXT_BASE_PATH=/wiki \
+  -t vaultmark:wiki .
+```
+
+See [Serving under a sub-path](../configuration.md#serving-under-a-sub-path-base-path).
+
 ## Run
 
 ```bash
