@@ -18,13 +18,15 @@ data:
   # CURATE_LAMBDA_ARN: "arn:aws:lambda:<region>:<account-id>:function:vaultmark-curate"
   # CURATE_LAMBDA_REGION: "us-east-1"
 
-  # Feature flags — everything is ON by default; uncomment to disable.
+  # Feature flags — in code, only FEATURE_AGENT defaults ON; every other
+  # feature defaults OFF and must be turned on explicitly here.
   # See docs/feature-flags.md
   # FEATURE_AGENT: "off"
-  # FEATURE_UPLOAD: "off"
+  # Upload to S3 + folder/structure management (shared flag).
+  FEATURE_UPLOAD: "on"
   FEATURE_CURATE: "off"
-  # FEATURE_REINDEX: "off"
-  # FEATURE_EDITOR: "off"
-  # FEATURE_SEARCH: "off"
-  # FEATURE_STAR: "off"
-  # FEATURE_PUBLISHING: "off"
+  # FEATURE_REINDEX: "on"
+  # FEATURE_EDITOR: "on"
+  # FEATURE_SEARCH: "on"
+  # FEATURE_STAR: "on"
+  # FEATURE_PUBLISHING: "on"

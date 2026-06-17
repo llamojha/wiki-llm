@@ -4,6 +4,8 @@ import { resolveScope, type Scope } from '@/lib/scope';
 import { regenerateMasterIndex, regenerateSpaceIndex } from '@/lib/index-gen';
 import { invalidateSearchIndex } from '@/lib/search';
 import { appendLog } from '@/lib/log-append';
+import { ensureSpaceInStructure } from '@/lib/vault-structure';
+import { PERSONAL_SPACE } from '@/lib/vault-paths';
 import { flagGuard } from '@/lib/flags';
 
 const SPACE_RE = /^[a-z0-9][a-z0-9-]*$/;
@@ -78,6 +80,13 @@ export async function POST(req: Request) {
   // effects as the CRUD path: scope-aware index regen, log append, search
   // invalidation. Raw uploads do none of this; curate handles them later.
   if (destination === 'authored') {
+    // Declare the space in structure.json if it isn't already. Without this
+    // the file lands in S3 (and is reachable by direct URL) but never shows
+    // in the sidebar tree, which only walks declared `indexed` spaces. The
+    // personal space is reserved and surfaced separately, so never declare it.
+    if (space && space !== PERSONAL_SPACE) {
+      await ensureSpaceInStructure(space);
+    }
     await regenerateSpaceIndex(space as string, scope);
     await regenerateMasterIndex(scope);
     await appendLog('created', key, filename.replace(/\.md$/, ''), scope);

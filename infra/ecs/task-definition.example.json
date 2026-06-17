@@ -24,6 +24,7 @@
         { "name": "VAULT_ID", "value": "default" },
         { "name": "BEDROCK_MODEL", "value": "us.amazon.nova-2-lite-v1:0" },
         { "name": "BEDROCK_REGION", "value": "us-east-1" },
+        { "name": "FEATURE_UPLOAD", "value": "on" },
         { "name": "FEATURE_CURATE", "value": "off" }
       ],
       "healthCheck": {

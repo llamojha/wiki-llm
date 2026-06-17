@@ -35,7 +35,11 @@ export type ApiSearchResult = {
 };
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { next: { revalidate: 30 } });
+  // Never serve a cached response: the tree, docs, and search all reflect live
+  // S3 state and the backing routes are `force-dynamic`. A stale Data Cache
+  // here was the cause of "uploaded file doesn't show in the sidebar" — the
+  // refresh fetch returned a tree snapshot from before the write.
+  const res = await fetch(`${BASE}${path}`, { cache: 'no-store' });
   if (!res.ok) throw new Error(`API ${path} → ${res.status}`);
   return res.json() as Promise<T>;
 }
