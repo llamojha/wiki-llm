@@ -6,7 +6,7 @@ import { withBasePath } from '@/lib/base-path';
 import { DEFAULT_USER_ID } from '@/lib/vault-paths';
 import type { FeatureFlags } from '@/lib/flags';
 
-export type LibraryTab = 'upload' | 'pending' | 'reindex';
+export type LibraryTab = 'upload' | 'pending' | 'reindex' | 'folders';
 
 type Scope = 'shared' | 'user';
 
@@ -105,6 +105,13 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
   const [reindexIndexed, setReindexIndexed] = useState(0);
   const [reindexRawCount, setReindexRawCount] = useState(0);
 
+  // Folders tab
+  const [newSpaceName, setNewSpaceName] = useState('');
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  const [folderBusy, setFolderBusy] = useState(false);
+
   // Reset on open
   useEffect(() => {
     if (!open) {
@@ -118,6 +125,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
     setFiles([]); setDragActive(false);
     setPendingStream([]); setPendingRunning(false); setPendingDone(false); setPendingJobTotal(0); setPendingPhase(null); setPendingFinalizing(false);
     setReindexRunning(false); setReindexDone(false); setReindexTotal(0); setReindexIndexed(0); setReindexRawCount(0);
+    setNewSpaceName(''); setRenaming(null); setRenameValue(''); setConfirmingDelete(null); setFolderBusy(false);
     if (spaces.length && !spaces.includes(space)) setSpace(defaultSpace(spaces));
   }, [open, initialTab]);
 
@@ -360,6 +368,63 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
     } catch { setReindexRunning(false); showToast('Re-index failed'); }
   };
 
+  // ── Folders tab: space create / rename / delete ──
+  const createSpace = async () => {
+    const name = newSpaceName.trim().toLowerCase();
+    if (!name) return;
+    setFolderBusy(true);
+    try {
+      const res = await fetch(withBasePath('/api/spaces'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { showToast(data.detail || 'Could not create folder'); return; }
+      setNewSpaceName('');
+      showToast(`Created folder "${name}"`);
+      onUploaded();
+    } catch { showToast('Network error'); }
+    finally { setFolderBusy(false); }
+  };
+
+  const submitRename = async (from: string) => {
+    const to = renameValue.trim().toLowerCase();
+    if (!to || to === from) { setRenaming(null); return; }
+    setFolderBusy(true);
+    try {
+      const res = await fetch(withBasePath('/api/spaces'), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from, to }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { showToast(data.detail || 'Could not rename folder'); return; }
+      setRenaming(null);
+      if (space === from) setSpace(to);
+      showToast(`Renamed "${from}" → "${to}"`);
+      onUploaded();
+    } catch { showToast('Network error'); }
+    finally { setFolderBusy(false); }
+  };
+
+  const deleteSpace = async (name: string) => {
+    setFolderBusy(true);
+    try {
+      const res = await fetch(withBasePath(`/api/spaces?name=${encodeURIComponent(name)}`), { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        showToast(data.detail || 'Could not delete folder');
+        return;
+      }
+      setConfirmingDelete(null);
+      if (space === name) setSpace(defaultSpace(spaces.filter((s) => s !== name)));
+      showToast(`Deleted folder "${name}"`);
+      onUploaded();
+    } catch { showToast('Network error'); }
+    finally { setFolderBusy(false); }
+  };
+
   if (!open) return null;
 
   return (
@@ -375,7 +440,9 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
           <button className="icon-btn" onClick={onClose} title="Close">{ICONS.close}</button>
         </div>
 
-        {/* Scope toggle — every operation in this modal is bound to this scope. */}
+        {/* Scope toggle — every operation in this modal is bound to this scope.
+            Folder management is vault-global, so the toggle is hidden there. */}
+        {tab !== 'folders' && (
         <div className="upload-meta" style={{ borderBottom: '1px solid var(--border-1, rgba(255,255,255,0.08))', paddingBottom: 12 }}>
           <div className="upload-meta-row">
             <label>Scope</label>
@@ -401,6 +468,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
             </div>
           </div>
         </div>
+        )}
 
         {/* Tabs */}
         <div className="upload-tabs">
@@ -420,9 +488,15 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
               {ICONS.recent} Re-index
             </button>
           )}
+          {flags.upload && (
+            <button className={'upload-tab' + (tab === 'folders' ? ' on' : '')} onClick={() => setTab('folders')}>
+              {ICONS.folder} Folders
+            </button>
+          )}
         </div>
 
-        {/* Space selector */}
+        {/* Space selector — not shown on the Folders tab, which manages spaces. */}
+        {tab !== 'folders' && (
         <div className="upload-meta">
           <div className="upload-meta-row">
             <label>Space</label>
@@ -470,6 +544,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
             </span>
           </div>
         </div>
+        )}
 
         {/* Upload tab */}
         {tab === 'upload' && (
@@ -719,6 +794,109 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
               )}
             </div>
           </div>
+        )}
+
+        {/* Folders tab */}
+        {tab === 'folders' && (
+          <>
+            <div className="upload-meta" style={{ paddingTop: 4 }}>
+              <div className="upload-meta-row">
+                <label>New folder</label>
+                <div className="space-select" style={{ flex: 1, gap: 6 }}>
+                  <input
+                    className="upload-input"
+                    placeholder="e.g. handbook"
+                    value={newSpaceName}
+                    disabled={folderBusy}
+                    onChange={(e) => setNewSpaceName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') createSpace(); }}
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    className="btn primary"
+                    disabled={folderBusy || !newSpaceName.trim()}
+                    onClick={createSpace}
+                  >
+                    {ICONS.plus} Create
+                  </button>
+                </div>
+              </div>
+              <div className="upload-s3-preview">
+                {ICONS.s3}
+                <span>s3://vaultmark/authored/{newSpaceName.trim().toLowerCase() || '<folder>'}/</span>
+              </div>
+            </div>
+
+            <div className="callout warn" style={{ margin: '0 0 8px' }}>
+              <span className="icon">{ICONS.warn}</span>
+              <div style={{ fontSize: 12, color: 'var(--fg-2)' }}>
+                Renaming or deleting a folder affects <strong>both</strong> the shared
+                library and every user&apos;s copy. Deleting removes all documents inside it.
+              </div>
+            </div>
+
+            <div className="upload-list">
+              {spaces.length === 0 && (
+                <div className="pending-empty">
+                  <div className="upload-drop-title">No folders yet</div>
+                  <div className="upload-drop-sub">Create one above to start organizing authored documents.</div>
+                </div>
+              )}
+              {spaces.map((s) => (
+                <div key={s} className="upload-row">
+                  <span className="upload-row-icon">{ICONS.folder}</span>
+                  <div className="upload-row-body">
+                    {renaming === s ? (
+                      <div className="space-select" style={{ gap: 6 }}>
+                        <input
+                          className="upload-input"
+                          value={renameValue}
+                          disabled={folderBusy}
+                          autoFocus
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') submitRename(s);
+                            if (e.key === 'Escape') setRenaming(null);
+                          }}
+                          style={{ flex: 1 }}
+                        />
+                        <button className="btn primary" disabled={folderBusy} onClick={() => submitRename(s)}>{ICONS.check}</button>
+                        <button className="btn ghost" disabled={folderBusy} onClick={() => setRenaming(null)}>Cancel</button>
+                      </div>
+                    ) : confirmingDelete === s ? (
+                      <div className="upload-row-title" style={{ alignItems: 'center' }}>
+                        <span style={{ color: 'var(--red, #e53e3e)' }}>Delete <code>{s}</code> and all its documents?</span>
+                      </div>
+                    ) : (
+                      <div className="upload-row-title">
+                        <span className="upload-row-name">{s}</span>
+                        <span className="upload-row-size">authored/{s}/</span>
+                      </div>
+                    )}
+                  </div>
+                  {renaming !== s && (
+                    confirmingDelete === s ? (
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button className="btn" disabled={folderBusy} onClick={() => deleteSpace(s)} style={{ color: 'var(--red, #e53e3e)' }}>Delete</button>
+                        <button className="btn ghost" disabled={folderBusy} onClick={() => setConfirmingDelete(null)}>Cancel</button>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: 2 }}>
+                        <button className="icon-btn" disabled={folderBusy} title="Rename" onClick={() => { setRenaming(s); setRenameValue(s); }}>{ICONS.edit}</button>
+                        <button className="icon-btn" disabled={folderBusy} title="Delete" onClick={() => setConfirmingDelete(s)}>{ICONS.trash}</button>
+                      </div>
+                    )
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="upload-foot">
+              <span style={{ flex: 1 }}></span>
+              <span className="upload-summary">{spaces.length} folder{spaces.length === 1 ? '' : 's'}</span>
+              <button className="btn ghost" onClick={onClose}>Close</button>
+            </div>
+          </>
         )}
       </div>
     </div>

@@ -58,6 +58,7 @@ type SidebarProps = {
   onOpen: (id: string) => void;
   onNewPage: () => void;
   onUpload: () => void;
+  onManageFolders: () => void;
   onProcessPending: () => void;
   onReindex: () => void;
   apiTree?: ApiTreeNode[];
@@ -102,7 +103,7 @@ function filterByScope(nodes: TreeNodeType[], scope: Scope): TreeNodeType[] {
   return nodes.filter((n) => !(n.type === 'folder' && n.id === 'folder:__user'));
 }
 
-export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, onUpload, onProcessPending, onReindex, apiTree, flags }: SidebarProps) {
+export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, onUpload, onManageFolders, onProcessPending, onReindex, apiTree, flags }: SidebarProps) {
   const fullTree = apiTree && apiTree.length > 0 ? apiTreeToLocal(apiTree) : [];
   const tree = filterByScope(fullTree, scope);
   const [openFolders, setOpenFolders] = useState<Set<string>>(DEFAULT_OPEN_FOLDERS);
@@ -143,6 +144,7 @@ export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, onUpload
         <span>{scope === 'shared' ? 'Shared spaces' : 'My library'}</span>
         <div style={{ display: 'flex', gap: 2 }}>
           {flags.upload && <button onClick={onUpload} title="Upload Markdown files">{ICONS.upload}</button>}
+          {flags.upload && <button onClick={onManageFolders} title="Manage folders">{ICONS.folder}</button>}
           {flags.editor && <button onClick={onNewPage} title="New page">{ICONS.plus}</button>}
         </div>
       </div>

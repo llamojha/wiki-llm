@@ -113,7 +113,7 @@ Hiding the button alone is not control — the route guard is the enforcement.
 | Env var | Feature | Routes gated |
 |---|---|---|
 | `FEATURE_AGENT` | Ask-Wiki chat | `POST /api/chat` |
-| `FEATURE_UPLOAD` | File upload | `POST /api/upload` |
+| `FEATURE_UPLOAD` | File upload + folder management | `POST /api/upload`, `/api/spaces` |
 | `FEATURE_CURATE` | AI ingest/curate | `/api/curate/*` |
 | `FEATURE_REINDEX` | Re-index | `POST /api/reindex` |
 | `FEATURE_EDITOR` | Page CRUD | `POST/PUT/DELETE /api/docs` |
