@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server';
 
 import { getTree } from '@/lib/vault-tree';
 
+// The tree is built from live S3 contents but the handler's only
+// request-derived input is the route segment param — which does NOT opt the
+// route out of Next.js 16's default static caching. Without this, the response
+// is frozen at first request (e.g. an empty vault stays empty until redeploy).
+// Force per-request evaluation so the tree always reflects current S3 state.
+export const dynamic = 'force-dynamic';
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
