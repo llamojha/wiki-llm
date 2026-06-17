@@ -4,10 +4,19 @@ name: Release image
 # Container Registry as ghcr.io/<owner>/<repo>. The image name follows the
 # repository automatically, so a repo rename needs no workflow change.
 #
-# Tags published:
-#   latest          — every push to main
-#   vX.Y.Z / X.Y    — on version tags (git tag v1.2.3 && git push --tags)
-#   sha-<short>     — every published build, for exact rollbacks
+# Two variants are published from the same Dockerfile (matrix over base path):
+#   root  — served at "/"      (no tag suffix)
+#   wiki  — served under "/wiki" (NEXT_BASE_PATH=/wiki baked in, "-wiki" suffix)
+#
+# `basePath` is a Next.js build-time setting, so the sub-path image MUST be
+# built with the build-arg — setting NEXT_BASE_PATH at runtime has no effect
+# and leaves assets at /_next/ instead of /wiki/_next/. See
+# docs/configuration.md#serving-under-a-sub-path-base-path.
+#
+# Tags published (per variant; <suffix> is "" for root, "-wiki" for wiki):
+#   latest<suffix>          — every push to main
+#   vX.Y.Z<suffix> / X.Y<suffix> — on version tags (git tag v1.2.3 && git push --tags)
+#   sha-<short><suffix>     — every published build, for exact rollbacks
 #
 # Pull requests build + scan the amd64 image but never push.
 
@@ -36,8 +45,22 @@ env:
 
 jobs:
   image:
-    name: build / scan / push
+    name: build / scan / push (${{ matrix.variant }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Root-path image — served at "/".
+          - variant: root
+            base_path: ""
+            tag_suffix: ""
+          # Sub-path image — served under "/wiki". basePath is baked in at build
+          # time so the portal's chunks resolve at /wiki/_next/... behind an
+          # ingress that routes /wiki to the app (without stripping the prefix).
+          - variant: wiki
+            base_path: "/wiki"
+            tag_suffix: "-wiki"
     steps:
       - uses: actions/checkout@v6
 
@@ -57,6 +80,10 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # Suffix every tag for the sub-path variant (latest -> latest-wiki,
+          # v1.2.3 -> v1.2.3-wiki, ...). onlatest applies it to `latest` too.
+          flavor: |
+            suffix=${{ matrix.tag_suffix }},onlatest=true
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=semver,pattern={{version}}
@@ -75,9 +102,13 @@ jobs:
           context: .
           file: web/Dockerfile
           load: true
-          tags: vaultmark-scan-target:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: vaultmark-scan-target:ci${{ matrix.tag_suffix }}
+          build-args: |
+            NEXT_BASE_PATH=${{ matrix.base_path }}
+          # Scope the cache per variant — root and wiki produce different chunk
+          # URLs, so a shared cache would cross-contaminate the build output.
+          cache-from: type=gha,scope=${{ matrix.variant }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.variant }}
 
       # Gate publishing on the scan: fixable HIGH/CRITICAL vulns fail the job.
       # (SARIF upload to the Security tab needs GitHub code scanning, which is
@@ -85,7 +116,7 @@ jobs:
       - name: Trivy scan (vulnerabilities)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: vaultmark-scan-target:ci
+          image-ref: vaultmark-scan-target:ci${{ matrix.tag_suffix }}
           format: table
           severity: CRITICAL,HIGH
           ignore-unfixed: true
@@ -101,5 +132,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          build-args: |
+            NEXT_BASE_PATH=${{ matrix.base_path }}
+          cache-from: type=gha,scope=${{ matrix.variant }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.variant }}
