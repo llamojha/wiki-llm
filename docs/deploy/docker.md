@@ -54,6 +54,13 @@ docker build -f web/Dockerfile \
   -t vaultmark:wiki .
 ```
 
+Or skip the build: the release pipeline publishes a ready-made `/wiki` variant
+under a `-wiki` tag suffix (`ghcr.io/<owner>/<repo>:latest-wiki`,
+`:vX.Y.Z-wiki`, `:sha-<short>-wiki`). Pull that instead of the root image when
+the portal is routed under `/wiki`. **Setting `NEXT_BASE_PATH` at runtime on
+the root image does nothing** — `basePath` is baked at build time, so the root
+image always serves assets from `/_next/`.
+
 See [Serving under a sub-path](../configuration.md#serving-under-a-sub-path-base-path).
 
 ## Run

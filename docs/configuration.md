@@ -88,9 +88,15 @@ Build a prefixed image with the Docker build-arg:
 docker build -f web/Dockerfile -t vaultmark:wiki --build-arg NEXT_BASE_PATH=/wiki .
 ```
 
+The release pipeline also publishes a prebuilt `/wiki` variant under a `-wiki`
+tag suffix (`ghcr.io/<owner>/<repo>:latest-wiki`, `:vX.Y.Z-wiki`,
+`:sha-<short>-wiki`) so you can pull instead of build.
+
 The container healthcheck reads the same value, so it probes
-`/wiki/api/vaults` automatically. There is no runtime override — serving under
-a different prefix requires a rebuild.
+`/wiki/api/vaults` automatically. **There is no runtime override** — running
+the root image and setting `NEXT_BASE_PATH=/wiki` at runtime has no effect, so
+its assets stay at `/_next/` (not `/wiki/_next/`). Serving under a prefix
+requires an image built for that prefix.
 
 ## Feature flags
 
