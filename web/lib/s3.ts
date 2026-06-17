@@ -28,6 +28,23 @@ const bucket = process.env.VAULT_BUCKET ?? 'mock-bucket';
 const prefix = process.env.VAULT_PREFIX ?? '';
 const region = process.env.VAULT_REGION ?? 'us-east-1';
 
+// Per-operation tracing. Off by default; set DEBUG_S3=1 to log every object
+// read/write/delete/list (key, byte size, ETag) to the server log. Independent
+// of this flag, the resolved runtime config is logged once below and all S3
+// errors are surfaced regardless.
+const DEBUG_S3 = process.env.DEBUG_S3 === '1' || process.env.DEBUG_S3 === 'true';
+
+// Log the resolved S3 runtime config once at module load. This is the first
+// thing to check when a deployment points at the wrong vault ("why is it
+// empty?", "why am I seeing stale docs?") — it pins down exactly which
+// bucket/prefix/region the server resolved, and whether the in-memory mock is
+// active. Credentials are never logged; they come from the standard AWS
+// credential chain (env, shared config, instance/task role).
+console.info(
+  `[s3] runtime config — bucket=${bucket} prefix=${prefix || '<none>'} ` +
+    `region=${region} useMock=${useMock}`,
+);
+
 let _client: S3Client | null = null;
 
 function client(): S3Client {
@@ -41,8 +58,14 @@ function fullKey(relKey: string): string {
   return prefix ? `${prefix}/${relKey}`.replace(/^\//, '') : relKey;
 }
 
+/** DEBUG_S3-gated per-operation trace. No-op unless DEBUG_S3 is set. */
+function trace(op: string, detail: string): void {
+  if (DEBUG_S3) console.log(`[s3] ${op} ${detail}${useMock ? ' (mock)' : ''}`);
+}
+
 /** List top-level folders (spaces) in the vault. */
 export async function listSpaces(): Promise<string[]> {
+  trace('LIST', `spaces under ${prefix || '<root>'}`);
   if (useMock) return mock.listSpaces();
   const res = await client().send(
     new ListObjectsV2Command({
@@ -62,6 +85,7 @@ export async function listSpaces(): Promise<string[]> {
 
 /** List all .md keys under the vault prefix. Returns keys relative to prefix. */
 export async function listObjects(subPrefix = ''): Promise<string[]> {
+  trace('LIST', subPrefix || '<root>');
   if (useMock) return mock.listObjects(subPrefix);
   const searchPrefix = subPrefix
     ? `${prefix}/${subPrefix}`.replace(/^\//, '')
@@ -102,6 +126,7 @@ export async function listObjects(subPrefix = ''): Promise<string[]> {
  * the security note in `docs/theming.md`.
  */
 export async function listCssObjects(subPrefix = ''): Promise<string[]> {
+  trace('LIST css', subPrefix || '<root>');
   if (useMock) return mock.listCssObjects(subPrefix);
   const searchPrefix = subPrefix
     ? `${prefix}/${subPrefix}`.replace(/^\//, '')
@@ -133,6 +158,7 @@ export async function listCssObjects(subPrefix = ''): Promise<string[]> {
 
 /** Fetch a single object by relative key. Returns UTF-8 content. */
 export async function getObject(relKey: string): Promise<string> {
+  trace('GET', relKey);
   if (useMock) return mock.getObject(relKey);
   const res = await client().send(
     new GetObjectCommand({ Bucket: bucket, Key: fullKey(relKey) }),
@@ -142,6 +168,7 @@ export async function getObject(relKey: string): Promise<string> {
 
 /** Fetch object metadata by relative key. */
 export async function headObject(relKey: string): Promise<{ lastModified: Date | null }> {
+  trace('HEAD', relKey);
   if (useMock) return mock.headObject(relKey);
   const res = await client().send(
     new HeadObjectCommand({ Bucket: bucket, Key: fullKey(relKey) }),
@@ -167,6 +194,7 @@ export class ObjectAlreadyExistsError extends Error {
 export async function getObjectWithETag(
   relKey: string,
 ): Promise<{ content: string; etag: string }> {
+  trace('GET', `${relKey} (+etag)`);
   if (useMock) return mock.getObjectWithETag(relKey);
   const res = await client().send(
     new GetObjectCommand({ Bucket: bucket, Key: fullKey(relKey) }),
@@ -182,6 +210,7 @@ export async function putObject(
   body: string,
   ifMatch?: string,
 ): Promise<string> {
+  trace('PUT', `${relKey} (${body.length} chars)${ifMatch ? ' if-match' : ''}`);
   if (useMock) {
     try {
       return await mock.putObject(relKey, body, ifMatch);
@@ -216,6 +245,7 @@ export async function putObjectIfAbsent(
   relKey: string,
   body: string,
 ): Promise<string> {
+  trace('PUT', `${relKey} (${body.length} chars) if-absent`);
   if (useMock) {
     try {
       return await mock.putObjectIfAbsent(relKey, body);
@@ -247,6 +277,7 @@ export async function putObjectIfAbsent(
 
 /** Delete an object from S3. */
 export async function deleteObject(relKey: string): Promise<void> {
+  trace('DELETE', relKey);
   if (useMock) return mock.deleteObject(relKey);
   await client().send(
     new DeleteObjectCommand({ Bucket: bucket, Key: fullKey(relKey) }),
