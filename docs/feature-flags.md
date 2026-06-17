@@ -49,15 +49,24 @@ cites sources, and proposes new pages (all writes user-confirmed).
 - **Depends on:** `BEDROCK_MODEL` / `BEDROCK_REGION` and Bedrock IAM
   permissions when on.
 
-### `FEATURE_UPLOAD` — File upload
+### `FEATURE_UPLOAD` — File upload & folder management
 
-Uploading Markdown/source files into the vault's `raw/` area.
+Uploading Markdown/source files into the vault, and managing the spaces
+(top-level folders) that organize authored content.
 
+- **Upload:** drop `.md` files into either `raw/` (queued for AI curation) or
+  directly into `authored/<space>/` as final documents (indexed inline, no AI).
+- **Folder management:** the library modal's **Folders** tab (and the "Manage
+  folders" sidebar button) lets you create, rename, and delete spaces. Rename
+  re-keys every document under `generated/<space>/` and `authored/<space>/`
+  across the shared library and each user subtree; delete removes a space and
+  all its documents. These operations are vault-global and the `personal` space
+  is reserved (cannot be renamed or deleted).
 - **UI when off:** upload buttons in the sidebar, document toolbar, home view,
-  and the upload tab of the library modal disappear.
-- **Routes gated:** `POST /api/upload`.
-- **Turn off when:** the vault is populated out-of-band (CI, the ingest CLI,
-  direct S3 sync) and the portal should be read-only for sources.
+  and the Upload/Folders tabs of the library modal disappear.
+- **Routes gated:** `POST /api/upload`, and `GET/POST/PATCH/DELETE /api/spaces`.
+- **Turn off when:** the vault is populated and organized out-of-band (CI, the
+  ingest CLI, direct S3 sync) and the portal should be read-only for sources.
 
 ### `FEATURE_CURATE` — AI ingest / curation
 

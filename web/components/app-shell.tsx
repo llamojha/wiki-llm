@@ -271,6 +271,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
         onOpen={openDoc}
         onNewPage={onNewPage}
         onUpload={() => { setUploadTab('upload'); setUploadOpen(true); }}
+        onManageFolders={() => { setUploadTab('folders'); setUploadOpen(true); }}
         onProcessPending={() => { setUploadTab('pending'); setUploadOpen(true); }}
         onReindex={() => { setUploadTab('reindex'); setUploadOpen(true); }}
         apiTree={tree}

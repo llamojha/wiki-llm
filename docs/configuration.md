@@ -123,6 +123,7 @@ authoring guide and variable reference.
 | Variable | Default | Purpose |
 |---|---|---|
 | `DEBUG_AGENT` | off | Set to `1` or `true` to stream per-round agent traces (tool calls, stop reasons) to the server log. |
+| `DEBUG_S3` | off | Set to `1` or `true` to trace every S3 object operation (`GET`/`PUT`/`DELETE`/`LIST`, with key and byte size) to the server log. The resolved S3 runtime config (bucket, prefix, region, `useMock`) is logged once at startup regardless of this flag. |
 
 ## Build-time vs runtime
 

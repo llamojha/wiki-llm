@@ -15,6 +15,10 @@ test.describe('feature flags — all OFF', () => {
     { method: 'POST', path: '/api/docs' },
     { method: 'GET', path: '/api/search?q=anything' },
     { method: 'PATCH', path: '/api/star/authored%2Fwiki%2Fonboarding.md' },
+    { method: 'GET', path: '/api/spaces' },
+    { method: 'POST', path: '/api/spaces' },
+    { method: 'PATCH', path: '/api/spaces' },
+    { method: 'DELETE', path: '/api/spaces?name=anything' },
   ];
 
   for (const c of gated) {
@@ -24,7 +28,9 @@ test.describe('feature flags — all OFF', () => {
           ? await request.post(c.path, { data: {} })
           : c.method === 'PATCH'
             ? await request.patch(c.path, { data: {} })
-            : await request.get(c.path);
+            : c.method === 'DELETE'
+              ? await request.delete(c.path)
+              : await request.get(c.path);
       expect(res.status()).toBe(404);
       const body = (await res.json().catch(() => ({}))) as { detail?: string };
       expect(body.detail ?? '').toMatch(/disabled/);
