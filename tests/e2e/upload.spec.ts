@@ -37,4 +37,40 @@ test.describe('upload modal', () => {
     expect(rawKey).toMatch(/^raw\//);
     expect(dump[rawKey!]).toContain('Uploaded Doc');
   });
+
+  test('authored upload honors a subfolder path', async ({ request }) => {
+    const res = await request.post('/api/upload', {
+      multipart: {
+        file: {
+          name: 'setup-guide.md',
+          mimeType: 'text/markdown',
+          buffer: Buffer.from('# Setup Guide\n\nNested.\n', 'utf-8'),
+        },
+        destination: 'authored',
+        scope: 'shared',
+        space: 'wiki',
+        folder: 'guides/setup',
+      },
+    });
+    expect(res.status()).toBe(201);
+    const body = await res.json();
+    expect(body.key).toBe('authored/wiki/guides/setup/setup-guide.md');
+    expect(body.folder).toBe('guides/setup');
+
+    const dump = await dumpVault(request);
+    expect(dump['authored/wiki/guides/setup/setup-guide.md']).toContain('Setup Guide');
+  });
+
+  test('rejects a malformed subfolder path', async ({ request }) => {
+    const res = await request.post('/api/upload', {
+      multipart: {
+        file: { name: 'x.md', mimeType: 'text/markdown', buffer: Buffer.from('# X\n', 'utf-8') },
+        destination: 'authored',
+        scope: 'shared',
+        space: 'wiki',
+        folder: '../escape',
+      },
+    });
+    expect(res.status()).toBe(400);
+  });
 });

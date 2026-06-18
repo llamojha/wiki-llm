@@ -356,6 +356,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
         open={uploadOpen}
         initialTab={uploadTab}
         spaces={tree.filter((n) => n.type === 'folder' && !n.id.startsWith('folder:__')).map((n) => n.id.replace('folder:', ''))}
+        tree={tree}
         onClose={() => setUploadOpen(false)}
         onUploaded={() => getTree().then(setTree).catch(() => showToast('Failed to refresh sidebar'))}
         showToast={showToast}

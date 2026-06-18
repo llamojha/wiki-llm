@@ -5,6 +5,7 @@ import { ICONS } from '@/lib/icons';
 import { withBasePath } from '@/lib/base-path';
 import { DEFAULT_USER_ID } from '@/lib/vault-paths';
 import type { FeatureFlags } from '@/lib/flags';
+import type { ApiTreeNode } from '@/lib/api';
 
 export type LibraryTab = 'upload' | 'pending' | 'reindex' | 'folders';
 
@@ -14,11 +15,47 @@ type UploadModalProps = {
   open: boolean;
   initialTab?: LibraryTab;
   spaces: string[];
+  /** Full sidebar tree — used to suggest existing subfolders for autocomplete. */
+  tree: ApiTreeNode[];
   onClose: () => void;
   onUploaded: () => void;
   showToast: (msg: string) => void;
   flags: FeatureFlags;
 };
+
+/**
+ * Collect existing subfolder paths (relative to the space root, e.g.
+ * `"guides"`, `"guides/setup"`) for a given scope + space, walking the live
+ * sidebar tree. Used to populate the subfolder autocomplete so users can drop
+ * files into a folder that already exists instead of re-typing the path.
+ */
+function collectSubfolders(tree: ApiTreeNode[], scope: Scope, space: string): string[] {
+  if (!space || space === '__all') return [];
+
+  let spaceNode: ApiTreeNode | undefined;
+  if (scope === 'user') {
+    const userRoot = tree.find((n) => n.type === 'folder' && n.id === 'folder:__user');
+    spaceNode =
+      userRoot?.type === 'folder'
+        ? userRoot.children.find((n) => n.type === 'folder' && n.id === `folder:__user/${space}`)
+        : undefined;
+  } else {
+    spaceNode = tree.find((n) => n.type === 'folder' && n.id === `folder:${space}`);
+  }
+  if (!spaceNode || spaceNode.type !== 'folder') return [];
+
+  const prefix = scope === 'user' ? `folder:__user/${space}/` : `folder:${space}/`;
+  const out: string[] = [];
+  const walk = (nodes: ApiTreeNode[]) => {
+    for (const n of nodes) {
+      if (n.type !== 'folder') continue;
+      if (n.id.startsWith(prefix)) out.push(n.id.slice(prefix.length));
+      walk(n.children);
+    }
+  };
+  walk(spaceNode.children);
+  return out.sort();
+}
 
 type FileStatus = 'queued' | 'uploading' | 'indexing' | 'indexed' | 'queued-curate' | 'error';
 type UploadFile = { id: string; name: string; size: number; file: File; status: FileStatus; progress: number; error?: string };
@@ -53,11 +90,12 @@ function defaultSpace(spaces: string[]): string {
   return spaces.includes('wiki') ? 'wiki' : spaces.find((s) => s !== 'personal') ?? spaces[0] ?? 'wiki';
 }
 
-export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, showToast, flags }: UploadModalProps) {
+export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploaded, showToast, flags }: UploadModalProps) {
   const [tab, setTab] = useState<LibraryTab>(initialTab ?? 'upload');
   const [scope, setScope] = useState<Scope>('shared');
   const [space, setSpace] = useState(defaultSpace(spaces));
   const [destination, setDestination] = useState<Destination>('raw');
+  const [folder, setFolder] = useState('');
   const [files, setFiles] = useState<UploadFile[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -67,9 +105,14 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
   const scopeRef = useRef(scope);
   const spaceRef = useRef(space);
   const destinationRef = useRef(destination);
+  const folderRef = useRef(folder);
   useEffect(() => { scopeRef.current = scope; }, [scope]);
   useEffect(() => { spaceRef.current = space; }, [space]);
   useEffect(() => { destinationRef.current = destination; }, [destination]);
+  useEffect(() => { folderRef.current = folder; }, [folder]);
+
+  // Subfolders that already exist in the selected scope + space, for autocomplete.
+  const subfolderSuggestions = collectSubfolders(tree, scope, space);
 
   // Build the scope-bearing query string fragment used by GETs.
   const scopeQuery = (s: Scope = scope): string =>
@@ -121,7 +164,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
       return;
     }
     setTab(initialTab ?? 'upload');
-    setScope('shared'); setDestination('raw');
+    setScope('shared'); setDestination('raw'); setFolder('');
     setFiles([]); setDragActive(false);
     setPendingStream([]); setPendingRunning(false); setPendingDone(false); setPendingJobTotal(0); setPendingPhase(null); setPendingFinalizing(false);
     setReindexRunning(false); setReindexDone(false); setReindexTotal(0); setReindexIndexed(0); setReindexRawCount(0);
@@ -169,6 +212,8 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
     form.append('scope', currentScope);
     if (currentScope === 'user') form.append('userId', DEFAULT_USER_ID);
     if (currentDestination === 'authored') form.append('space', currentSpace);
+    const currentFolder = folderRef.current.trim().replace(/^\/+|\/+$/g, '');
+    if (currentFolder) form.append('folder', currentFolder);
     try {
       const res = await fetch(withBasePath('/api/upload'), { method: 'POST', body: form });
       if (!res.ok) {
@@ -205,7 +250,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
   const allDone = files.length > 0 && files.every(f => f.status === 'indexed' || f.status === 'queued-curate' || f.status === 'error');
   const anyActive = files.some(f => f.status === 'uploading' || f.status === 'indexing' || f.status === 'queued');
 
-  const finishUpload = () => { onUploaded(); onClose(); const n = files.filter(f => f.status === 'indexed').length; if (n) showToast(`Uploaded ${n} file${n > 1 ? 's' : ''} to ${space}`); };
+  const finishUpload = () => { onUploaded(); onClose(); const n = files.filter(f => f.status === 'indexed').length; const sub = folder.trim().replace(/^\/+|\/+$/g, ''); if (n) showToast(`Uploaded ${n} file${n > 1 ? 's' : ''} to ${space}${sub ? `/${sub}` : ''}`); };
 
   // ── Pending tab: Lambda-based curation with polling ──
   const startPendingStream = async () => {
@@ -513,7 +558,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
                 </button>
               )}
               {tab !== 'pending' && spaces.map(s => (
-                <button key={s} className={'space-pill' + (space === s ? ' on' : '')} onClick={() => setSpace(s)}>
+                <button key={s} className={'space-pill' + (space === s ? ' on' : '')} onClick={() => { setSpace(s); setFolder(''); }}>
                   {ICONS.globe}
                   <span>{s}</span>
                 </button>
@@ -535,12 +580,31 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
               </div>
             </div>
           )}
+          {tab === 'upload' && (
+            <div className="upload-meta-row">
+              <label>Subfolder</label>
+              <div className="space-select" style={{ flex: 1, gap: 6 }}>
+                <input
+                  className="upload-input"
+                  placeholder="optional · e.g. guides/setup"
+                  value={folder}
+                  list="subfolder-suggestions"
+                  onChange={(e) => setFolder(e.target.value)}
+                  style={{ flex: 1 }}
+                />
+                <datalist id="subfolder-suggestions">
+                  {subfolderSuggestions.map((p) => <option key={p} value={p} />)}
+                </datalist>
+              </div>
+            </div>
+          )}
           <div className="upload-s3-preview">
             {ICONS.s3}
             <span>
               s3://vaultmark/
               {scope === 'user' ? `users/${DEFAULT_USER_ID}/` : ''}
               {destination === 'raw' ? 'raw/' : `authored/${space}/`}
+              {folder.trim() ? `${folder.trim().replace(/^\/+|\/+$/g, '')}/` : ''}
             </span>
           </div>
         </div>
