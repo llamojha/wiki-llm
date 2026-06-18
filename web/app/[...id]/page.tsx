@@ -3,7 +3,7 @@ import { type ApiTreeNode } from '@/lib/api';
 import { getTree } from '@/lib/vault-tree';
 import { FLAGS } from '@/lib/flags';
 import { getThemeRegistry } from '@/lib/theme-registry';
-import { vaultDisplayName } from '@/lib/vault-paths';
+import { vaultDisplayName, vaultS3Location } from '@/lib/vault-paths';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +31,7 @@ export default async function DocPage({
       themes={themes}
       defaultTheme={defaultTheme.id}
       vaultName={vaultDisplayName()}
+      s3Location={vaultS3Location()}
     />
   );
 }

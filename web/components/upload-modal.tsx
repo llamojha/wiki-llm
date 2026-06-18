@@ -21,6 +21,8 @@ type UploadModalProps = {
   onUploaded: () => void;
   showToast: (msg: string) => void;
   flags: FeatureFlags;
+  /** Resolved S3 destination base (`s3://bucket/prefix/`) from the server. */
+  s3Location: string;
 };
 
 /**
@@ -91,7 +93,7 @@ function defaultSpace(spaces: string[]): string {
   return spaces.includes('wiki') ? 'wiki' : spaces.find((s) => s !== 'personal') ?? spaces[0];
 }
 
-export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploaded, showToast, flags }: UploadModalProps) {
+export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploaded, showToast, flags, s3Location }: UploadModalProps) {
   const [tab, setTab] = useState<LibraryTab>(initialTab ?? 'upload');
   const [scope, setScope] = useState<Scope>('shared');
   // Spaces are per-scope: the list is fetched for the selected scope and
@@ -650,7 +652,7 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
           <div className="upload-s3-preview">
             {ICONS.s3}
             <span>
-              s3://vaultmark/
+              {s3Location}
               {scope === 'user' ? `users/${DEFAULT_USER_ID}/` : ''}
               {destination === 'raw' ? 'raw/' : `authored/${space || '<folder>'}/`}
               {folder.trim() ? `${folder.trim().replace(/^\/+|\/+$/g, '')}/` : ''}
@@ -936,7 +938,7 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
               </div>
               <div className="upload-s3-preview">
                 {ICONS.s3}
-                <span>s3://vaultmark/{scope === 'user' ? `users/${DEFAULT_USER_ID}/` : ''}authored/{newSpaceName.trim().toLowerCase() || '<folder>'}/</span>
+                <span>{s3Location}{scope === 'user' ? `users/${DEFAULT_USER_ID}/` : ''}authored/{newSpaceName.trim().toLowerCase() || '<folder>'}/</span>
               </div>
             </div>
 

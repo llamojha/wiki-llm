@@ -76,9 +76,11 @@ type AppShellProps = {
   defaultTheme: Theme;
   /** Vault name for the top-bar pill (from VAULT_ID); null hides it. */
   vaultName?: string | null;
+  /** Resolved S3 destination base (`s3://bucket/prefix/`) for upload previews. */
+  s3Location: string;
 };
 
-export function AppShell({ initialTree, initialDocId, flags, themes, defaultTheme, vaultName }: AppShellProps) {
+export function AppShell({ initialTree, initialDocId, flags, themes, defaultTheme, vaultName, s3Location }: AppShellProps) {
   const [scope, setScope] = useState<Scope>('shared');
   const [activeId, setActiveId] = useState<string>(initialDocId ?? '__home');
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -361,6 +363,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
         onUploaded={() => getTree().then(setTree).catch(() => showToast('Failed to refresh sidebar'))}
         showToast={showToast}
         flags={flags}
+        s3Location={s3Location}
       />
 
       <ToastStack message={toast} />
