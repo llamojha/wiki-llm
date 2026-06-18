@@ -126,7 +126,7 @@ test.describe('folder management', () => {
     await expect(page.locator('.upload-tab', { hasText: 'Folders' })).toBeVisible();
 
     await page.locator('input.upload-input').first().fill('playbooks');
-    await page.locator('.upload-meta .btn.primary', { hasText: 'Create' }).click();
+    await page.locator('.folder-mgr .btn.primary', { hasText: 'Create' }).click();
 
     await expect
       .poll(async () => {

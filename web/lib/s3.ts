@@ -116,6 +116,46 @@ export async function listObjects(subPrefix = ''): Promise<string[]> {
 }
 
 /**
+ * List *every* key under a sub-prefix, regardless of extension. Returns keys
+ * relative to the vault prefix.
+ *
+ * Unlike `listObjects` (which is deliberately `.md`-only), this surfaces
+ * `.keep` markers and any other objects. Folder administration needs it: an
+ * empty nested folder is represented solely by a `.keep` marker, so renaming or
+ * deleting such a folder requires seeing keys that `listObjects` filters out.
+ */
+export async function listAllKeys(subPrefix = ''): Promise<string[]> {
+  trace('LIST all', subPrefix || '<root>');
+  if (useMock) return mock.listAllKeys(subPrefix);
+  const searchPrefix = subPrefix
+    ? `${prefix}/${subPrefix}`.replace(/^\//, '')
+    : prefix;
+
+  const keys: string[] = [];
+  let token: string | undefined;
+
+  do {
+    const res = await client().send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: searchPrefix,
+        ContinuationToken: token,
+      }),
+    );
+    for (const obj of res.Contents ?? []) {
+      const key = obj.Key ?? '';
+      const rel = key.startsWith(prefix)
+        ? key.slice(prefix.length).replace(/^\//, '')
+        : key;
+      if (rel) keys.push(rel);
+    }
+    token = res.NextContinuationToken;
+  } while (token);
+
+  return keys;
+}
+
+/**
  * List `.css` keys under a sub-prefix. Returns keys relative to the vault
  * prefix.
  *

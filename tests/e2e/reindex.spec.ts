@@ -17,7 +17,7 @@ test.describe('reindex', () => {
     await page.locator('button[title="Re-index everything"]').click();
     await expect(page.locator('.reindex-panel')).toBeVisible();
 
-    await page.locator('.reindex-panel button.btn.primary', { hasText: /Re-index space/ }).click();
+    await page.locator('.reindex-panel button.btn.primary', { hasText: /Re-index/ }).click();
 
     // Wait for completion message.
     await expect(page.locator('.reindex-panel')).toContainText('Re-index complete', {
