@@ -87,12 +87,18 @@ function fmtSize(b: number): string {
 }
 
 function defaultSpace(spaces: string[]): string {
-  return spaces.includes('wiki') ? 'wiki' : spaces.find((s) => s !== 'personal') ?? spaces[0] ?? 'wiki';
+  if (!spaces.length) return '';
+  return spaces.includes('wiki') ? 'wiki' : spaces.find((s) => s !== 'personal') ?? spaces[0];
 }
 
 export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploaded, showToast, flags }: UploadModalProps) {
   const [tab, setTab] = useState<LibraryTab>(initialTab ?? 'upload');
   const [scope, setScope] = useState<Scope>('shared');
+  // Spaces are per-scope: the list is fetched for the selected scope and
+  // refreshed after any folder op. `spaces` (the shared list, derived from the
+  // tree) seeds the first render so shared scope shows instantly.
+  const [spaceList, setSpaceList] = useState<string[]>(spaces);
+  const [spacesNonce, setSpacesNonce] = useState(0);
   const [space, setSpace] = useState(defaultSpace(spaces));
   // `raw` means "process with AI later" — that pipeline is the curate feature.
   // With curate off there's nothing to process raw files (the Pending tab is
@@ -123,6 +129,28 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
   // Build the scope payload used by POSTs.
   const scopePayload = (s: Scope = scope): Record<string, string> =>
     s === 'user' ? { scope: 'user', userId: DEFAULT_USER_ID } : { scope: 'shared' };
+
+  // Fetch the declared spaces for the active scope. Re-runs when the scope
+  // changes or a folder op bumps `spacesNonce`. GET /api/spaces is a read path
+  // (ungated), so this works even when only the curate/reindex tabs are on.
+  useEffect(() => {
+    if (!open) return;
+    const ctrl = new AbortController();
+    fetch(withBasePath(`/api/spaces?scope=${scope}${scope === 'user' ? `&userId=${encodeURIComponent(DEFAULT_USER_ID)}` : ''}`), { signal: ctrl.signal })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: Array<{ name: string }>) => {
+        const names = list.map((x) => x.name);
+        setSpaceList(names);
+        // Keep the current selection if still valid; the pending tab pins its
+        // own space and the reindex tab uses the synthetic `__all`.
+        if (tab !== 'pending') {
+          setSpace((prev) => (prev && (names.includes(prev) || prev === '__all') ? prev : defaultSpace(names)));
+        }
+      })
+      .catch(() => { /* keep the current list on failure */ });
+    return () => ctrl.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, scope, spacesNonce]);
 
   // Pending tab
   const [pendingCount, setPendingCount] = useState(0);
@@ -172,7 +200,8 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
     setPendingStream([]); setPendingRunning(false); setPendingDone(false); setPendingJobTotal(0); setPendingPhase(null); setPendingFinalizing(false);
     setReindexRunning(false); setReindexDone(false); setReindexTotal(0); setReindexIndexed(0); setReindexRawCount(0);
     setNewSpaceName(''); setRenaming(null); setRenameValue(''); setConfirmingDelete(null); setFolderBusy(false);
-    if (spaces.length && !spaces.includes(space)) setSpace(defaultSpace(spaces));
+    // The spaces effect (keyed on scope) loads the authoritative list for the
+    // reset-to-shared scope and fixes the selection.
   }, [open, initialTab]);
 
   // Fetch pending count when space/scope changes.
@@ -207,6 +236,13 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
     const currentScope = scopeRef.current;
     const currentSpace = spaceRef.current;
     const currentDestination = destinationRef.current;
+
+    // Authored uploads must land in a folder. With per-scope spaces, the
+    // selected scope may have none declared yet — prompt to create one.
+    if (currentDestination === 'authored' && !currentSpace) {
+      updateFile(entry.id, { status: 'error', error: 'Create a folder first (Folders tab)' });
+      return;
+    }
 
     updateFile(entry.id, { status: 'uploading', progress: 0 });
     const form = new FormData();
@@ -425,11 +461,12 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
       const res = await fetch(withBasePath('/api/spaces'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, ...scopePayload() }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { showToast(data.detail || 'Could not create folder'); return; }
       setNewSpaceName('');
+      setSpacesNonce((n) => n + 1);
       showToast(`Created folder "${name}"`);
       onUploaded();
     } catch { showToast('Network error'); }
@@ -444,12 +481,13 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
       const res = await fetch(withBasePath('/api/spaces'), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from, to }),
+        body: JSON.stringify({ from, to, ...scopePayload() }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { showToast(data.detail || 'Could not rename folder'); return; }
       setRenaming(null);
       if (space === from) setSpace(to);
+      setSpacesNonce((n) => n + 1);
       showToast(`Renamed "${from}" → "${to}"`);
       onUploaded();
     } catch { showToast('Network error'); }
@@ -459,14 +497,15 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
   const deleteSpace = async (name: string) => {
     setFolderBusy(true);
     try {
-      const res = await fetch(withBasePath(`/api/spaces?name=${encodeURIComponent(name)}`), { method: 'DELETE' });
+      const res = await fetch(withBasePath(`/api/spaces?name=${encodeURIComponent(name)}${scopeQuery()}`), { method: 'DELETE' });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         showToast(data.detail || 'Could not delete folder');
         return;
       }
       setConfirmingDelete(null);
-      if (space === name) setSpace(defaultSpace(spaces.filter((s) => s !== name)));
+      if (space === name) setSpace(defaultSpace(spaceList.filter((s) => s !== name)));
+      setSpacesNonce((n) => n + 1);
       showToast(`Deleted folder "${name}"`);
       onUploaded();
     } catch { showToast('Network error'); }
@@ -488,9 +527,9 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
           <button className="icon-btn" onClick={onClose} title="Close">{ICONS.close}</button>
         </div>
 
-        {/* Scope toggle — every operation in this modal is bound to this scope.
-            Folder management is vault-global, so the toggle is hidden there. */}
-        {tab !== 'folders' && (
+        {/* Scope toggle — every operation in this modal (including folder
+            management) is bound to the selected scope. Each scope owns its
+            folders independently. */}
         <div className="upload-meta" style={{ borderBottom: '1px solid var(--border-1, rgba(255,255,255,0.08))', paddingBottom: 12 }}>
           <div className="upload-meta-row">
             <label>Scope</label>
@@ -516,7 +555,6 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
             </div>
           </div>
         </div>
-        )}
 
         {/* Tabs */}
         <div className="upload-tabs">
@@ -560,12 +598,17 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
                   <span>All</span>
                 </button>
               )}
-              {tab !== 'pending' && spaces.map(s => (
+              {tab !== 'pending' && spaceList.map(s => (
                 <button key={s} className={'space-pill' + (space === s ? ' on' : '')} onClick={() => { setSpace(s); setFolder(''); }}>
                   {ICONS.globe}
                   <span>{s}</span>
                 </button>
               ))}
+              {tab !== 'pending' && spaceList.length === 0 && (
+                <span style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>
+                  No folders in this scope — create one in the Folders tab.
+                </span>
+              )}
             </div>
           </div>
           {/* Destination toggle only matters when curate is on. Without it,
@@ -609,7 +652,7 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
             <span>
               s3://vaultmark/
               {scope === 'user' ? `users/${DEFAULT_USER_ID}/` : ''}
-              {destination === 'raw' ? 'raw/' : `authored/${space}/`}
+              {destination === 'raw' ? 'raw/' : `authored/${space || '<folder>'}/`}
               {folder.trim() ? `${folder.trim().replace(/^\/+|\/+$/g, '')}/` : ''}
             </span>
           </div>
@@ -893,26 +936,27 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
               </div>
               <div className="upload-s3-preview">
                 {ICONS.s3}
-                <span>s3://vaultmark/authored/{newSpaceName.trim().toLowerCase() || '<folder>'}/</span>
+                <span>s3://vaultmark/{scope === 'user' ? `users/${DEFAULT_USER_ID}/` : ''}authored/{newSpaceName.trim().toLowerCase() || '<folder>'}/</span>
               </div>
             </div>
 
             <div className="callout warn" style={{ margin: '0 0 8px' }}>
               <span className="icon">{ICONS.warn}</span>
               <div style={{ fontSize: 12, color: 'var(--fg-2)' }}>
-                Renaming or deleting a folder affects <strong>both</strong> the shared
-                library and every user&apos;s copy. Deleting removes all documents inside it.
+                Folders are managed per scope. These changes affect only the{' '}
+                <strong>{scope === 'user' ? `My (${DEFAULT_USER_ID})` : 'Shared'}</strong> library.
+                Deleting removes all documents inside the folder.
               </div>
             </div>
 
             <div className="upload-list">
-              {spaces.length === 0 && (
+              {spaceList.length === 0 && (
                 <div className="pending-empty">
                   <div className="upload-drop-title">No folders yet</div>
                   <div className="upload-drop-sub">Create one above to start organizing authored documents.</div>
                 </div>
               )}
-              {spaces.map((s) => (
+              {spaceList.map((s) => (
                 <div key={s} className="upload-row">
                   <span className="upload-row-icon">{ICONS.folder}</span>
                   <div className="upload-row-body">
@@ -940,7 +984,7 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
                     ) : (
                       <div className="upload-row-title">
                         <span className="upload-row-name">{s}</span>
-                        <span className="upload-row-size">authored/{s}/</span>
+                        <span className="upload-row-size">{scope === 'user' ? `users/${DEFAULT_USER_ID}/` : ''}authored/{s}/</span>
                       </div>
                     )}
                   </div>
@@ -963,7 +1007,7 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
 
             <div className="upload-foot">
               <span style={{ flex: 1 }}></span>
-              <span className="upload-summary">{spaces.length} folder{spaces.length === 1 ? '' : 's'}</span>
+              <span className="upload-summary">{spaceList.length} folder{spaceList.length === 1 ? '' : 's'}</span>
               <button className="btn ghost" onClick={onClose}>Close</button>
             </div>
           </>

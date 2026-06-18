@@ -75,6 +75,48 @@ test.describe('folder management', () => {
     expect(res.status()).toBe(400);
   });
 
+  test('user-scope folders are independent of shared', async ({ request }) => {
+    // Create a folder in the user scope only.
+    const res = await request.post('/api/spaces', {
+      data: { name: 'notes', scope: 'user', userId: 'default' },
+    });
+    expect(res.status()).toBe(201);
+
+    // It shows in the user scope listing…
+    const userList = (await (await request.get('/api/spaces?scope=user&userId=default')).json()) as Array<{ name: string }>;
+    expect(userList.some((s) => s.name === 'notes')).toBe(true);
+
+    // …but not in the shared listing.
+    const sharedList = (await (await request.get('/api/spaces')).json()) as Array<{ name: string }>;
+    expect(sharedList.some((s) => s.name === 'notes')).toBe(false);
+    expect(sharedList.some((s) => s.name === 'wiki')).toBe(true);
+
+    // Structure: the user's own spaces carry it; shared spaces do not.
+    const dump = await dumpVault(request);
+    const structure = JSON.parse(dump['_system/structure.json']) as {
+      spaces: Array<{ name: string }>;
+      users: Array<{ id: string; spaces?: Array<{ name: string }> }>;
+    };
+    expect(structure.spaces.some((s) => s.name === 'notes')).toBe(false);
+    const user = structure.users.find((u) => u.id === 'default');
+    expect(user?.spaces?.some((s) => s.name === 'notes')).toBe(true);
+  });
+
+  test('the same folder name can exist in both scopes independently', async ({ request }) => {
+    const shared = await request.post('/api/spaces', { data: { name: 'handbook' } });
+    expect(shared.status()).toBe(201);
+    const user = await request.post('/api/spaces', {
+      data: { name: 'handbook', scope: 'user', userId: 'default' },
+    });
+    expect(user.status()).toBe(201);
+
+    // Deleting the shared one leaves the user's copy intact.
+    const del = await request.delete('/api/spaces?name=handbook');
+    expect(del.status()).toBe(204);
+    const userList = (await (await request.get('/api/spaces?scope=user&userId=default')).json()) as Array<{ name: string }>;
+    expect(userList.some((s) => s.name === 'handbook')).toBe(true);
+  });
+
   test('creates a folder through the Folders tab UI', async ({ page, request }) => {
     await gotoHome(page);
     await page.locator('button[title="Toggle theme"]').waitFor();

@@ -127,7 +127,7 @@ export async function POST(req: Request) {
     // in the sidebar tree, which only walks declared `indexed` spaces. The
     // personal space is reserved and surfaced separately, so never declare it.
     if (space && space !== PERSONAL_SPACE) {
-      await ensureSpaceInStructure(space);
+      await ensureSpaceInStructure(space, scope.scope, scope.userId);
     }
     await regenerateSpaceIndex(space as string, scope);
     await regenerateMasterIndex(scope);

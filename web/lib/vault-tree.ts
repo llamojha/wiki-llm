@@ -1,5 +1,5 @@
 import { listObjects } from '@/lib/s3';
-import { getStructure } from '@/lib/vault-structure';
+import { getStructure, spacesForScope } from '@/lib/vault-structure';
 import {
   DEFAULT_USER_ID,
   authoredPrefix,
@@ -81,11 +81,12 @@ export async function getTree(): Promise<TreeNode[]> {
     });
   }
 
-  // Skip `personal` here — it's already covered by the dedicated block
-  // above. Otherwise an `indexed: true` entry for `personal` in
-  // structure.json would re-walk the same `users/<id>/authored/personal/`
-  // prefix and add every doc twice to the My-wiki sidebar.
-  for (const space of structure.spaces.filter((s) => s.indexed && s.name !== 'personal')) {
+  // Walk the user's OWN declared spaces (independent of the shared list).
+  // Skip `personal` — it's already covered by the dedicated block above;
+  // otherwise an `indexed: true` personal entry would re-walk the same
+  // `users/<id>/authored/personal/` prefix and double every doc.
+  const userSpaces = spacesForScope(structure, 'user', defaultUser);
+  for (const space of userSpaces.filter((s) => s.indexed && s.name !== 'personal')) {
     const generated = (await listObjects(userScope.generatedPrefix(space.name))).filter(isDocumentKey);
     const authored = (await listObjects(userScope.authoredPrefix(space.name))).filter(isDocumentKey);
     if (!generated.length && !authored.length) continue;

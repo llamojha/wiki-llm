@@ -19,7 +19,7 @@
 export type Seed = Record<string, string>;
 
 const STRUCTURE = {
-  version: 2,
+  version: 3,
   roots: {
     raw: 'raw/',
     generated: 'generated/',
@@ -41,6 +41,9 @@ const STRUCTURE = {
         authored: 'users/default/authored/',
         system: 'users/default/_system/',
       },
+      // Per-scope spaces (v3): the user owns their folders independently of the
+      // shared list. Starts empty — `personal` is implicit and not declared.
+      spaces: [],
     },
   ],
   spaces: [

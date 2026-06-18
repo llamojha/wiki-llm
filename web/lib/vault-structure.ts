@@ -49,10 +49,17 @@ export type UserEntry = {
     authored: string;
     system: string;
   };
+  /**
+   * Spaces declared in this user's own subtree, independent of the shared
+   * `spaces` list. The reserved `personal` space is implicit and never stored
+   * here. Absent on structures written before v3 — treated as empty (the user
+   * scope starts with no declared spaces beyond personal).
+   */
+  spaces?: SpaceEntry[];
 };
 
 export type VaultStructure = {
-  version: 1 | 2;
+  version: 1 | 2 | 3;
   roots?: {
     raw: string;
     generated: string;
@@ -68,7 +75,7 @@ export type VaultStructure = {
 const STRUCTURE_KEY = systemKey('structure.json');
 
 const DEFAULT_STRUCTURE: VaultStructure = {
-  version: 2,
+  version: 3,
   roots: {
     raw: RAW_PREFIX,
     generated: `${GENERATED_ROOT}/`,
@@ -90,6 +97,7 @@ const DEFAULT_STRUCTURE: VaultStructure = {
         authored: `${DEFAULT_USER_ROOT}/authored/`,
         system: `${DEFAULT_USER_ROOT}/_system/`,
       },
+      spaces: [],
     },
   ],
   spaces: [],
@@ -115,11 +123,57 @@ export async function putStructure(structure: VaultStructure): Promise<void> {
   await putObject(STRUCTURE_KEY, JSON.stringify(structure, null, 2));
 }
 
-/** Ensure a space exists in structure.json. Adds it if missing. */
-export async function ensureSpaceInStructure(space: string): Promise<void> {
+/**
+ * Declared spaces for a scope. Shared scope reads the top-level `spaces` list;
+ * user scope reads that user's own `spaces` (independent of shared). Returns a
+ * non-mutating view — empty when nothing is declared. The reserved `personal`
+ * space is implicit and never appears here.
+ */
+export function spacesForScope(
+  structure: VaultStructure,
+  scope: 'shared' | 'user',
+  userId?: string,
+): SpaceEntry[] {
+  if (scope === 'shared') return structure.spaces;
+  const id = userId ?? structure.defaultUser ?? DEFAULT_USER_ID;
+  return structure.users?.find((u) => u.id === id)?.spaces ?? [];
+}
+
+/**
+ * Locate the mutable spaces array for a scope inside `structure`, creating the
+ * user entry / array as needed. Mutating the returned array and then calling
+ * `putStructure(structure)` persists the change. Use this for writes;
+ * `spacesForScope` for reads.
+ */
+export function mutableSpacesForScope(
+  structure: VaultStructure,
+  scope: 'shared' | 'user',
+  userId?: string,
+): SpaceEntry[] {
+  if (scope === 'shared') return structure.spaces;
+  const id = userId ?? structure.defaultUser ?? DEFAULT_USER_ID;
+  let user = structure.users?.find((u) => u.id === id);
+  if (!user) {
+    user = { id, label: id, prefix: `users/${id}/`, spaces: [] };
+    structure.users = [...(structure.users ?? []), user];
+  }
+  if (!user.spaces) user.spaces = [];
+  return user.spaces;
+}
+
+/**
+ * Ensure a space is declared in the given scope's structure. Adds it if
+ * missing. Defaults to the shared scope to preserve existing call sites.
+ */
+export async function ensureSpaceInStructure(
+  space: string,
+  scope: 'shared' | 'user' = 'shared',
+  userId?: string,
+): Promise<void> {
   const structure = await getStructure();
-  if (structure.spaces.some((s) => s.name === space)) return;
+  const arr = mutableSpacesForScope(structure, scope, userId);
+  if (arr.some((s) => s.name === space)) return;
   const label = space.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-  structure.spaces.push({ name: space, label, indexed: true });
+  arr.push({ name: space, label, indexed: true });
   await putStructure(structure);
 }
