@@ -27,6 +27,19 @@ export function vaultDisplayName(): string | null {
   return id && id !== 'default' ? id : null;
 }
 
+/**
+ * S3 location prefix for the upload-destination preview (server-side; pass to
+ * clients as a prop). Mirrors how `web/lib/s3.ts` resolves the bucket/prefix
+ * from the runtime environment so the modal shows the *real* destination
+ * instead of a hardcoded bucket name. Returns a trailing-slash base such as
+ * `s3://my-bucket/` or `s3://my-bucket/team-vault/`.
+ */
+export function vaultS3Location(): string {
+  const bucket = (process.env.VAULT_BUCKET ?? '').trim() || 'mock-bucket';
+  const prefix = (process.env.VAULT_PREFIX ?? '').trim().replace(/^\/+|\/+$/g, '');
+  return `s3://${bucket}/${prefix ? `${prefix}/` : ''}`;
+}
+
 export function generatedPrefix(space: string): string {
   return `${GENERATED_ROOT}/${space}/`;
 }
