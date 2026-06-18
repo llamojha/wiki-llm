@@ -94,7 +94,10 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
   const [tab, setTab] = useState<LibraryTab>(initialTab ?? 'upload');
   const [scope, setScope] = useState<Scope>('shared');
   const [space, setSpace] = useState(defaultSpace(spaces));
-  const [destination, setDestination] = useState<Destination>('raw');
+  // `raw` means "process with AI later" — that pipeline is the curate feature.
+  // With curate off there's nothing to process raw files (the Pending tab is
+  // hidden and reindex skips raw/), so authored is the only sensible default.
+  const [destination, setDestination] = useState<Destination>(flags.curate ? 'raw' : 'authored');
   const [folder, setFolder] = useState('');
   const [files, setFiles] = useState<UploadFile[]>([]);
   const [dragActive, setDragActive] = useState(false);
@@ -164,7 +167,7 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
       return;
     }
     setTab(initialTab ?? 'upload');
-    setScope('shared'); setDestination('raw'); setFolder('');
+    setScope('shared'); setDestination(flags.curate ? 'raw' : 'authored'); setFolder('');
     setFiles([]); setDragActive(false);
     setPendingStream([]); setPendingRunning(false); setPendingDone(false); setPendingJobTotal(0); setPendingPhase(null); setPendingFinalizing(false);
     setReindexRunning(false); setReindexDone(false); setReindexTotal(0); setReindexIndexed(0); setReindexRawCount(0);
@@ -565,7 +568,10 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
               ))}
             </div>
           </div>
-          {tab === 'upload' && (
+          {/* Destination toggle only matters when curate is on. Without it,
+              raw uploads can never be processed, so authored is the only
+              choice and the toggle is hidden. */}
+          {tab === 'upload' && flags.curate && (
             <div className="upload-meta-row">
               <label>Destination</label>
               <div className="space-select">

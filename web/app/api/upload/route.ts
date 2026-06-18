@@ -6,7 +6,7 @@ import { invalidateSearchIndex } from '@/lib/search';
 import { appendLog } from '@/lib/log-append';
 import { ensureSpaceInStructure } from '@/lib/vault-structure';
 import { PERSONAL_SPACE } from '@/lib/vault-paths';
-import { flagGuard } from '@/lib/flags';
+import { flagGuard, isEnabled } from '@/lib/flags';
 
 const SPACE_RE = /^[a-z0-9][a-z0-9-]*$/;
 // A subfolder is a chain of space-shaped segments (`guides`, `guides/setup`).
@@ -68,6 +68,17 @@ export async function POST(req: Request) {
 
   if (destination !== 'raw' && destination !== 'authored') {
     return NextResponse.json({ detail: 'destination must be raw or authored' }, { status: 400 });
+  }
+
+  // A `raw` upload is only ever processed by the curate pipeline. With curate
+  // disabled the file would sit in raw/ forever (no Pending tab, reindex skips
+  // raw/), so reject it rather than write an orphan. The UI hides the raw
+  // option in this case; this guard is the enforcement.
+  if (destination === 'raw' && !isEnabled('curate')) {
+    return NextResponse.json(
+      { detail: 'raw destination requires the curate feature' },
+      { status: 400 },
+    );
   }
 
   if (folder === null) {
