@@ -1,6 +1,6 @@
 import matter from 'gray-matter';
 
-import { getStructure } from '@/lib/vault-structure';
+import { getStructure, spacesForScope } from '@/lib/vault-structure';
 import { getObject, listObjects, putObject } from '@/lib/s3';
 import { isDocumentKey } from '@/lib/vault-paths';
 import { inferScopeFromKey, resolveScope, type ScopePaths } from '@/lib/scope';
@@ -85,7 +85,7 @@ export async function regenerateMasterIndex(
   scope: ScopePaths = resolveScope({ scope: 'shared' }),
 ): Promise<void> {
   const structure = await getStructure();
-  const spaces = structure.spaces
+  const spaces = spacesForScope(structure, scope.scope, scope.userId)
     .filter((s) => s.indexed)
     .map((s) => s.name)
     .filter((name) => name !== 'personal' || scope.scope === 'user');

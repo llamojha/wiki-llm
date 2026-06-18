@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { flagGuard } from '@/lib/flags';
+import type { Scope } from '@/lib/scope';
 import {
   SpaceError,
   createSpace,
@@ -12,15 +13,19 @@ import {
 /**
  * Space (folder) management.
  *
- * Gated by `FEATURE_UPLOAD` — the same flag that controls the Library upload
- * surface, since folder management lives alongside it in the modal. All
- * operations are vault-global (shared + every declared user scope); see
+ * Spaces are per-scope: shared spaces live in `structure.spaces`, each user's
+ * own spaces under `users[].spaces`. Every request carries the target scope
+ * (`scope=shared|user` + `userId`); an operation only touches that scope. See
  * `lib/spaces.ts`.
  *
- *   GET    /api/spaces           → list declared spaces (excludes personal)
- *   POST   /api/spaces           → { name }        create a space
- *   PATCH  /api/spaces           → { from, to }    rename a space
- *   DELETE /api/spaces?name=...  → delete a space and all its content
+ * GET is a read path and is never gated. Mutations are gated by
+ * `FEATURE_UPLOAD` — the same flag that controls the Library surface where
+ * folder management lives.
+ *
+ *   GET    /api/spaces?scope=&userId=   → list a scope's spaces (no personal)
+ *   POST   /api/spaces  { name, scope?, userId? }        create a space
+ *   PATCH  /api/spaces  { from, to, scope?, userId? }    rename a space
+ *   DELETE /api/spaces?name=&scope=&userId=              delete a space
  */
 
 function handleError(err: unknown): NextResponse {
@@ -30,11 +35,19 @@ function handleError(err: unknown): NextResponse {
   return NextResponse.json({ detail: 'Internal error' }, { status: 500 });
 }
 
-export async function GET() {
-  const blocked = flagGuard('upload');
-  if (blocked) return blocked;
+/** Resolve scope + userId from arbitrary string inputs (query or body). */
+function resolveTarget(scope: unknown, userId: unknown): { scope: Scope; userId?: string } {
+  return {
+    scope: scope === 'user' ? 'user' : 'shared',
+    userId: typeof userId === 'string' && userId ? userId : undefined,
+  };
+}
 
-  const spaces = await listSpaces();
+export async function GET(req: Request) {
+  const params = new URL(req.url).searchParams;
+  const { scope, userId } = resolveTarget(params.get('scope'), params.get('userId'));
+
+  const spaces = await listSpaces(scope, userId);
   return NextResponse.json(spaces);
 }
 
@@ -42,18 +55,19 @@ export async function POST(req: Request) {
   const blocked = flagGuard('upload');
   if (blocked) return blocked;
 
-  let name: unknown;
+  let body: { name?: unknown; scope?: unknown; userId?: unknown };
   try {
-    ({ name } = (await req.json()) as { name?: unknown });
+    body = (await req.json()) as typeof body;
   } catch {
     return NextResponse.json({ detail: 'invalid JSON body' }, { status: 400 });
   }
-  if (typeof name !== 'string') {
+  if (typeof body.name !== 'string') {
     return NextResponse.json({ detail: 'name is required' }, { status: 400 });
   }
 
+  const { scope, userId } = resolveTarget(body.scope, body.userId);
   try {
-    const entry = await createSpace(name);
+    const entry = await createSpace(body.name, scope, userId);
     return NextResponse.json(entry, { status: 201 });
   } catch (err) {
     return handleError(err);
@@ -64,19 +78,19 @@ export async function PATCH(req: Request) {
   const blocked = flagGuard('upload');
   if (blocked) return blocked;
 
-  let from: unknown;
-  let to: unknown;
+  let body: { from?: unknown; to?: unknown; scope?: unknown; userId?: unknown };
   try {
-    ({ from, to } = (await req.json()) as { from?: unknown; to?: unknown });
+    body = (await req.json()) as typeof body;
   } catch {
     return NextResponse.json({ detail: 'invalid JSON body' }, { status: 400 });
   }
-  if (typeof from !== 'string' || typeof to !== 'string') {
+  if (typeof body.from !== 'string' || typeof body.to !== 'string') {
     return NextResponse.json({ detail: 'from and to are required' }, { status: 400 });
   }
 
+  const { scope, userId } = resolveTarget(body.scope, body.userId);
   try {
-    const entry = await renameSpace(from, to);
+    const entry = await renameSpace(body.from, body.to, scope, userId);
     return NextResponse.json(entry);
   } catch (err) {
     return handleError(err);
@@ -87,13 +101,15 @@ export async function DELETE(req: Request) {
   const blocked = flagGuard('upload');
   if (blocked) return blocked;
 
-  const name = new URL(req.url).searchParams.get('name');
+  const params = new URL(req.url).searchParams;
+  const name = params.get('name');
   if (!name) {
     return NextResponse.json({ detail: 'name query param is required' }, { status: 400 });
   }
 
+  const { scope, userId } = resolveTarget(params.get('scope'), params.get('userId'));
   try {
-    await deleteSpace(name);
+    await deleteSpace(name, scope, userId);
     return new NextResponse(null, { status: 204 });
   } catch (err) {
     return handleError(err);

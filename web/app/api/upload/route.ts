@@ -6,13 +6,35 @@ import { invalidateSearchIndex } from '@/lib/search';
 import { appendLog } from '@/lib/log-append';
 import { ensureSpaceInStructure } from '@/lib/vault-structure';
 import { PERSONAL_SPACE } from '@/lib/vault-paths';
-import { flagGuard } from '@/lib/flags';
+import { flagGuard, isEnabled } from '@/lib/flags';
 
 const SPACE_RE = /^[a-z0-9][a-z0-9-]*$/;
+// A subfolder is a chain of space-shaped segments (`guides`, `guides/setup`).
+const FOLDER_SEGMENT_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 function sanitizeFilename(name: string): string {
   // Strip path separators, keep only the basename, ensure .md extension
   return name.replace(/[/\\]/g, '').replace(/[^a-zA-Z0-9._-]/g, '-');
+}
+
+/**
+ * Normalize an optional subfolder path supplied with an upload.
+ *
+ * Returns a clean relative path with no leading/trailing slashes
+ * (e.g. `"guides/setup"`), or `''` when no folder was given. Returns `null`
+ * when the path is malformed so the caller can reject with a 400 rather than
+ * writing to a surprising key. Each segment must match the same shape as a
+ * space name, which keeps S3 keys lowercase and rejects `..` traversal.
+ */
+function normalizeFolder(raw: string | null): string | null {
+  if (!raw) return '';
+  const trimmed = raw.trim().replace(/^\/+|\/+$/g, '');
+  if (!trimmed) return '';
+  const segments = trimmed.split('/').filter(Boolean);
+  for (const seg of segments) {
+    if (!FOLDER_SEGMENT_RE.test(seg)) return null;
+  }
+  return segments.join('/');
 }
 
 /**
@@ -38,6 +60,7 @@ export async function POST(req: Request) {
   const destination = ((form.get('destination') as string | null) ?? 'raw') as 'raw' | 'authored';
   const scopeName = ((form.get('scope') as string | null) ?? 'shared') as Scope;
   const userId = (form.get('userId') as string | null) ?? undefined;
+  const folder = normalizeFolder(form.get('folder') as string | null);
 
   if (!file) {
     return NextResponse.json({ detail: 'file is required' }, { status: 400 });
@@ -45,6 +68,24 @@ export async function POST(req: Request) {
 
   if (destination !== 'raw' && destination !== 'authored') {
     return NextResponse.json({ detail: 'destination must be raw or authored' }, { status: 400 });
+  }
+
+  // A `raw` upload is only ever processed by the curate pipeline. With curate
+  // disabled the file would sit in raw/ forever (no Pending tab, reindex skips
+  // raw/), so reject it rather than write an orphan. The UI hides the raw
+  // option in this case; this guard is the enforcement.
+  if (destination === 'raw' && !isEnabled('curate')) {
+    return NextResponse.json(
+      { detail: 'raw destination requires the curate feature' },
+      { status: 400 },
+    );
+  }
+
+  if (folder === null) {
+    return NextResponse.json(
+      { detail: 'folder segments must be lowercase alphanumeric with hyphens only' },
+      { status: 400 },
+    );
   }
 
   if (destination === 'authored') {
@@ -65,9 +106,10 @@ export async function POST(req: Request) {
 
   const scope = resolveScope({ scope: scopeName, userId });
   const filename = sanitizeFilename(file.name);
+  const folderPrefix = folder ? `${folder}/` : '';
   const key = destination === 'raw'
-    ? `${scope.rawPrefix}${filename}`
-    : `${scope.authoredPrefix(space as string)}${filename}`;
+    ? `${scope.rawPrefix}${folderPrefix}${filename}`
+    : `${scope.authoredPrefix(space as string)}${folderPrefix}${filename}`;
   const content = await file.text();
 
   try {
@@ -85,7 +127,7 @@ export async function POST(req: Request) {
     // in the sidebar tree, which only walks declared `indexed` spaces. The
     // personal space is reserved and surfaced separately, so never declare it.
     if (space && space !== PERSONAL_SPACE) {
-      await ensureSpaceInStructure(space);
+      await ensureSpaceInStructure(space, scope.scope, scope.userId);
     }
     await regenerateSpaceIndex(space as string, scope);
     await regenerateMasterIndex(scope);
@@ -94,7 +136,7 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json(
-    { key, scope: scope.scope, userId: scope.userId, destination, space: space ?? null },
+    { key, scope: scope.scope, userId: scope.userId, destination, space: space ?? null, folder: folder || null },
     { status: 201 },
   );
 }

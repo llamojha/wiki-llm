@@ -5,6 +5,7 @@ import { ICONS } from '@/lib/icons';
 import { withBasePath } from '@/lib/base-path';
 import { DEFAULT_USER_ID } from '@/lib/vault-paths';
 import type { FeatureFlags } from '@/lib/flags';
+import type { ApiTreeNode } from '@/lib/api';
 
 export type LibraryTab = 'upload' | 'pending' | 'reindex' | 'folders';
 
@@ -14,11 +15,47 @@ type UploadModalProps = {
   open: boolean;
   initialTab?: LibraryTab;
   spaces: string[];
+  /** Full sidebar tree — used to suggest existing subfolders for autocomplete. */
+  tree: ApiTreeNode[];
   onClose: () => void;
   onUploaded: () => void;
   showToast: (msg: string) => void;
   flags: FeatureFlags;
 };
+
+/**
+ * Collect existing subfolder paths (relative to the space root, e.g.
+ * `"guides"`, `"guides/setup"`) for a given scope + space, walking the live
+ * sidebar tree. Used to populate the subfolder autocomplete so users can drop
+ * files into a folder that already exists instead of re-typing the path.
+ */
+function collectSubfolders(tree: ApiTreeNode[], scope: Scope, space: string): string[] {
+  if (!space || space === '__all') return [];
+
+  let spaceNode: ApiTreeNode | undefined;
+  if (scope === 'user') {
+    const userRoot = tree.find((n) => n.type === 'folder' && n.id === 'folder:__user');
+    spaceNode =
+      userRoot?.type === 'folder'
+        ? userRoot.children.find((n) => n.type === 'folder' && n.id === `folder:__user/${space}`)
+        : undefined;
+  } else {
+    spaceNode = tree.find((n) => n.type === 'folder' && n.id === `folder:${space}`);
+  }
+  if (!spaceNode || spaceNode.type !== 'folder') return [];
+
+  const prefix = scope === 'user' ? `folder:__user/${space}/` : `folder:${space}/`;
+  const out: string[] = [];
+  const walk = (nodes: ApiTreeNode[]) => {
+    for (const n of nodes) {
+      if (n.type !== 'folder') continue;
+      if (n.id.startsWith(prefix)) out.push(n.id.slice(prefix.length));
+      walk(n.children);
+    }
+  };
+  walk(spaceNode.children);
+  return out.sort();
+}
 
 type FileStatus = 'queued' | 'uploading' | 'indexing' | 'indexed' | 'queued-curate' | 'error';
 type UploadFile = { id: string; name: string; size: number; file: File; status: FileStatus; progress: number; error?: string };
@@ -50,14 +87,24 @@ function fmtSize(b: number): string {
 }
 
 function defaultSpace(spaces: string[]): string {
-  return spaces.includes('wiki') ? 'wiki' : spaces.find((s) => s !== 'personal') ?? spaces[0] ?? 'wiki';
+  if (!spaces.length) return '';
+  return spaces.includes('wiki') ? 'wiki' : spaces.find((s) => s !== 'personal') ?? spaces[0];
 }
 
-export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, showToast, flags }: UploadModalProps) {
+export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploaded, showToast, flags }: UploadModalProps) {
   const [tab, setTab] = useState<LibraryTab>(initialTab ?? 'upload');
   const [scope, setScope] = useState<Scope>('shared');
+  // Spaces are per-scope: the list is fetched for the selected scope and
+  // refreshed after any folder op. `spaces` (the shared list, derived from the
+  // tree) seeds the first render so shared scope shows instantly.
+  const [spaceList, setSpaceList] = useState<string[]>(spaces);
+  const [spacesNonce, setSpacesNonce] = useState(0);
   const [space, setSpace] = useState(defaultSpace(spaces));
-  const [destination, setDestination] = useState<Destination>('raw');
+  // `raw` means "process with AI later" — that pipeline is the curate feature.
+  // With curate off there's nothing to process raw files (the Pending tab is
+  // hidden and reindex skips raw/), so authored is the only sensible default.
+  const [destination, setDestination] = useState<Destination>(flags.curate ? 'raw' : 'authored');
+  const [folder, setFolder] = useState('');
   const [files, setFiles] = useState<UploadFile[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -67,9 +114,14 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
   const scopeRef = useRef(scope);
   const spaceRef = useRef(space);
   const destinationRef = useRef(destination);
+  const folderRef = useRef(folder);
   useEffect(() => { scopeRef.current = scope; }, [scope]);
   useEffect(() => { spaceRef.current = space; }, [space]);
   useEffect(() => { destinationRef.current = destination; }, [destination]);
+  useEffect(() => { folderRef.current = folder; }, [folder]);
+
+  // Subfolders that already exist in the selected scope + space, for autocomplete.
+  const subfolderSuggestions = collectSubfolders(tree, scope, space);
 
   // Build the scope-bearing query string fragment used by GETs.
   const scopeQuery = (s: Scope = scope): string =>
@@ -77,6 +129,28 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
   // Build the scope payload used by POSTs.
   const scopePayload = (s: Scope = scope): Record<string, string> =>
     s === 'user' ? { scope: 'user', userId: DEFAULT_USER_ID } : { scope: 'shared' };
+
+  // Fetch the declared spaces for the active scope. Re-runs when the scope
+  // changes or a folder op bumps `spacesNonce`. GET /api/spaces is a read path
+  // (ungated), so this works even when only the curate/reindex tabs are on.
+  useEffect(() => {
+    if (!open) return;
+    const ctrl = new AbortController();
+    fetch(withBasePath(`/api/spaces?scope=${scope}${scope === 'user' ? `&userId=${encodeURIComponent(DEFAULT_USER_ID)}` : ''}`), { signal: ctrl.signal })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: Array<{ name: string }>) => {
+        const names = list.map((x) => x.name);
+        setSpaceList(names);
+        // Keep the current selection if still valid; the pending tab pins its
+        // own space and the reindex tab uses the synthetic `__all`.
+        if (tab !== 'pending') {
+          setSpace((prev) => (prev && (names.includes(prev) || prev === '__all') ? prev : defaultSpace(names)));
+        }
+      })
+      .catch(() => { /* keep the current list on failure */ });
+    return () => ctrl.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, scope, spacesNonce]);
 
   // Pending tab
   const [pendingCount, setPendingCount] = useState(0);
@@ -121,12 +195,13 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
       return;
     }
     setTab(initialTab ?? 'upload');
-    setScope('shared'); setDestination('raw');
+    setScope('shared'); setDestination(flags.curate ? 'raw' : 'authored'); setFolder('');
     setFiles([]); setDragActive(false);
     setPendingStream([]); setPendingRunning(false); setPendingDone(false); setPendingJobTotal(0); setPendingPhase(null); setPendingFinalizing(false);
     setReindexRunning(false); setReindexDone(false); setReindexTotal(0); setReindexIndexed(0); setReindexRawCount(0);
     setNewSpaceName(''); setRenaming(null); setRenameValue(''); setConfirmingDelete(null); setFolderBusy(false);
-    if (spaces.length && !spaces.includes(space)) setSpace(defaultSpace(spaces));
+    // The spaces effect (keyed on scope) loads the authoritative list for the
+    // reset-to-shared scope and fixes the selection.
   }, [open, initialTab]);
 
   // Fetch pending count when space/scope changes.
@@ -162,6 +237,13 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
     const currentSpace = spaceRef.current;
     const currentDestination = destinationRef.current;
 
+    // Authored uploads must land in a folder. With per-scope spaces, the
+    // selected scope may have none declared yet — prompt to create one.
+    if (currentDestination === 'authored' && !currentSpace) {
+      updateFile(entry.id, { status: 'error', error: 'Create a folder first (Folders tab)' });
+      return;
+    }
+
     updateFile(entry.id, { status: 'uploading', progress: 0 });
     const form = new FormData();
     form.append('file', entry.file);
@@ -169,6 +251,8 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
     form.append('scope', currentScope);
     if (currentScope === 'user') form.append('userId', DEFAULT_USER_ID);
     if (currentDestination === 'authored') form.append('space', currentSpace);
+    const currentFolder = folderRef.current.trim().replace(/^\/+|\/+$/g, '');
+    if (currentFolder) form.append('folder', currentFolder);
     try {
       const res = await fetch(withBasePath('/api/upload'), { method: 'POST', body: form });
       if (!res.ok) {
@@ -205,7 +289,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
   const allDone = files.length > 0 && files.every(f => f.status === 'indexed' || f.status === 'queued-curate' || f.status === 'error');
   const anyActive = files.some(f => f.status === 'uploading' || f.status === 'indexing' || f.status === 'queued');
 
-  const finishUpload = () => { onUploaded(); onClose(); const n = files.filter(f => f.status === 'indexed').length; if (n) showToast(`Uploaded ${n} file${n > 1 ? 's' : ''} to ${space}`); };
+  const finishUpload = () => { onUploaded(); onClose(); const n = files.filter(f => f.status === 'indexed').length; const sub = folder.trim().replace(/^\/+|\/+$/g, ''); if (n) showToast(`Uploaded ${n} file${n > 1 ? 's' : ''} to ${space}${sub ? `/${sub}` : ''}`); };
 
   // ── Pending tab: Lambda-based curation with polling ──
   const startPendingStream = async () => {
@@ -377,11 +461,12 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
       const res = await fetch(withBasePath('/api/spaces'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, ...scopePayload() }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { showToast(data.detail || 'Could not create folder'); return; }
       setNewSpaceName('');
+      setSpacesNonce((n) => n + 1);
       showToast(`Created folder "${name}"`);
       onUploaded();
     } catch { showToast('Network error'); }
@@ -396,12 +481,13 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
       const res = await fetch(withBasePath('/api/spaces'), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from, to }),
+        body: JSON.stringify({ from, to, ...scopePayload() }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { showToast(data.detail || 'Could not rename folder'); return; }
       setRenaming(null);
       if (space === from) setSpace(to);
+      setSpacesNonce((n) => n + 1);
       showToast(`Renamed "${from}" → "${to}"`);
       onUploaded();
     } catch { showToast('Network error'); }
@@ -411,14 +497,15 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
   const deleteSpace = async (name: string) => {
     setFolderBusy(true);
     try {
-      const res = await fetch(withBasePath(`/api/spaces?name=${encodeURIComponent(name)}`), { method: 'DELETE' });
+      const res = await fetch(withBasePath(`/api/spaces?name=${encodeURIComponent(name)}${scopeQuery()}`), { method: 'DELETE' });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         showToast(data.detail || 'Could not delete folder');
         return;
       }
       setConfirmingDelete(null);
-      if (space === name) setSpace(defaultSpace(spaces.filter((s) => s !== name)));
+      if (space === name) setSpace(defaultSpace(spaceList.filter((s) => s !== name)));
+      setSpacesNonce((n) => n + 1);
       showToast(`Deleted folder "${name}"`);
       onUploaded();
     } catch { showToast('Network error'); }
@@ -440,9 +527,9 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
           <button className="icon-btn" onClick={onClose} title="Close">{ICONS.close}</button>
         </div>
 
-        {/* Scope toggle — every operation in this modal is bound to this scope.
-            Folder management is vault-global, so the toggle is hidden there. */}
-        {tab !== 'folders' && (
+        {/* Scope toggle — every operation in this modal (including folder
+            management) is bound to the selected scope. Each scope owns its
+            folders independently. */}
         <div className="upload-meta" style={{ borderBottom: '1px solid var(--border-1, rgba(255,255,255,0.08))', paddingBottom: 12 }}>
           <div className="upload-meta-row">
             <label>Scope</label>
@@ -468,7 +555,6 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
             </div>
           </div>
         </div>
-        )}
 
         {/* Tabs */}
         <div className="upload-tabs">
@@ -512,15 +598,23 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
                   <span>All</span>
                 </button>
               )}
-              {tab !== 'pending' && spaces.map(s => (
-                <button key={s} className={'space-pill' + (space === s ? ' on' : '')} onClick={() => setSpace(s)}>
+              {tab !== 'pending' && spaceList.map(s => (
+                <button key={s} className={'space-pill' + (space === s ? ' on' : '')} onClick={() => { setSpace(s); setFolder(''); }}>
                   {ICONS.globe}
                   <span>{s}</span>
                 </button>
               ))}
+              {tab !== 'pending' && spaceList.length === 0 && (
+                <span style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>
+                  No folders in this scope — create one in the Folders tab.
+                </span>
+              )}
             </div>
           </div>
-          {tab === 'upload' && (
+          {/* Destination toggle only matters when curate is on. Without it,
+              raw uploads can never be processed, so authored is the only
+              choice and the toggle is hidden. */}
+          {tab === 'upload' && flags.curate && (
             <div className="upload-meta-row">
               <label>Destination</label>
               <div className="space-select">
@@ -535,12 +629,31 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
               </div>
             </div>
           )}
+          {tab === 'upload' && (
+            <div className="upload-meta-row">
+              <label>Subfolder</label>
+              <div className="space-select" style={{ flex: 1, gap: 6 }}>
+                <input
+                  className="upload-input"
+                  placeholder="optional · e.g. guides/setup"
+                  value={folder}
+                  list="subfolder-suggestions"
+                  onChange={(e) => setFolder(e.target.value)}
+                  style={{ flex: 1 }}
+                />
+                <datalist id="subfolder-suggestions">
+                  {subfolderSuggestions.map((p) => <option key={p} value={p} />)}
+                </datalist>
+              </div>
+            </div>
+          )}
           <div className="upload-s3-preview">
             {ICONS.s3}
             <span>
               s3://vaultmark/
               {scope === 'user' ? `users/${DEFAULT_USER_ID}/` : ''}
-              {destination === 'raw' ? 'raw/' : `authored/${space}/`}
+              {destination === 'raw' ? 'raw/' : `authored/${space || '<folder>'}/`}
+              {folder.trim() ? `${folder.trim().replace(/^\/+|\/+$/g, '')}/` : ''}
             </span>
           </div>
         </div>
@@ -823,26 +936,27 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
               </div>
               <div className="upload-s3-preview">
                 {ICONS.s3}
-                <span>s3://vaultmark/authored/{newSpaceName.trim().toLowerCase() || '<folder>'}/</span>
+                <span>s3://vaultmark/{scope === 'user' ? `users/${DEFAULT_USER_ID}/` : ''}authored/{newSpaceName.trim().toLowerCase() || '<folder>'}/</span>
               </div>
             </div>
 
             <div className="callout warn" style={{ margin: '0 0 8px' }}>
               <span className="icon">{ICONS.warn}</span>
               <div style={{ fontSize: 12, color: 'var(--fg-2)' }}>
-                Renaming or deleting a folder affects <strong>both</strong> the shared
-                library and every user&apos;s copy. Deleting removes all documents inside it.
+                Folders are managed per scope. These changes affect only the{' '}
+                <strong>{scope === 'user' ? `My (${DEFAULT_USER_ID})` : 'Shared'}</strong> library.
+                Deleting removes all documents inside the folder.
               </div>
             </div>
 
             <div className="upload-list">
-              {spaces.length === 0 && (
+              {spaceList.length === 0 && (
                 <div className="pending-empty">
                   <div className="upload-drop-title">No folders yet</div>
                   <div className="upload-drop-sub">Create one above to start organizing authored documents.</div>
                 </div>
               )}
-              {spaces.map((s) => (
+              {spaceList.map((s) => (
                 <div key={s} className="upload-row">
                   <span className="upload-row-icon">{ICONS.folder}</span>
                   <div className="upload-row-body">
@@ -870,7 +984,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
                     ) : (
                       <div className="upload-row-title">
                         <span className="upload-row-name">{s}</span>
-                        <span className="upload-row-size">authored/{s}/</span>
+                        <span className="upload-row-size">{scope === 'user' ? `users/${DEFAULT_USER_ID}/` : ''}authored/{s}/</span>
                       </div>
                     )}
                   </div>
@@ -893,7 +1007,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
 
             <div className="upload-foot">
               <span style={{ flex: 1 }}></span>
-              <span className="upload-summary">{spaces.length} folder{spaces.length === 1 ? '' : 's'}</span>
+              <span className="upload-summary">{spaceList.length} folder{spaceList.length === 1 ? '' : 's'}</span>
               <button className="btn ghost" onClick={onClose}>Close</button>
             </div>
           </>

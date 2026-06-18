@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import matter from 'gray-matter';
 
 import { getObject, listObjects, putObject } from '@/lib/s3';
-import { getStructure } from '@/lib/vault-structure';
+import { getStructure, spacesForScope } from '@/lib/vault-structure';
 import { isDocumentKey } from '@/lib/vault-paths';
 import { resolveScope, type Scope } from '@/lib/scope';
 import { invalidateSearchIndex } from '@/lib/search';
@@ -46,6 +46,7 @@ export async function POST(req: Request) {
 
   const scope = resolveScope({ scope: scopeName ?? 'shared', userId });
   const structure = await getStructure();
+  const declaredSpaces = spacesForScope(structure, scope.scope, scope.userId);
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -59,13 +60,13 @@ export async function POST(req: Request) {
         let targetSpaces: string[];
         if (space) {
           targetSpaces = [space];
-        } else if (structure.spaces.length > 0) {
-          targetSpaces = structure.spaces.filter((s) => s.indexed).map((s) => s.name);
+        } else {
+          // A scope's own declared spaces. User scope always includes the
+          // reserved personal space, even when nothing else is declared.
+          targetSpaces = declaredSpaces.filter((s) => s.indexed).map((s) => s.name);
           if (scope.scope === 'user' && !targetSpaces.includes('personal')) {
             targetSpaces.push('personal');
           }
-        } else {
-          targetSpaces = [];
         }
 
         // Gather keys per space, scoped.
@@ -107,7 +108,7 @@ export async function POST(req: Request) {
         for (const sk of masterSpaces.sort((a, b) => a.space.localeCompare(b.space))) {
           const lines = spaceLines.get(sk.space);
           if (!lines?.length) continue;
-          const label = structure.spaces.find((s) => s.name === sk.space)?.label ?? toTitleCase(sk.space);
+          const label = declaredSpaces.find((s) => s.name === sk.space)?.label ?? toTitleCase(sk.space);
           sections.push(`## ${label}\n${lines.join('\n')}`);
         }
         const masterBody = `---\ntitle: Index\ntype: nav\nupdated: ${new Date().toISOString()}\n---\n\n${sections.join('\n\n')}\n`;
