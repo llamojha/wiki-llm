@@ -125,6 +125,14 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
   // Subfolders that already exist in the selected scope + space, for autocomplete.
   const subfolderSuggestions = collectSubfolders(tree, scope, space);
 
+  // Full S3 destination for the current selection — `s3://bucket/prefix/...`.
+  // Shared by the inline preview and the CLI instructions so they never drift.
+  const destPath =
+    s3Location +
+    (scope === 'user' ? `users/${DEFAULT_USER_ID}/` : '') +
+    (destination === 'raw' ? 'raw/' : `authored/${space || '<folder>'}/`) +
+    (folder.trim() ? `${folder.trim().replace(/^\/+|\/+$/g, '')}/` : '');
+
   // Build the scope-bearing query string fragment used by GETs.
   const scopeQuery = (s: Scope = scope): string =>
     s === 'user' ? `&scope=user&userId=${encodeURIComponent(DEFAULT_USER_ID)}` : '';
@@ -651,12 +659,7 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
           )}
           <div className="upload-s3-preview">
             {ICONS.s3}
-            <span>
-              {s3Location}
-              {scope === 'user' ? `users/${DEFAULT_USER_ID}/` : ''}
-              {destination === 'raw' ? 'raw/' : `authored/${space || '<folder>'}/`}
-              {folder.trim() ? `${folder.trim().replace(/^\/+|\/+$/g, '')}/` : ''}
-            </span>
+            <span>{destPath}</span>
           </div>
         </div>
         )}
@@ -690,6 +693,29 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
                 </div>
               )}
             </div>
+
+            <details className="upload-cli">
+              <summary>{ICONS.s3} Prefer the CLI? Upload straight to S3</summary>
+              <div className="upload-cli-body">
+                <p>
+                  These write directly to the destination above. Files added this
+                  way show up in the sidebar after a refresh, but won&apos;t be
+                  searchable until you run <strong>Re-index</strong>.
+                </p>
+                <div className="upload-cli-block">
+                  <span className="upload-cli-label">AWS CLI — one file</span>
+                  <pre><code>aws s3 cp ./your-file.md &quot;{destPath}&quot;</code></pre>
+                </div>
+                <div className="upload-cli-block">
+                  <span className="upload-cli-label">AWS CLI — a whole folder of Markdown</span>
+                  <pre><code>aws s3 sync ./docs/ &quot;{destPath}&quot; --exclude &quot;*&quot; --include &quot;*.md&quot;</code></pre>
+                </div>
+                <div className="upload-cli-block">
+                  <span className="upload-cli-label">Project CLI — uploads {destination === 'raw' ? '+ runs AI ingest' : 'only'}</span>
+                  <pre><code>pnpm ingest -- add ./your-file.md --space {space || '<folder>'}{destination === 'authored' ? ' --no-ingest' : ''}</code></pre>
+                </div>
+              </div>
+            </details>
 
             {files.length > 0 && (
               <div className="upload-list">
