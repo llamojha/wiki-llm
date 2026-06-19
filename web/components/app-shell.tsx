@@ -320,6 +320,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
             onStarToggle={(starred, etag) => {
               if (liveDoc) setLiveDoc({ ...liveDoc, starred, etag });
             }}
+            showToast={showToast}
             flags={flags}
           />
         ) : (

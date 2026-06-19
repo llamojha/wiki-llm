@@ -2,14 +2,16 @@ import { Fragment } from 'react';
 import { ICONS } from '@/lib/icons';
 import type { GeneratedDoc } from '@/lib/types';
 import type { FeatureFlags } from '@/lib/flags';
+import { shareDocLink } from './doc-toolbar';
 
 type GeneratedDocReaderProps = {
   doc: GeneratedDoc;
   onEdit: () => void;
+  showToast: (msg: string) => void;
   flags: FeatureFlags;
 };
 
-export function GeneratedDocReader({ doc, onEdit, flags }: GeneratedDocReaderProps) {
+export function GeneratedDocReader({ doc, onEdit, showToast, flags }: GeneratedDocReaderProps) {
   return <>
     <div className="doc-toolbar">
       <div className="crumbs">
@@ -24,7 +26,7 @@ export function GeneratedDocReader({ doc, onEdit, flags }: GeneratedDocReaderPro
       <span className="tag-chip generated">{ICONS.spark} generated</span>
       {flags.star && <button className="btn ghost icon-only" title="Star">{ICONS.star}</button>}
       {flags.editor && <button className="btn" onClick={onEdit}>{ICONS.edit} Edit</button>}
-      <button className="btn">{ICONS.share} Share</button>
+      <button className="btn" onClick={() => shareDocLink(showToast)}>{ICONS.share} Share</button>
     </div>
     <div className="doc-wrap">
       <article className="doc">

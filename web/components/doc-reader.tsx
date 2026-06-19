@@ -12,6 +12,7 @@ type DocReaderProps = {
   onEdit: () => void;
   onUpload: () => void;
   onStarToggle?: (starred: boolean, etag: string) => void;
+  showToast: (msg: string) => void;
   flags: FeatureFlags;
 };
 
@@ -19,14 +20,14 @@ function isLiveDoc(doc: Doc): doc is LiveDoc {
   return !doc.generated && 'kind' in doc;
 }
 
-export function DocReader({ doc, docId, onAskInChat, onEdit, onUpload, onStarToggle, flags }: DocReaderProps) {
+export function DocReader({ doc, docId, onAskInChat, onEdit, onUpload, onStarToggle, showToast, flags }: DocReaderProps) {
   if (doc.generated) {
-    return <GeneratedDocReader doc={doc} onEdit={onEdit} flags={flags}/>;
+    return <GeneratedDocReader doc={doc} onEdit={onEdit} showToast={showToast} flags={flags}/>;
   }
   const liveDoc = isLiveDoc(doc) ? doc : null;
 
   return <>
-    <DocToolbar doc={doc} docId={docId} onAskInChat={onAskInChat} onEdit={onEdit} onUpload={onUpload} onStarToggle={onStarToggle} flags={flags}/>
+    <DocToolbar doc={doc} docId={docId} onAskInChat={onAskInChat} onEdit={onEdit} onUpload={onUpload} onStarToggle={onStarToggle} showToast={showToast} flags={flags}/>
     <div className="doc-wrap">
       <article className="doc">
         <div className="doc-meta">
