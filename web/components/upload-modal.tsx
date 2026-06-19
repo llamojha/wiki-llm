@@ -5,18 +5,25 @@ import { ICONS } from '@/lib/icons';
 import { withBasePath } from '@/lib/base-path';
 import { DEFAULT_USER_ID } from '@/lib/vault-paths';
 import type { FeatureFlags } from '@/lib/flags';
-import type { ApiTreeNode } from '@/lib/api';
 
 export type LibraryTab = 'upload' | 'pending' | 'reindex' | 'folders';
 
 type Scope = 'shared' | 'user';
 
+/** A node in the nested folder tree returned by GET /api/folders. */
+type FolderNode = {
+  name: string;
+  path: string;
+  indexed: number;
+  children: FolderNode[];
+};
+
 type UploadModalProps = {
   open: boolean;
   initialTab?: LibraryTab;
+  /** Shared top-level folder names — seeds the first render before the
+   * scope-aware /api/folders fetch resolves. */
   spaces: string[];
-  /** Full sidebar tree — used to suggest existing subfolders for autocomplete. */
-  tree: ApiTreeNode[];
   onClose: () => void;
   onUploaded: () => void;
   showToast: (msg: string) => void;
@@ -25,38 +32,42 @@ type UploadModalProps = {
   s3Location: string;
 };
 
-/**
- * Collect existing subfolder paths (relative to the space root, e.g.
- * `"guides"`, `"guides/setup"`) for a given scope + space, walking the live
- * sidebar tree. Used to populate the subfolder autocomplete so users can drop
- * files into a folder that already exists instead of re-typing the path.
- */
-function collectSubfolders(tree: ApiTreeNode[], scope: Scope, space: string): string[] {
-  if (!space || space === '__all') return [];
+const SEG_RE = /^[a-z0-9][a-z0-9-]*$/;
+const cleanSeg = (s: string): string => s.trim().replace(/^\/+|\/+$/g, '');
+const validPath = (p: string): boolean => p.length > 0 && p.split('/').every((s) => SEG_RE.test(s));
 
-  let spaceNode: ApiTreeNode | undefined;
-  if (scope === 'user') {
-    const userRoot = tree.find((n) => n.type === 'folder' && n.id === 'folder:__user');
-    spaceNode =
-      userRoot?.type === 'folder'
-        ? userRoot.children.find((n) => n.type === 'folder' && n.id === `folder:__user/${space}`)
-        : undefined;
-  } else {
-    spaceNode = tree.find((n) => n.type === 'folder' && n.id === `folder:${space}`);
+/** Find a node by path segments within a folder tree. */
+function findFolder(list: FolderNode[], segs: string[]): FolderNode | null {
+  let level = list;
+  let node: FolderNode | null = null;
+  for (const seg of segs) {
+    node = level.find((n) => n.name === seg) ?? null;
+    if (!node) return null;
+    level = node.children;
   }
-  if (!spaceNode || spaceNode.type !== 'folder') return [];
+  return node;
+}
 
-  const prefix = scope === 'user' ? `folder:__user/${space}/` : `folder:${space}/`;
-  const out: string[] = [];
-  const walk = (nodes: ApiTreeNode[]) => {
-    for (const n of nodes) {
-      if (n.type !== 'folder') continue;
-      if (n.id.startsWith(prefix)) out.push(n.id.slice(prefix.length));
-      walk(n.children);
-    }
-  };
-  walk(spaceNode.children);
-  return out.sort();
+/** Paths of every descendant folder, relative to `node` (e.g. `a`, `a/b`). */
+function descendantPaths(node: FolderNode, prefix = ''): string[] {
+  let out: string[] = [];
+  for (const c of node.children) {
+    const p = prefix ? `${prefix}/${c.name}` : c.name;
+    out.push(p);
+    out = out.concat(descendantPaths(c, p));
+  }
+  return out;
+}
+
+/** True if a folder already has a child of the given name at `parentSegs`. */
+function childExists(list: FolderNode[], parentSegs: string[], name: string): boolean {
+  const siblings = parentSegs.length === 0 ? list : findFolder(list, parentSegs)?.children ?? [];
+  return siblings.some((n) => n.name === name);
+}
+
+/** Total folder count across the whole tree. */
+function countFolders(list: FolderNode[]): number {
+  return list.reduce((a, n) => a + 1 + countFolders(n.children), 0);
 }
 
 type FileStatus = 'queued' | 'uploading' | 'indexing' | 'indexed' | 'queued-curate' | 'error';
@@ -93,24 +104,33 @@ function defaultSpace(spaces: string[]): string {
   return spaces.includes('wiki') ? 'wiki' : spaces.find((s) => s !== 'personal') ?? spaces[0];
 }
 
-export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploaded, showToast, flags, s3Location }: UploadModalProps) {
+export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, showToast, flags, s3Location }: UploadModalProps) {
   const [tab, setTab] = useState<LibraryTab>(initialTab ?? 'upload');
   const [scope, setScope] = useState<Scope>('shared');
-  // Spaces are per-scope: the list is fetched for the selected scope and
-  // refreshed after any folder op. `spaces` (the shared list, derived from the
-  // tree) seeds the first render so shared scope shows instantly.
-  const [spaceList, setSpaceList] = useState<string[]>(spaces);
-  const [spacesNonce, setSpacesNonce] = useState(0);
+  // The nested folder tree for the active scope, fetched from /api/folders and
+  // refreshed after any folder op. `spaces` (shared, from the sidebar) seeds the
+  // top level so the first render shows instantly.
+  const [folderTree, setFolderTree] = useState<FolderNode[]>(() =>
+    spaces.map((name) => ({ name, path: name, indexed: 0, children: [] })),
+  );
+  const [folderNonce, setFolderNonce] = useState(0);
   const [space, setSpace] = useState(defaultSpace(spaces));
   // `raw` means "process with AI later" — that pipeline is the curate feature.
-  // With curate off there's nothing to process raw files (the Pending tab is
-  // hidden and reindex skips raw/), so authored is the only sensible default.
+  // With curate off there's nothing to process raw files, so authored is the
+  // only sensible default.
   const [destination, setDestination] = useState<Destination>(flags.curate ? 'raw' : 'authored');
   const [folder, setFolder] = useState('');
+  const [cliOpen, setCliOpen] = useState(false);
   const [files, setFiles] = useState<UploadFile[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
+
+  const topNodes = folderTree;
+  const spaceList = topNodes.map((n) => n.name);
+  const selectedNode = topNodes.find((n) => n.name === space) ?? null;
+  const subfolderSuggestions = selectedNode ? descendantPaths(selectedNode) : [];
+  const scopeIndexed = topNodes.reduce((a, n) => a + n.indexed, 0);
 
   // Refs for latest values (avoids stale closures in async chains)
   const scopeRef = useRef(scope);
@@ -122,16 +142,13 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
   useEffect(() => { destinationRef.current = destination; }, [destination]);
   useEffect(() => { folderRef.current = folder; }, [folder]);
 
-  // Subfolders that already exist in the selected scope + space, for autocomplete.
-  const subfolderSuggestions = collectSubfolders(tree, scope, space);
-
   // Full S3 destination for the current selection — `s3://bucket/prefix/...`.
   // Shared by the inline preview and the CLI instructions so they never drift.
   const destPath =
     s3Location +
     (scope === 'user' ? `users/${DEFAULT_USER_ID}/` : '') +
     (destination === 'raw' ? 'raw/' : `authored/${space || '<folder>'}/`) +
-    (folder.trim() ? `${folder.trim().replace(/^\/+|\/+$/g, '')}/` : '');
+    (cleanSeg(folder) ? `${cleanSeg(folder)}/` : '');
 
   // Build the scope-bearing query string fragment used by GETs.
   const scopeQuery = (s: Scope = scope): string =>
@@ -140,27 +157,34 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
   const scopePayload = (s: Scope = scope): Record<string, string> =>
     s === 'user' ? { scope: 'user', userId: DEFAULT_USER_ID } : { scope: 'shared' };
 
-  // Fetch the declared spaces for the active scope. Re-runs when the scope
-  // changes or a folder op bumps `spacesNonce`. GET /api/spaces is a read path
-  // (ungated), so this works even when only the curate/reindex tabs are on.
+  // Fetch the nested folder tree for the active scope. Re-runs on scope change
+  // or when a folder op bumps `folderNonce`. GET /api/folders is a read path
+  // (ungated), so this works even when only curate/reindex tabs are on.
   useEffect(() => {
     if (!open) return;
     const ctrl = new AbortController();
-    fetch(withBasePath(`/api/spaces?scope=${scope}${scope === 'user' ? `&userId=${encodeURIComponent(DEFAULT_USER_ID)}` : ''}`), { signal: ctrl.signal })
+    fetch(withBasePath(`/api/folders?scope=${scope}${scope === 'user' ? `&userId=${encodeURIComponent(DEFAULT_USER_ID)}` : ''}`), { signal: ctrl.signal })
       .then((r) => (r.ok ? r.json() : []))
-      .then((list: Array<{ name: string }>) => {
-        const names = list.map((x) => x.name);
-        setSpaceList(names);
+      .then((tree: FolderNode[]) => {
+        setFolderTree(tree);
+        const names = tree.map((n) => n.name);
+        // Auto-expand top-level folders that have children so the tree opens
+        // usefully on the Folders tab.
+        setExpanded((prev) => {
+          const next = new Set(prev);
+          for (const n of tree) if (n.children.length) next.add(n.path);
+          return next;
+        });
         // Keep the current selection if still valid; the pending tab pins its
-        // own space and the reindex tab uses the synthetic `__all`.
+        // own space and the reindex tab can use the synthetic `__all`.
         if (tab !== 'pending') {
           setSpace((prev) => (prev && (names.includes(prev) || prev === '__all') ? prev : defaultSpace(names)));
         }
       })
-      .catch(() => { /* keep the current list on failure */ });
+      .catch(() => { /* keep the current tree on failure */ });
     return () => ctrl.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, scope, spacesNonce]);
+  }, [open, scope, folderNonce]);
 
   // Pending tab
   const [pendingCount, setPendingCount] = useState(0);
@@ -183,18 +207,29 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
   }, [pendingRunning]);
 
   // Reindex tab
+  const [reindexMode, setReindexMode] = useState<'folder' | 'all'>('folder');
   const [reindexRunning, setReindexRunning] = useState(false);
   const [reindexDone, setReindexDone] = useState(false);
   const [reindexTotal, setReindexTotal] = useState(0);
   const [reindexIndexed, setReindexIndexed] = useState(0);
   const [reindexRawCount, setReindexRawCount] = useState(0);
 
-  // Folders tab
-  const [newSpaceName, setNewSpaceName] = useState('');
-  const [renaming, setRenaming] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState('');
-  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  // Folders tab — nested tree editor (nodes addressed by full `a/b/c` paths)
+  const [newFolder, setNewFolder] = useState('');
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [editingPath, setEditingPath] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [deletingPath, setDeletingPath] = useState<string | null>(null);
+  const [addingChildPath, setAddingChildPath] = useState<string | null>(null);
+  const [childValue, setChildValue] = useState('');
   const [folderBusy, setFolderBusy] = useState(false);
+  const editInputRef = useRef<HTMLInputElement>(null);
+  const childInputRef = useRef<HTMLInputElement>(null);
+
+  const batchRunning = pendingRunning || reindexRunning;
+  const resetFolderEdits = useCallback(() => {
+    setEditingPath(null); setDeletingPath(null); setAddingChildPath(null);
+  }, []);
 
   // Reset on open
   useEffect(() => {
@@ -206,13 +241,13 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
     }
     setTab(initialTab ?? 'upload');
     setScope('shared'); setDestination(flags.curate ? 'raw' : 'authored'); setFolder('');
-    setFiles([]); setDragActive(false);
+    setFiles([]); setDragActive(false); setCliOpen(false);
     setPendingStream([]); setPendingRunning(false); setPendingDone(false); setPendingJobTotal(0); setPendingPhase(null); setPendingFinalizing(false);
-    setReindexRunning(false); setReindexDone(false); setReindexTotal(0); setReindexIndexed(0); setReindexRawCount(0);
-    setNewSpaceName(''); setRenaming(null); setRenameValue(''); setConfirmingDelete(null); setFolderBusy(false);
-    // The spaces effect (keyed on scope) loads the authoritative list for the
+    setReindexMode('folder'); setReindexRunning(false); setReindexDone(false); setReindexTotal(0); setReindexIndexed(0); setReindexRawCount(0);
+    setNewFolder(''); resetFolderEdits(); setFolderBusy(false);
+    // The folders effect (keyed on scope) loads the authoritative tree for the
     // reset-to-shared scope and fixes the selection.
-  }, [open, initialTab]);
+  }, [open, initialTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch pending count when space/scope changes.
   useEffect(() => {
@@ -230,13 +265,26 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, space, tab, scope]);
 
-  // Escape to close
+  // Escape to close — but not while an inline folder edit is open.
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !editingPath && !deletingPath && addingChildPath === null) onClose();
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  }, [open, onClose, editingPath, deletingPath, addingChildPath]);
+
+  useEffect(() => { if (editingPath && editInputRef.current) editInputRef.current.select(); }, [editingPath]);
+  useEffect(() => { if (addingChildPath !== null && childInputRef.current) childInputRef.current.focus(); }, [addingChildPath]);
+
+  // Switching scope re-fetches that scope's folders → reset selection + clear subfolder.
+  const switchScope = (next: Scope) => {
+    if (next === scope || batchRunning) return;
+    setScope(next);
+    setFolder('');
+    resetFolderEdits(); setNewFolder('');
+  };
 
   const updateFile = useCallback((id: string, patch: Partial<UploadFile>) => {
     setFiles(curr => curr.map(f => f.id === id ? { ...f, ...patch } : f));
@@ -247,7 +295,7 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
     const currentSpace = spaceRef.current;
     const currentDestination = destinationRef.current;
 
-    // Authored uploads must land in a folder. With per-scope spaces, the
+    // Authored uploads must land in a folder. With per-scope folders, the
     // selected scope may have none declared yet — prompt to create one.
     if (currentDestination === 'authored' && !currentSpace) {
       updateFile(entry.id, { status: 'error', error: 'Create a folder first (Folders tab)' });
@@ -261,7 +309,7 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
     form.append('scope', currentScope);
     if (currentScope === 'user') form.append('userId', DEFAULT_USER_ID);
     if (currentDestination === 'authored') form.append('space', currentSpace);
-    const currentFolder = folderRef.current.trim().replace(/^\/+|\/+$/g, '');
+    const currentFolder = cleanSeg(folderRef.current);
     if (currentFolder) form.append('folder', currentFolder);
     try {
       const res = await fetch(withBasePath('/api/upload'), { method: 'POST', body: form });
@@ -299,7 +347,7 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
   const allDone = files.length > 0 && files.every(f => f.status === 'indexed' || f.status === 'queued-curate' || f.status === 'error');
   const anyActive = files.some(f => f.status === 'uploading' || f.status === 'indexing' || f.status === 'queued');
 
-  const finishUpload = () => { onUploaded(); onClose(); const n = files.filter(f => f.status === 'indexed').length; const sub = folder.trim().replace(/^\/+|\/+$/g, ''); if (n) showToast(`Uploaded ${n} file${n > 1 ? 's' : ''} to ${space}${sub ? `/${sub}` : ''}`); };
+  const finishUpload = () => { onUploaded(); onClose(); const n = files.filter(f => f.status === 'indexed').length; const sub = cleanSeg(folder); if (n) showToast(`Uploaded ${n} file${n > 1 ? 's' : ''} to ${space}${sub ? `/${sub}` : ''}`); };
 
   // ── Pending tab: Lambda-based curation with polling ──
   const startPendingStream = async () => {
@@ -429,13 +477,14 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
   };
 
   // ── Re-index tab ──
+  const reindexSpace = reindexMode === 'all' ? '__all' : space;
   const startReindex = async () => {
     setReindexRunning(true); setReindexDone(false); setReindexTotal(0); setReindexIndexed(0); setReindexRawCount(0);
     try {
       const res = await fetch(withBasePath('/api/reindex'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...(space === '__all' ? {} : { space }), ...scopePayload() }),
+        body: JSON.stringify({ ...(reindexSpace === '__all' ? {} : { space: reindexSpace }), ...scopePayload() }),
       });
       if (!res.ok || !res.body) { setReindexRunning(false); showToast('Re-index failed'); return; }
       const reader = res.body.getReader();
@@ -458,81 +507,201 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
       }
       setReindexRunning(false); setReindexDone(true);
       onUploaded();
-      showToast(`Re-indexed ${space === '__all' ? 'all spaces' : space}`);
+      showToast(`Re-indexed ${reindexSpace === '__all' ? 'all folders' : reindexSpace}`);
     } catch { setReindexRunning(false); showToast('Re-index failed'); }
   };
 
-  // ── Folders tab: space create / rename / delete ──
-  const createSpace = async () => {
-    const name = newSpaceName.trim().toLowerCase();
-    if (!name) return;
+  // ── Folders tab: nested folder create / rename / delete via /api/folders ──
+  const refreshFolders = () => { setFolderNonce((n) => n + 1); onUploaded(); };
+
+  const newFolderClean = cleanSeg(newFolder.trim().toLowerCase());
+  const newFolderValid = !!newFolderClean && validPath(newFolderClean) && !findFolder(folderTree, newFolderClean.split('/'));
+  const createFolderReq = async () => {
+    if (!newFolderValid || folderBusy) return;
     setFolderBusy(true);
     try {
-      const res = await fetch(withBasePath('/api/spaces'), {
+      const res = await fetch(withBasePath('/api/folders'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, ...scopePayload() }),
+        body: JSON.stringify({ path: newFolderClean, ...scopePayload() }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { showToast(data.detail || 'Could not create folder'); return; }
-      setNewSpaceName('');
-      setSpacesNonce((n) => n + 1);
-      showToast(`Created folder "${name}"`);
-      onUploaded();
+      setNewFolder('');
+      setExpanded((s) => {
+        const n = new Set(s);
+        const segs = newFolderClean.split('/');
+        for (let i = 1; i < segs.length; i++) n.add(segs.slice(0, i).join('/'));
+        return n;
+      });
+      showToast(`Created folder "${newFolderClean}"`);
+      refreshFolders();
     } catch { showToast('Network error'); }
     finally { setFolderBusy(false); }
   };
 
-  const submitRename = async (from: string) => {
-    const to = renameValue.trim().toLowerCase();
-    if (!to || to === from) { setRenaming(null); return; }
+  const startRename = (path: string, name: string) => { resetFolderEdits(); setEditingPath(path); setEditValue(name); };
+  const submitRename = async (path: string) => {
+    const segs = path.split('/');
+    const from = segs[segs.length - 1];
+    const parentSegs = segs.slice(0, -1);
+    const to = cleanSeg(editValue.trim().toLowerCase());
+    if (!to || !SEG_RE.test(to) || (to !== from && childExists(folderTree, parentSegs, to))) { return; }
+    if (to === from) { setEditingPath(null); return; }
     setFolderBusy(true);
     try {
-      const res = await fetch(withBasePath('/api/spaces'), {
+      const res = await fetch(withBasePath('/api/folders'), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from, to, ...scopePayload() }),
+        body: JSON.stringify({ from: path, to, ...scopePayload() }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { showToast(data.detail || 'Could not rename folder'); return; }
-      setRenaming(null);
-      if (space === from) setSpace(to);
-      setSpacesNonce((n) => n + 1);
+      setEditingPath(null);
+      if (segs.length === 1 && space === from) setSpace(to);
       showToast(`Renamed "${from}" → "${to}"`);
-      onUploaded();
+      refreshFolders();
     } catch { showToast('Network error'); }
     finally { setFolderBusy(false); }
   };
 
-  const deleteSpace = async (name: string) => {
+  const startAddChild = (path: string) => { resetFolderEdits(); setAddingChildPath(path); setChildValue(''); setExpanded((s) => new Set(s).add(path)); };
+  const childClean = cleanSeg(childValue.trim().toLowerCase());
+  const childValid = !!childClean && SEG_RE.test(childClean) && addingChildPath !== null && !childExists(folderTree, addingChildPath ? addingChildPath.split('/') : [], childClean);
+  const submitAddChild = async () => {
+    if (!childValid || folderBusy || addingChildPath === null) return;
+    const path = `${addingChildPath}/${childClean}`;
     setFolderBusy(true);
     try {
-      const res = await fetch(withBasePath(`/api/spaces?name=${encodeURIComponent(name)}${scopeQuery()}`), { method: 'DELETE' });
+      const res = await fetch(withBasePath('/api/folders'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path, ...scopePayload() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { showToast(data.detail || 'Could not create subfolder'); return; }
+      setAddingChildPath(null);
+      showToast(`Created folder "${path}"`);
+      refreshFolders();
+    } catch { showToast('Network error'); }
+    finally { setFolderBusy(false); }
+  };
+
+  const submitDelete = async (path: string) => {
+    setFolderBusy(true);
+    try {
+      const res = await fetch(withBasePath(`/api/folders?path=${encodeURIComponent(path)}${scopeQuery()}`), { method: 'DELETE' });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         showToast(data.detail || 'Could not delete folder');
         return;
       }
-      setConfirmingDelete(null);
-      if (space === name) setSpace(defaultSpace(spaceList.filter((s) => s !== name)));
-      setSpacesNonce((n) => n + 1);
-      showToast(`Deleted folder "${name}"`);
-      onUploaded();
+      setDeletingPath(null);
+      if (!path.includes('/') && space === path) setSpace(defaultSpace(spaceList.filter((s) => s !== path)));
+      showToast(`Deleted folder "${path}"`);
+      refreshFolders();
     } catch { showToast('Network error'); }
     finally { setFolderBusy(false); }
   };
 
+  const toggleExpand = (key: string) => setExpanded((s) => {
+    const n = new Set(s); if (n.has(key)) n.delete(key); else n.add(key); return n;
+  });
+
   if (!open) return null;
 
+  const scopeLabel = scope === 'shared' ? 'Shared' : `My (${DEFAULT_USER_ID})`;
+
+  // Recursive folder-tree row (Folders tab)
+  const renderNode = (node: FolderNode): React.ReactNode => {
+    const key = node.path;
+    const hasChildren = node.children.length > 0;
+    const isOpen = expanded.has(key);
+    const isEditing = editingPath === key;
+    const isDeleting = deletingPath === key;
+    return (
+      <div key={key} className="folder-node">
+        <div className={'folder-item' + (isDeleting ? ' is-deleting' : '')}>
+          <button
+            className={'folder-twist' + (isOpen ? ' open' : '') + (hasChildren ? '' : ' leaf')}
+            onClick={() => hasChildren && toggleExpand(key)}
+            tabIndex={hasChildren ? 0 : -1}
+            title={hasChildren ? (isOpen ? 'Collapse' : 'Expand') : undefined}
+          >
+            {hasChildren ? ICONS.chev : null}
+          </button>
+          <span className="folder-item-icon">{ICONS.folder}</span>
+          {isEditing ? (
+            <>
+              <input ref={editInputRef} className="upload-input" value={editValue}
+                     disabled={folderBusy}
+                     onChange={(e) => setEditValue(e.target.value)}
+                     onKeyDown={(e) => { if (e.key === 'Enter') submitRename(key); if (e.key === 'Escape') setEditingPath(null); }}
+                     style={{ flex: 1 }} />
+              <div className="folder-item-actions">
+                <button className="icon-btn" disabled={folderBusy} onClick={() => submitRename(key)} title="Confirm">{ICONS.check}</button>
+                <button className="btn ghost" disabled={folderBusy} onClick={() => setEditingPath(null)}>Cancel</button>
+              </div>
+            </>
+          ) : isDeleting ? (
+            <>
+              <div className="folder-item-body">
+                <div className="folder-item-name" style={{ color: 'var(--red)' }}>Delete <code>{key}</code> and everything inside?</div>
+              </div>
+              <div className="folder-item-actions">
+                <button className="btn danger" disabled={folderBusy} onClick={() => submitDelete(key)}>{ICONS.trash} Delete</button>
+                <button className="btn ghost" disabled={folderBusy} onClick={() => setDeletingPath(null)}>Cancel</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="folder-item-body">
+                <div className="folder-item-name">{node.name}</div>
+                <div className="folder-item-path">authored/{key}/{node.indexed ? ` · ${node.indexed} indexed` : ''}</div>
+              </div>
+              <div className="folder-item-actions">
+                <button className="icon-btn" disabled={folderBusy} onClick={() => startAddChild(key)} title="Add subfolder">{ICONS.plus}</button>
+                <button className="icon-btn" disabled={folderBusy} onClick={() => startRename(key, node.name)} title="Rename">{ICONS.edit}</button>
+                <button className="icon-btn danger" disabled={folderBusy} onClick={() => { resetFolderEdits(); setDeletingPath(key); }} title="Delete">{ICONS.trash}</button>
+              </div>
+            </>
+          )}
+        </div>
+        {(isOpen || addingChildPath === key) && (
+          <div className="folder-children">
+            {node.children.map((c) => renderNode(c))}
+            {addingChildPath === key && (
+              <div className="folder-item folder-item-new">
+                <span className="folder-twist leaf"></span>
+                <span className="folder-item-icon">{ICONS.folder}</span>
+                <input ref={childInputRef} className="upload-input" value={childValue}
+                       disabled={folderBusy}
+                       onChange={(e) => setChildValue(e.target.value)}
+                       onKeyDown={(e) => { if (e.key === 'Enter') submitAddChild(); if (e.key === 'Escape') setAddingChildPath(null); }}
+                       placeholder={`new subfolder in ${node.name}`} style={{ flex: 1 }} />
+                <div className="folder-item-actions">
+                  <button className="icon-btn" disabled={!childValid || folderBusy} onClick={submitAddChild} title="Create">{ICONS.check}</button>
+                  <button className="btn ghost" disabled={folderBusy} onClick={() => setAddingChildPath(null)}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
-    <div className="palette-overlay" onClick={onClose} style={{ paddingTop: '7vh' }}>
+    <div className="palette-overlay" onClick={onClose} style={{ paddingTop: '6vh' }}>
       <div className="upload-modal" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="upload-head">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ color: 'var(--accent)' }}>{ICONS.upload}</span>
             <b>Library</b>
-            <span style={{ color: 'var(--fg-3)', fontSize: 11.5, fontFamily: 'var(--font-mono)' }}>{pendingCount} pending</span>
+            <span style={{ color: 'var(--fg-3)', fontSize: 11.5, fontFamily: 'var(--font-mono)' }}>
+              {scopeIndexed.toLocaleString()} indexed · {pendingCount} pending
+            </span>
           </div>
           <button className="icon-btn" onClick={onClose} title="Close">{ICONS.close}</button>
         </div>
@@ -540,30 +709,27 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
         {/* Scope toggle — every operation in this modal (including folder
             management) is bound to the selected scope. Each scope owns its
             folders independently. */}
-        <div className="upload-meta" style={{ borderBottom: '1px solid var(--border-1, rgba(255,255,255,0.08))', paddingBottom: 12 }}>
-          <div className="upload-meta-row">
-            <label>Scope</label>
-            <div className="space-select">
-              <button
-                className={'space-pill' + (scope === 'shared' ? ' on' : '')}
-                onClick={() => setScope('shared')}
-                disabled={pendingRunning || reindexRunning}
-                title="Shared library — visible to everyone in a multi-tenant deployment"
-              >
-                {ICONS.globe}
-                <span>Shared</span>
-              </button>
-              <button
-                className={'space-pill' + (scope === 'user' ? ' on' : '')}
-                onClick={() => setScope('user')}
-                disabled={pendingRunning || reindexRunning}
-                title="My library — isolated to this user's subtree"
-              >
-                {ICONS.user ?? ICONS.globe}
-                <span>My ({DEFAULT_USER_ID})</span>
-              </button>
-            </div>
+        <div className="upload-scope">
+          <label>Scope</label>
+          <div className="seg">
+            <button
+              className={scope === 'shared' ? 'on' : ''}
+              disabled={batchRunning}
+              onClick={() => switchScope('shared')}
+              title="Shared library — visible to everyone in a multi-tenant deployment"
+            >
+              {ICONS.globe} Shared
+            </button>
+            <button
+              className={scope === 'user' ? 'on' : ''}
+              disabled={batchRunning}
+              onClick={() => switchScope('user')}
+              title="My library — isolated to this user's subtree"
+            >
+              {ICONS.user} My ({DEFAULT_USER_ID})
+            </button>
           </div>
+          <span className="upload-scope-hint">{scope === 'shared' ? 'Visible to everyone' : 'Private to you'}</span>
         </div>
 
         {/* Tabs */}
@@ -591,77 +757,72 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
           )}
         </div>
 
-        {/* Space selector — not shown on the Folders tab, which manages spaces. */}
+        {/* Folder selector — shared by Upload / Pending / Re-index; hidden on the
+            Folders tab, which manages folders directly. */}
         {tab !== 'folders' && (
-        <div className="upload-meta">
-          <div className="upload-meta-row">
-            <label>Space</label>
-            <div className="space-select">
-              {tab === 'pending' ? (
-                <button className="space-pill on" onClick={() => setSpace('wiki')}>
-                  {ICONS.globe}
-                  <span>wiki</span>
-                </button>
-              ) : (tab === 'reindex') && (
-                <button className={'space-pill' + (space === '__all' ? ' on' : '')} onClick={() => setSpace('__all')}>
-                  {ICONS.globe}
-                  <span>All</span>
-                </button>
-              )}
-              {tab !== 'pending' && spaceList.map(s => (
-                <button key={s} className={'space-pill' + (space === s ? ' on' : '')} onClick={() => { setSpace(s); setFolder(''); }}>
-                  {ICONS.globe}
-                  <span>{s}</span>
-                </button>
-              ))}
-              {tab !== 'pending' && spaceList.length === 0 && (
-                <span style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>
-                  No folders in this scope — create one in the Folders tab.
-                </span>
-              )}
-            </div>
-          </div>
-          {/* Destination toggle only matters when curate is on. Without it,
-              raw uploads can never be processed, so authored is the only
-              choice and the toggle is hidden. */}
-          {tab === 'upload' && flags.curate && (
+          <div className="upload-meta">
             <div className="upload-meta-row">
-              <label>Destination</label>
+              <label>Folder</label>
               <div className="space-select">
-                <button className={'space-pill' + (destination === 'raw' ? ' on' : '')} onClick={() => setDestination('raw')}>
-                  <span>raw/</span>
-                  <span style={{ fontSize: 10, color: 'var(--fg-3)' }}>process with AI later</span>
-                </button>
-                <button className={'space-pill' + (destination === 'authored' ? ' on' : '')} onClick={() => setDestination('authored')}>
-                  <span>authored/</span>
-                  <span style={{ fontSize: 10, color: 'var(--fg-3)' }}>final, no AI</span>
-                </button>
+                {tab === 'pending' ? (
+                  <button className="space-pill on" onClick={() => setSpace('wiki')}>
+                    {ICONS.folder}
+                    <span>wiki</span>
+                  </button>
+                ) : (
+                  spaceList.map(s => {
+                    const node = topNodes.find((n) => n.name === s);
+                    return (
+                      <button key={s} className={'space-pill' + (space === s ? ' on' : '')} onClick={() => { setSpace(s); setFolder(''); }}>
+                        {ICONS.folder}
+                        <span>{s}</span>
+                        {node && node.indexed > 0 && (
+                          <span className="space-pill-counts"><span className="indexed">{node.indexed}</span></span>
+                        )}
+                      </button>
+                    );
+                  })
+                )}
+                {tab !== 'pending' && spaceList.length === 0 && (
+                  <span className="upload-inline-empty">No folders in this scope — create one in the Folders tab.</span>
+                )}
               </div>
             </div>
-          )}
-          {tab === 'upload' && (
-            <div className="upload-meta-row">
-              <label>Subfolder</label>
-              <div className="space-select" style={{ flex: 1, gap: 6 }}>
-                <input
-                  className="upload-input"
-                  placeholder="optional · e.g. guides/setup"
-                  value={folder}
-                  list="subfolder-suggestions"
-                  onChange={(e) => setFolder(e.target.value)}
-                  style={{ flex: 1 }}
-                />
-                <datalist id="subfolder-suggestions">
-                  {subfolderSuggestions.map((p) => <option key={p} value={p} />)}
-                </datalist>
-              </div>
-            </div>
-          )}
-          <div className="upload-s3-preview">
-            {ICONS.s3}
-            <span>{destPath}</span>
+
+            {tab === 'upload' && (
+              <>
+                {/* Destination toggle only matters when curate is on. Without it,
+                    raw uploads can never be processed, so authored is the only
+                    choice and the toggle is hidden. */}
+                {flags.curate && (
+                  <div className="upload-meta-row">
+                    <label>Destination</label>
+                    <div className="seg">
+                      <button className={destination === 'authored' ? 'on' : ''} onClick={() => setDestination('authored')}>
+                        {ICONS.check} authored · indexed
+                      </button>
+                      <button className={destination === 'raw' ? 'on' : ''} onClick={() => setDestination('raw')}>
+                        {ICONS.spark} raw · curate later
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <div className="upload-meta-row">
+                  <label>Subfolder</label>
+                  <input className="upload-input" list="subfolder-suggestions" value={folder}
+                         placeholder="optional · e.g. guides/setup"
+                         onChange={(e) => setFolder(e.target.value)} />
+                  <datalist id="subfolder-suggestions">
+                    {subfolderSuggestions.map((p) => <option key={p} value={p} />)}
+                  </datalist>
+                </div>
+                <div className="upload-s3-preview">
+                  {ICONS.s3}
+                  <span>{destPath}</span>
+                </div>
+              </>
+            )}
           </div>
-        </div>
         )}
 
         {/* Upload tab */}
@@ -674,7 +835,7 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
                  onKeyDown={files.length ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(); } }}>
               <input ref={inputRef} type="file" multiple accept=".md,.markdown"
                      onChange={e => { if (e.target.files?.length) addFiles(e.target.files); e.target.value = ''; }}
-                     style={{ display: 'none' }}/>
+                     style={{ display: 'none' }} />
               {files.length === 0 ? (
                 <div className="upload-drop-inner">
                   <div className="upload-drop-icon">{ICONS.upload}</div>
@@ -693,29 +854,6 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
                 </div>
               )}
             </div>
-
-            <details className="upload-cli">
-              <summary>{ICONS.s3} Prefer the CLI? Upload straight to S3</summary>
-              <div className="upload-cli-body">
-                <p>
-                  These write directly to the destination above. Files added this
-                  way show up in the sidebar after a refresh, but won&apos;t be
-                  searchable until you run <strong>Re-index</strong>.
-                </p>
-                <div className="upload-cli-block">
-                  <span className="upload-cli-label">AWS CLI — one file</span>
-                  <pre><code>aws s3 cp ./your-file.md &quot;{destPath}&quot;</code></pre>
-                </div>
-                <div className="upload-cli-block">
-                  <span className="upload-cli-label">AWS CLI — a whole folder of Markdown</span>
-                  <pre><code>aws s3 sync ./docs/ &quot;{destPath}&quot; --exclude &quot;*&quot; --include &quot;*.md&quot;</code></pre>
-                </div>
-                <div className="upload-cli-block">
-                  <span className="upload-cli-label">Project CLI — uploads {destination === 'raw' ? '+ runs AI ingest' : 'only'}</span>
-                  <pre><code>pnpm ingest -- add ./your-file.md --space {space || '<folder>'}{destination === 'authored' ? ' --no-ingest' : ''}</code></pre>
-                </div>
-              </div>
-            </details>
 
             {files.length > 0 && (
               <div className="upload-list">
@@ -745,13 +883,30 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
               </div>
             )}
 
+            {/* CLI handoff — same destination, ready to run */}
+            <div className="cli-handoff">
+              <button className={'cli-toggle' + (cliOpen ? ' open' : '')} onClick={() => setCliOpen(v => !v)}>
+                <span className="chev-i">{ICONS.chev}</span>
+                <span>Prefer the CLI? Upload straight to S3</span>
+                <span style={{ flex: 1 }}></span>
+                <span style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 10.5 }}>same destination</span>
+              </button>
+              {cliOpen && (
+                <div className="cli-body">
+                  <div className="cli-snippet"><span className="cmt"># one file → the resolved destination above</span>{'\n'}aws s3 cp ./your-file.md &quot;{destPath}&quot;</div>
+                  <div className="cli-snippet"><span className="cmt"># …or a whole folder of Markdown (then run Re-index to make it searchable)</span>{'\n'}aws s3 sync ./docs/ &quot;{destPath}&quot; --exclude &quot;*&quot; --include &quot;*.md&quot;</div>
+                  <div className="cli-snippet"><span className="cmt"># project CLI — uploads {destination === 'raw' ? '+ runs AI ingest' : 'only'}</span>{'\n'}pnpm ingest -- add ./your-file.md --space {space || '<folder>'}{destination === 'authored' ? ' --no-ingest' : ''}</div>
+                </div>
+              )}
+            </div>
+
             <div className="upload-foot">
-              <span style={{ flex: 1 }}></span>
               <span className="upload-summary">
                 {files.length === 0 && 'No files selected'}
                 {files.length > 0 && anyActive && `${files.filter(f => f.status === 'indexed').length} of ${files.length} indexed`}
                 {files.length > 0 && allDone && `${files.length} file${files.length > 1 ? 's' : ''} ready`}
               </span>
+              <span style={{ flex: 1 }}></span>
               <button className="btn ghost" onClick={onClose}>Cancel</button>
               <button className="btn primary" disabled={files.length === 0 || anyActive} onClick={finishUpload}>
                 {allDone ? <>{ICONS.check} Done</> : <>{ICONS.upload} Upload {files.length || ''}</>}
@@ -822,10 +977,7 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
               </div>
             )}
             {pendingRunning && pendingPhase === 'chaining' && (
-              <div
-                className="stream-line"
-                style={{ marginTop: 8, fontSize: 12, color: 'var(--fg-2)' }}
-              >
+              <div className="stream-line" style={{ marginTop: 8, fontSize: 12, color: 'var(--fg-2)' }}>
                 <span className="spinner"></span>
                 <span style={{ marginLeft: 8 }}>
                   Continuing in a new worker — batch is being handed off to avoid the 5-minute Lambda timeout…
@@ -833,10 +985,7 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
               </div>
             )}
             {pendingFinalizing && (
-              <div
-                className="stream-line"
-                style={{ marginTop: 8, fontSize: 12, color: 'var(--fg-2)' }}
-              >
+              <div className="stream-line" style={{ marginTop: 8, fontSize: 12, color: 'var(--fg-2)' }}>
                 <span className="spinner"></span>
                 <span style={{ marginLeft: 8 }}>
                   Finalizing — regenerating index.md and refreshing search…
@@ -877,17 +1026,11 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
               <span style={{ flex: 1 }}></span>
               <button className="btn ghost" onClick={onClose}>Close</button>
               {!pendingRunning ? (
-                <button
-                  className="btn primary"
-                  disabled={pendingCount === 0 || pendingFinalizing}
-                  onClick={startPendingStream}
-                >
+                <button className="btn primary" disabled={pendingCount === 0 || pendingFinalizing} onClick={startPendingStream}>
                   {ICONS.spark} {pendingDone ? 'Run again' : 'Process batch'}
                 </button>
               ) : (
-                <button className="btn" onClick={cancelPending}>
-                  Stop
-                </button>
+                <button className="btn" onClick={cancelPending}>Stop</button>
               )}
             </div>
           </>
@@ -896,30 +1039,62 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
         {/* Re-index tab */}
         {tab === 'reindex' && (
           <div className="reindex-panel">
+            <div className="upload-meta-row" style={{ gridTemplateColumns: '90px 1fr', alignItems: 'center' }}>
+              <label>Rebuild</label>
+              <div className="seg">
+                <button className={reindexMode === 'folder' ? 'on' : ''} disabled={reindexRunning} onClick={() => setReindexMode('folder')}>
+                  {ICONS.folder} This folder
+                </button>
+                <button className={reindexMode === 'all' ? 'on' : ''} disabled={reindexRunning} onClick={() => setReindexMode('all')}>
+                  {ICONS.globe} All in {scopeLabel}
+                </button>
+              </div>
+            </div>
+
             <div className="callout warn" style={{ margin: 0 }}>
               <span className="icon">{ICONS.warn}</span>
               <div>
-                <div><strong>Re-index the <code>{space}</code> space</strong> from S3 content.</div>
-                <div style={{ marginTop: 4, color: 'var(--fg-2)' }}>The index for this space will be rebuilt. Search results may be temporarily incomplete.</div>
+                <div><strong>Re-index {reindexMode === 'all' ? `the ${scopeLabel} library` : <>the <code>{space}</code> folder</>}</strong> from S3 content.</div>
+                <div style={{ marginTop: 4, color: 'var(--fg-2)' }}>The index will be rebuilt. Search results may be temporarily incomplete during the rebuild.</div>
+              </div>
+            </div>
+
+            <div className="reindex-stats">
+              <div>
+                <div className="reindex-stat-label">Indexed now</div>
+                <div className="reindex-stat-value">
+                  {(reindexMode === 'all' ? scopeIndexed : selectedNode?.indexed ?? 0).toLocaleString()}{' '}
+                  <span style={{ color: 'var(--fg-3)', fontSize: 11, fontFamily: 'var(--font-mono)' }}>docs</span>
+                </div>
+              </div>
+              <div>
+                <div className="reindex-stat-label">Scope</div>
+                <div className="reindex-stat-value" style={{ fontSize: 14 }}>{scopeLabel}</div>
+              </div>
+              <div>
+                <div className="reindex-stat-label">Endpoint</div>
+                <code style={{ fontSize: 11 }}>POST /api/reindex</code>
               </div>
             </div>
 
             {(reindexRunning || reindexDone) && (
               <div className="reindex-progress">
+                {reindexTotal > 0 && (
+                  <div className="reindex-progress-bar">
+                    <div className="reindex-progress-fill" style={{ width: (reindexTotal ? (reindexIndexed / reindexTotal) * 100 : 0) + '%' }}></div>
+                  </div>
+                )}
                 <div className="reindex-progress-text">
                   {reindexDone
-                    ? <><span style={{ color: 'var(--green, #22c55e)' }}>{ICONS.check}</span> Re-index complete — {reindexIndexed} files</>
+                    ? <><span style={{ color: 'var(--green, #22c55e)' }}>{ICONS.check}</span> Re-index complete · {reindexIndexed} files</>
                     : <><span className="spinner"></span> Indexing {reindexIndexed} / {reindexTotal}</>
                   }
                 </div>
                 {reindexRawCount > 0 && (
-                  <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 4 }}>
+                  <div style={{ fontSize: 11, color: 'var(--fg-3)' }}>
                     {reindexRawCount} file{reindexRawCount !== 1 ? 's' : ''} in <code>raw/</code> not yet processed
                   </div>
                 )}
-                <div className="upload-row-bar" style={{ marginTop: 6 }}>
-                  <div className="upload-row-bar-fill" style={{ width: (reindexTotal ? (reindexIndexed / reindexTotal) * 100 : 0) + '%' }}></div>
-                </div>
               </div>
             )}
 
@@ -927,8 +1102,8 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
               <span style={{ flex: 1 }}></span>
               <button className="btn ghost" onClick={onClose}>Cancel</button>
               {!reindexDone ? (
-                <button className="btn primary" disabled={reindexRunning} onClick={startReindex}>
-                  {reindexRunning ? <><span className="spinner"></span> Re-indexing…</> : <>{ICONS.recent} Re-index space</>}
+                <button className="btn primary" disabled={reindexRunning || (reindexMode === 'folder' && !space)} onClick={startReindex}>
+                  {reindexRunning ? <><span className="spinner"></span> Re-indexing…</> : <>{ICONS.recent} Re-index</>}
                 </button>
               ) : (
                 <button className="btn primary" onClick={onClose}>{ICONS.check} Done</button>
@@ -940,103 +1115,49 @@ export function UploadModal({ open, initialTab, spaces, tree, onClose, onUploade
         {/* Folders tab */}
         {tab === 'folders' && (
           <>
-            <div className="upload-meta" style={{ paddingTop: 4 }}>
-              <div className="upload-meta-row">
+            <div className="folder-mgr">
+              <div className="upload-meta-row" style={{ gridTemplateColumns: '90px 1fr auto', alignItems: 'center' }}>
                 <label>New folder</label>
-                <div className="space-select" style={{ flex: 1, gap: 6 }}>
-                  <input
-                    className="upload-input"
-                    placeholder="e.g. handbook"
-                    value={newSpaceName}
-                    disabled={folderBusy}
-                    onChange={(e) => setNewSpaceName(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') createSpace(); }}
-                    style={{ flex: 1 }}
-                  />
-                  <button
-                    className="btn primary"
-                    disabled={folderBusy || !newSpaceName.trim()}
-                    onClick={createSpace}
-                  >
-                    {ICONS.plus} Create
-                  </button>
-                </div>
+                <input className="upload-input" value={newFolder}
+                       disabled={folderBusy}
+                       placeholder="handbook  ·  or nested:  handbook/onboarding"
+                       onChange={(e) => setNewFolder(e.target.value)}
+                       onKeyDown={(e) => { if (e.key === 'Enter') createFolderReq(); }} />
+                <button className="btn primary" disabled={!newFolderValid || folderBusy} onClick={createFolderReq}>
+                  {ICONS.plus} Create
+                </button>
               </div>
-              <div className="upload-s3-preview">
+              <div className="upload-s3-preview" style={{ marginLeft: 0 }}>
                 {ICONS.s3}
-                <span>{s3Location}{scope === 'user' ? `users/${DEFAULT_USER_ID}/` : ''}authored/{newSpaceName.trim().toLowerCase() || '<folder>'}/</span>
+                <span>{s3Location}{scope === 'user' ? `users/${DEFAULT_USER_ID}/` : ''}authored/{newFolderClean || '<folder>'}/</span>
               </div>
-            </div>
 
-            <div className="callout warn" style={{ margin: '0 0 8px' }}>
-              <span className="icon">{ICONS.warn}</span>
-              <div style={{ fontSize: 12, color: 'var(--fg-2)' }}>
-                Folders are managed per scope. These changes affect only the{' '}
-                <strong>{scope === 'user' ? `My (${DEFAULT_USER_ID})` : 'Shared'}</strong> library.
-                Deleting removes all documents inside the folder.
-              </div>
-            </div>
-
-            <div className="upload-list">
-              {spaceList.length === 0 && (
-                <div className="pending-empty">
-                  <div className="upload-drop-title">No folders yet</div>
-                  <div className="upload-drop-sub">Create one above to start organizing authored documents.</div>
+              <div className="callout warn" style={{ margin: 0 }}>
+                <span className="icon">{ICONS.warn}</span>
+                <div style={{ fontSize: 12, color: 'var(--fg-2)' }}>
+                  Folders are managed per scope — these changes affect only the{' '}
+                  <strong>{scopeLabel}</strong> library. Deleting a folder removes{' '}
+                  <strong>every document and subfolder inside it</strong>. Type a path like <code>a/b</code> to
+                  nest, or use the <span style={{ display: 'inline-flex', verticalAlign: 'middle', color: 'var(--fg-2)' }}>{ICONS.plus}</span> on any row to add a subfolder.
                 </div>
-              )}
-              {spaceList.map((s) => (
-                <div key={s} className="upload-row">
-                  <span className="upload-row-icon">{ICONS.folder}</span>
-                  <div className="upload-row-body">
-                    {renaming === s ? (
-                      <div className="space-select" style={{ gap: 6 }}>
-                        <input
-                          className="upload-input"
-                          value={renameValue}
-                          disabled={folderBusy}
-                          autoFocus
-                          onChange={(e) => setRenameValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') submitRename(s);
-                            if (e.key === 'Escape') setRenaming(null);
-                          }}
-                          style={{ flex: 1 }}
-                        />
-                        <button className="btn primary" disabled={folderBusy} onClick={() => submitRename(s)}>{ICONS.check}</button>
-                        <button className="btn ghost" disabled={folderBusy} onClick={() => setRenaming(null)}>Cancel</button>
-                      </div>
-                    ) : confirmingDelete === s ? (
-                      <div className="upload-row-title" style={{ alignItems: 'center' }}>
-                        <span style={{ color: 'var(--red, #e53e3e)' }}>Delete <code>{s}</code> and all its documents?</span>
-                      </div>
-                    ) : (
-                      <div className="upload-row-title">
-                        <span className="upload-row-name">{s}</span>
-                        <span className="upload-row-size">{scope === 'user' ? `users/${DEFAULT_USER_ID}/` : ''}authored/{s}/</span>
-                      </div>
-                    )}
+              </div>
+
+              <div className="folder-list">
+                {topNodes.length === 0 && (
+                  <div className="folder-empty">
+                    <div className="upload-drop-icon" style={{ margin: '0 auto 12px' }}>{ICONS.folder}</div>
+                    <div className="upload-drop-title">No folders yet</div>
+                    <div className="upload-drop-sub">Create one above to start organizing authored documents.</div>
                   </div>
-                  {renaming !== s && (
-                    confirmingDelete === s ? (
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <button className="btn" disabled={folderBusy} onClick={() => deleteSpace(s)} style={{ color: 'var(--red, #e53e3e)' }}>Delete</button>
-                        <button className="btn ghost" disabled={folderBusy} onClick={() => setConfirmingDelete(null)}>Cancel</button>
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', gap: 2 }}>
-                        <button className="icon-btn" disabled={folderBusy} title="Rename" onClick={() => { setRenaming(s); setRenameValue(s); }}>{ICONS.edit}</button>
-                        <button className="icon-btn" disabled={folderBusy} title="Delete" onClick={() => setConfirmingDelete(s)}>{ICONS.trash}</button>
-                      </div>
-                    )
-                  )}
-                </div>
-              ))}
+                )}
+                {topNodes.map((n) => renderNode(n))}
+              </div>
             </div>
 
             <div className="upload-foot">
+              <span className="upload-summary">{countFolders(topNodes)} folder{countFolders(topNodes) === 1 ? '' : 's'} in {scopeLabel}</span>
               <span style={{ flex: 1 }}></span>
-              <span className="upload-summary">{spaceList.length} folder{spaceList.length === 1 ? '' : 's'}</span>
-              <button className="btn ghost" onClick={onClose}>Close</button>
+              <button className="btn primary" onClick={onClose}>Close</button>
             </div>
           </>
         )}

@@ -13,6 +13,7 @@ type DocToolbarProps = {
   onEdit: () => void;
   onUpload: () => void;
   onStarToggle?: (starred: boolean, etag: string) => void;
+  showToast: (msg: string) => void;
   flags: FeatureFlags;
 };
 
@@ -20,7 +21,21 @@ function isLiveDoc(doc: Doc): doc is LiveDoc {
   return !doc.generated && 'kind' in doc;
 }
 
-export function DocToolbar({ doc, docId, onAskInChat, onEdit, onUpload, onStarToggle, flags }: DocToolbarProps) {
+/**
+ * Copy the current page URL to the clipboard. The viewed URL is the shareable
+ * link for the doc, so no server round-trip is needed. Surfaces success/failure
+ * through the app's toast.
+ */
+export async function shareDocLink(showToast: (msg: string) => void): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(window.location.href);
+    showToast('Link copied to clipboard');
+  } catch {
+    showToast('Could not copy link');
+  }
+}
+
+export function DocToolbar({ doc, docId, onAskInChat, onEdit, onUpload, onStarToggle, showToast, flags }: DocToolbarProps) {
   const live = isLiveDoc(doc) ? doc : null;
   const [starred, setStarred] = useState(live?.starred ?? false);
 
@@ -73,7 +88,7 @@ export function DocToolbar({ doc, docId, onAskInChat, onEdit, onUpload, onStarTo
           style={starred ? { color: 'var(--accent)' } : undefined}
         >{ICONS.star}</button>
       )}
-      <button className="btn ghost icon-only" title="Share">{ICONS.share}</button>
+      <button className="btn ghost icon-only" title="Copy link" onClick={() => shareDocLink(showToast)}>{ICONS.share}</button>
       {flags.upload && <button className="btn" onClick={onUpload}>{ICONS.upload} Upload</button>}
       {flags.editor && <button className="btn" onClick={onEdit}>{ICONS.edit} Edit</button>}
       {flags.agent && <button className="btn primary" onClick={onAskInChat}>{ICONS.spark} Ask</button>}

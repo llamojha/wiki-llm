@@ -81,10 +81,6 @@ export function TopBar({ onSearch, onToggleChat, chatOpen, theme, setTheme, them
             )}
           </div>
         )}
-        <button className="icon-btn" title="Notifications">
-          {ICONS.bell}
-          <span className="dot"></span>
-        </button>
         {flags.agent && (
           <button className={'ask-btn' + (chatOpen ? ' active' : '')}
                   onClick={onToggleChat} title="Ask the wiki">

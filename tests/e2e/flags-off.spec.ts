@@ -19,6 +19,9 @@ test.describe('feature flags — all OFF', () => {
     { method: 'POST', path: '/api/spaces' },
     { method: 'PATCH', path: '/api/spaces' },
     { method: 'DELETE', path: '/api/spaces?name=anything' },
+    { method: 'POST', path: '/api/folders' },
+    { method: 'PATCH', path: '/api/folders' },
+    { method: 'DELETE', path: '/api/folders?path=anything' },
   ];
 
   for (const c of gated) {

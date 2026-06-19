@@ -80,6 +80,14 @@ export async function listObjects(subPrefix = ''): Promise<string[]> {
   return out;
 }
 
+export async function listAllKeys(subPrefix = ''): Promise<string[]> {
+  const out: string[] = [];
+  for (const key of store().objects.keys()) {
+    if (!subPrefix || key.startsWith(subPrefix)) out.push(key);
+  }
+  return out;
+}
+
 export async function listCssObjects(subPrefix = ''): Promise<string[]> {
   const out: string[] = [];
   for (const key of store().objects.keys()) {
