@@ -11,6 +11,7 @@ import { resolveScope, type Scope, type ScopePaths } from '@/lib/scope';
 import { PERSONAL_SPACE, PROVENANCE_ROOTS, isDocumentKey } from '@/lib/vault-paths';
 import { ensureSpaceInStructure } from '@/lib/vault-structure';
 import {
+  RESERVED_NAMES,
   SPACE_NAME_RE,
   SpaceError,
   createSpace,
@@ -77,6 +78,12 @@ function toSegments(rawPath: string): string[] {
     .filter(Boolean);
   if (!segs.length) throw new SpaceError('Folder path is required', 400);
   for (const seg of segs) validateSegment(seg);
+  // The top-level segment shares the space namespace, so it carries the same
+  // reservations as a space name (e.g. `personal`, `index`, `log`). A reserved
+  // word is fine deeper in the path — it's just a subfolder name there.
+  if (RESERVED_NAMES.has(segs[0])) {
+    throw new SpaceError(`"${segs[0]}" is a reserved name`, 400);
+  }
   return segs;
 }
 
@@ -212,6 +219,20 @@ export async function renameFolder(
 
   if (fromSegs.length === 1) {
     const entry = await renameSpace(fromSegs[0], toLeaf, scope, userId);
+    // `renameSpace` re-keys documents via the `.md`-only listing, so any
+    // marker-only nested folders (`.keep`) under the old space are left behind.
+    // Sweep every remaining key across both content roots to the new space.
+    const sp = resolveScope({ scope, userId });
+    for (const prefixFor of [sp.authoredPrefix, sp.generatedPrefix]) {
+      const fromPrefix = prefixFor(fromSegs[0]);
+      const toPrefix = prefixFor(toLeaf);
+      for (const key of await listAllKeys(fromPrefix)) {
+        const rel = key.slice(fromPrefix.length);
+        const content = await getObject(key);
+        await putObject(`${toPrefix}${rel}`, content);
+        await deleteObject(key);
+      }
+    }
     return { name: entry.name, path: entry.name, indexed: 0, children: [] };
   }
 
@@ -227,14 +248,19 @@ export async function renameFolder(
   const subFrom = `${[...parentRest, fromLeaf].join('/')}/`;
   const subTo = `${[...parentRest, toLeaf].join('/')}/`;
 
+  // Preflight: both content roots must be clear at the target before moving
+  // anything. Checking inline would let an authored move succeed and then a
+  // generated collision throw, leaving the folder half-renamed.
+  for (const prefixFor of [sp.authoredPrefix, sp.generatedPrefix]) {
+    if ((await listAllKeys(`${prefixFor(space)}${subTo}`)).length) {
+      throw new SpaceError(`Folder "${toSegs.join('/')}" already exists`, 409);
+    }
+  }
+
   let moved = 0;
   for (const prefixFor of [sp.authoredPrefix, sp.generatedPrefix]) {
     const fromPrefix = `${prefixFor(space)}${subFrom}`;
     const toPrefix = `${prefixFor(space)}${subTo}`;
-    const existsAtTarget = await listAllKeys(toPrefix);
-    if (existsAtTarget.length) {
-      throw new SpaceError(`Folder "${toSegs.join('/')}" already exists`, 409);
-    }
     const keys = await listAllKeys(fromPrefix);
     for (const key of keys) {
       const rel = key.slice(fromPrefix.length);
@@ -270,6 +296,15 @@ export async function deleteFolder(
 
   if (segs.length === 1) {
     await deleteSpace(segs[0], scope, userId);
+    // `deleteSpace` removes documents via the `.md`-only listing; purge any
+    // remaining markers (`.keep` for empty nested folders) so the space's
+    // prefixes don't linger and resurface in the folder tree.
+    const sp = resolveScope({ scope, userId });
+    for (const prefixFor of [sp.authoredPrefix, sp.generatedPrefix]) {
+      for (const key of await listAllKeys(prefixFor(segs[0]))) {
+        await deleteObject(key);
+      }
+    }
     return;
   }
 

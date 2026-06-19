@@ -33,7 +33,7 @@ export const SPACE_NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
  * Names that may not be used for a space because they collide with provenance
  * roots, sentinel folder ids, or system files.
  */
-const RESERVED_NAMES = new Set<string>([
+export const RESERVED_NAMES = new Set<string>([
   PERSONAL_SPACE,
   '__all',
   '__user',

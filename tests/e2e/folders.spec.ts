@@ -83,6 +83,39 @@ test.describe('nested folder management', () => {
     expect(structure.spaces.some((s) => s.name === 'handbook')).toBe(true);
   });
 
+  test('rejects the reserved personal namespace for a nested path', async ({ request }) => {
+    const res = await request.post('/api/folders', { data: { path: 'personal/foo' } });
+    expect(res.status()).toBe(400);
+
+    const dump = await dumpVault(request);
+    expect(Object.keys(dump)).not.toContain('authored/personal/foo/.keep');
+  });
+
+  test('renaming a top-level folder carries its empty .keep subfolders', async ({ request }) => {
+    // Materialise an empty nested folder (a .keep marker only).
+    await request.post('/api/folders', { data: { path: 'wiki/runbooks' } });
+
+    const res = await request.patch('/api/folders', { data: { from: 'wiki', to: 'knowledge' } });
+    expect(res.status()).toBe(200);
+
+    const dump = await dumpVault(request);
+    const keys = Object.keys(dump);
+    // The marker moved with the space; the old prefix is fully gone.
+    expect(keys).toContain('authored/knowledge/runbooks/.keep');
+    expect(keys.some((k) => k.startsWith('authored/wiki/'))).toBe(false);
+  });
+
+  test('deleting a top-level folder purges its empty .keep subfolders', async ({ request }) => {
+    await request.post('/api/folders', { data: { path: 'wiki/runbooks' } });
+
+    const res = await request.delete('/api/folders?path=wiki');
+    expect(res.status()).toBe(204);
+
+    const dump = await dumpVault(request);
+    // No wiki prefix lingers — the folder tree won't rediscover it.
+    expect(Object.keys(dump).some((k) => k.startsWith('authored/wiki/'))).toBe(false);
+  });
+
   test('mutations are gated by FEATURE_UPLOAD', async ({ request }) => {
     // GET is always allowed (read path).
     const get = await request.get('/api/folders');
