@@ -125,11 +125,16 @@ Marking documents as favorites (persisted to document frontmatter in S3).
 
 ### `FEATURE_PUBLISHING` — Personal site / HTML publishing
 
-Planned Phase 8 feature (publishing a vault as a static personal site).
+Planned Phase 8 (static HTML publishing) and Phase 9 (personal site + shareable
+agent persona — see [`specs/personal-persona-agent.md`](../specs/personal-persona-agent.md)).
 
 - **UI when off:** nothing yet.
 - **Routes gated:** none yet — the flag is reserved so deployments can opt out
-  before the feature ships.
+  before the feature ships. Phase 9's public routes (`GET /p/[slug]`,
+  `POST /api/p/[slug]/chat`) are unauthenticated by design, so gating them
+  correctly is a hard prerequisite before either phase ships — see the open
+  question in the Phase 9 spec about whether persona chat needs its own
+  dedicated flag separate from static publishing.
 
 ## Recipes
 

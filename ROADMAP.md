@@ -2,6 +2,8 @@
 
 Engineering plan derived from [`prd_vaultmark_markdown_llm_wiki.md`](prd_vaultmark_markdown_llm_wiki.md). Source of truth for sequencing and scope.
 
+> **Pending rename: Vaultmark → Canopy.** The product is being renamed to **Canopy**. The rename itself hasn't been executed yet — see [`specs/rename-to-canopy.md`](specs/rename-to-canopy.md) for the decision record and the checklist to carry it out. Until that PR lands, "Vaultmark" remains correct throughout this repo.
+
 ## Decisions log
 
 Locked decisions on PRD §16 open questions (and related):
@@ -44,6 +46,7 @@ s3://<bucket>/<vault-prefix>/
 | SaaS | Phase 6 | Multi-tenant hosted product |
 | Multimodal | Phase 7 | Voice chat, generated images/infographics, document podcasts |
 | Publishing | Phase 8 | Static HTML pages and visual artifacts generated from canonical Markdown |
+| Personal Site & Persona | Phase 9 | Curated public site + shareable chat agent grounded only in selected pages |
 
 ## Architecture note (post-Phase 2 pivot)
 
@@ -386,6 +389,22 @@ The renderer owns HTML generation. The model supplies structured intent, not exe
 - Public publishing workflow with custom domains, CDN invalidation, or anonymous access controls.
 - Full website builder / theme marketplace.
 - JavaScript-heavy interactive apps inside generated pages.
+
+### Phase 9 — Personal Site & Shareable Agent Persona (deferred)
+
+Let a user select a subset of their vault (specific pages and/or whole spaces) and publish it as a public, link-shareable "personal site" — a small set of read-only pages plus a chat widget backed by an ask-wiki agent that can only see and cite the selected content. Lets a user hand out a curated "ask me about X" persona without exposing their full private vault.
+
+- [ ] Persona manifest: `users/<id>/_system/personas/<persona-id>.json` (allowlist of doc keys + spaces, bio, instructions, publish state)
+- [ ] Persona management UI: doc/space picker, bio/instructions field, publish toggle, copy-link
+- [ ] Public route `GET /p/[slug]` — unauthenticated, read-only, sanitized, `noindex` by default
+- [ ] Scoped chat route `POST /api/p/[slug]/chat` — allowlist-based scoping (not the existing shared/user prefix scope), `propose_page` tool excluded entirely
+- [ ] Rate limiting per persona/IP on the public chat route before any real deployment (first unauthenticated Bedrock-billed surface)
+- [ ] Support multiple personas per user with independent, possibly overlapping selections
+- [ ] Instant, complete unpublish — revoking a persona immediately 404s both the site and chat routes
+
+**Dependencies:** Phase 5 (ask-wiki agent + scope machinery) must be complete. Benefits from, but doesn't require, Phase 8 (personas can ship against the existing Markdown renderer before `_site/` exists).
+
+**Acceptance:** see `specs/personal-persona-agent.md` — 9 criteria, plus open questions on flag naming, slug generation, and space-membership snapshotting.
 
 ## Out of scope (forever, or until reconsidered)
 

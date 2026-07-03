@@ -2,6 +2,8 @@
 
 This repo builds **Vaultmark**, an S3-backed Markdown knowledge portal for individuals and engineering teams.
 
+> **Pending rename: Vaultmark → Canopy.** Decided but not yet executed — see [`specs/rename-to-canopy.md`](specs/rename-to-canopy.md).
+
 - Product spec: [`prd_vaultmark_markdown_llm_wiki.md`](prd_vaultmark_markdown_llm_wiki.md) — goals, scope, data model
 - Engineering plan: [`ROADMAP.md`](ROADMAP.md) — phases, decisions log, sequencing
 - This file: codebase operating guide
