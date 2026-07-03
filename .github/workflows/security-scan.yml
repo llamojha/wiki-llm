@@ -22,7 +22,7 @@ jobs:
     name: lockfile vulnerabilities
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Trivy filesystem scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -37,7 +37,7 @@ jobs:
     name: IaC misconfigurations
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Trivy config scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
