@@ -18,6 +18,14 @@ Locked decisions on PRD §16 open questions (and related):
 | Ask-wiki agent provider | **Amazon Bedrock — Nova 2 Lite** (`amazon.nova-2-lite-v1:0`). 1M token context, multimodal-capable. Cross-region inference profile when needed (`us.amazon.nova-2-lite-v1:0`). |
 | Ask-wiki agent scope | **Tool-using agent** (search / read / propose-page) with citations, refusal, and scope. **Out of scope:** vector search, autonomous writes, multi-agent. |
 
+### Decisions under review (not yet re-decided)
+
+| Question | Status |
+|---|---|
+| Provenance-rooted S3 layout (`generated/` / `authored/` as folders) | **Under review.** [`specs/storage-v2-proposal.md`](specs/storage-v2-proposal.md) proposes metadata-driven provenance, stable page keys, and derived views instead; the folder-first design spike ([`plans/021-design-folder-first-vault-mode.md`](plans/021-design-folder-first-vault-mode.md)) adjudicates it (see Track C below). The locked layout above stands until that spec lands. |
+| `log.md` as an append target | **Direction superseded**, pending implementation: append-only event objects as truth, `log.md` as a derived view ([`plans/011-append-logs-per-event-objects.md`](plans/011-append-logs-per-event-objects.md); storage-v2 proposal §10 independently reaches the same design). |
+| Markdown-only document content | **Under review.** First-class HTML *source* documents are being designed in [`plans/022-design-html-document-support.md`](plans/022-design-html-document-support.md) — distinct from Phase 8, which generates *derived* HTML from Markdown. Markdown stays the canonical authored format either way. |
+
 ## S3 layout
 
 ```
@@ -36,6 +44,11 @@ s3://<bucket>/<vault-prefix>/
 
 `source_type` metadata distinguishes `authored | uploaded | generated | personal`.
 
+> **Note:** this layout is the locked v1. A v2 storage model (metadata-driven
+> provenance, derived views) is under design review — see "Decisions under
+> review" above and Track C below. Do not build new features that deepen the
+> `generated/`/`authored/` coupling without checking that spec's status.
+
 ## Milestone Mapping
 
 | PRD Milestone | Phases | What the user gets |
@@ -47,10 +60,83 @@ s3://<bucket>/<vault-prefix>/
 | Multimodal | Phase 7 | Voice chat, generated images/infographics, document podcasts |
 | Publishing | Phase 8 | Static HTML pages and visual artifacts generated from canonical Markdown |
 | Personal Site & Persona | Phase 9 | Curated public site + shareable chat agent grounded only in selected pages |
+| Hardening | Track A | Correct, tested, race-free portal — the audited fix backlog in [`plans/`](plans/README.md) |
+| Rename & go-public | Track B | Canopy rename executed, root cleaned, repo public |
+| Platform design | Track C | Decided specs for storage v2 / folder-first, HTML documents, agentic access |
 
 ## Architecture note (post-Phase 2 pivot)
 
 As of Phase 2 completion, the backend was migrated from Python/FastAPI to Next.js Route Handlers. The entire app is now a single Next.js project deployable to Vercel (free tier) or Docker. No Python, no Postgres, no separate backend service. In-memory search (Fuse.js) replaces Postgres FTS. The ingest pipeline (Phase 3) is a standalone TypeScript CLI in the same monorepo.
+
+## Current focus (July 2026) — between MVP 2 and Phase 6
+
+Phases 0–5 are shipped. Before any deferred phase is activated, three tracks
+run (roughly in this order, with overlap where the dependency notes allow):
+
+### Track A — Hardening & verification baseline (active)
+
+A full codebase audit (2026-07-03, at commit `fead8f9`) produced a 23-plan
+backlog in [`plans/`](plans/README.md) — self-contained handoff plans any
+agent can execute; the index there carries the authoritative dependency graph
+and status table. Grouped:
+
+- **Wave 1 — P1 fixes + baseline (plans 001–005):** single-space reindex
+  clobbering the master index; document-key allowlist on doc `GET` + star
+  `PATCH`; the Playwright e2e suite wired into CI (plus mock-S3 contract
+  fix); a vitest unit baseline for scope isolation / sanitization / path
+  classification; an upload size limit.
+- **Wave 2 — correctness & security (006–011):** agent tool-input parse
+  guard; ETag compare-and-swap for `structure.json`; curate-Lambda manifest
+  CAS + overlapping-job 409; userId validation + client error hygiene +
+  js-yaml advisory; frontmatter normalization; append-safe event logs.
+- **Wave 3 — performance & structure (012–016):** parallelized tree
+  listings; home view served from the cached index; incremental
+  search/index updates; one resumable `movePrefix`/`purgePrefix` for all
+  folder/space ops; decomposition of the 1167-line Library modal.
+- **Wave 4 — hygiene, DX, docs (017–020):** dead-export removal; repo-root
+  cleanup (parity scaffolding, stale context files, `AGENTS.md` pointer);
+  ESLint adoption (today `lint` is a typecheck alias); docs-to-reality sync.
+
+**Gate discipline:** plans 003 + 004 are the verification baseline; the
+L-effort refactors (014, 015, 016) do not start before they land. Wave 1
+also precedes Track B's public release — plan 002 in particular closes the
+read-path gaps a public repo would invite scrutiny of.
+
+### Track B — Canopy rename & go-public
+
+- Execute the **Vaultmark → Canopy** rename as one deliberate pass:
+  [`specs/rename-to-canopy.md`](specs/rename-to-canopy.md) (decision record +
+  checklist; repo slug, image names, and `VAULT_*` env vars explicitly
+  deferred there).
+- Pre-public cleanup: plan 018 (root scaffolding), plan 020 (doc drift), and
+  the private OSS-readiness checklist (branch cleanup, history squash, tip
+  scrub).
+- Order: Wave 1 fixes → rename (cheapest while private) → cleanup/docs →
+  public.
+
+### Track C — Platform design specs (decide before building)
+
+Three design spikes produce specs (into `specs/`) whose outcomes re-enter
+this roadmap as numbered phases:
+
+- **Storage v2 / folder-first** —
+  [`plans/021-design-folder-first-vault-mode.md`](plans/021-design-folder-first-vault-mode.md),
+  now also adjudicating [`specs/storage-v2-proposal.md`](specs/storage-v2-proposal.md)
+  (Confluence-model: metadata-driven provenance, stable page keys, derived
+  views, events-as-truth). Open decisions the spec must make: default
+  structure source (folder paths vs `parent_id` metadata), file naming
+  (readable slugs vs page IDs — portability vs move-cheapness), user-scope
+  layout, and the migration path for existing vaults. Its outcome reshapes
+  Waves 3's remaining plans and parts of Phase 6.
+- **HTML documents as source content** —
+  [`plans/022-design-html-document-support.md`](plans/022-design-html-document-support.md).
+  Complements (does not replace) Phase 8's derived-HTML pipeline; both share
+  one sanitizer allowlist.
+- **Secure agentic access** —
+  [`plans/023-design-agentic-access.md`](plans/023-design-agentic-access.md):
+  MCP-class gateway with server-side capability enforcement, propose-queue
+  writes (no autonomous writes, protocol-enforced), deny-by-default tokens.
+  Implementation waits for plans 002 + 009.
 
 ## Phases
 
@@ -289,10 +375,10 @@ Shipped 2026-05-17 / 2026-05-18 as preparation for Phase 6. Surfaced via a singl
 - **New-page editor bug.** Clicking "New page" while a doc was open left the previous doc in component state, so the editor pre-filled the new doc with the previous one's title and body. Saving then 409'd on the slug collision. Fixed by passing `doc={undefined}` to the Editor when `activeId === '__new'`.
 - **Editor error surfacing.** POST/PUT failures on `/api/docs` now surface the route's `detail` field in the toast instead of a generic "Failed to save" — users see the actual reason (e.g. *A page with slug "foo" already exists*).
 
-**Known gaps from the scope-refactor postmortem still open:**
-- No runtime smoke test of the user-scope path; only typecheck verified
+**Known gaps from the scope-refactor postmortem still open** (several now have plans — see [`plans/README.md`](plans/README.md)):
+- No runtime smoke test of the user-scope path; only typecheck verified → the unit/e2e baseline (plans 003/004) covers the scope-isolation logic directly
 - Mid-job scope change is prevented by disabling the toggle while running, but the modal closing + reopening discards the in-flight job (pre-existing)
-- Finalize + CRUD writes are not serialized **across requests**; same-scope concurrent finalizes still race on `index.md` writes (in-Lambda concurrency was addressed, cross-request was not)
+- Finalize + CRUD writes are not serialized **across requests**; same-scope concurrent finalizes still race on `index.md` writes (in-Lambda concurrency was addressed, cross-request was not) → plans 007 (`structure.json` CAS), 008 (manifest CAS + overlapping-job 409), 011/014 (log + index write patterns)
 - `personal` as a reserved-name vs first-class declared space is unresolved
 - Cross-deploy Lambda compatibility has no version guard; deploy Lambda before the web change
 
@@ -315,6 +401,12 @@ Only after MVP 2 is stable. Exploratory — scope will be refined when Phase 5 s
 ### Phase 8 — HTML Publishing & Visual Artifacts (deferred)
 
 Derived presentation layer for Markdown vault content. This phase responds to the emerging AI-engineering pattern where finished human-facing deliverables are often better as HTML artifacts than raw Markdown, while preserving Vaultmark's core rule: **Markdown remains canonical; HTML is disposable and regenerable.**
+
+> **Related but distinct:** [`plans/022-design-html-document-support.md`](plans/022-design-html-document-support.md)
+> designs HTML as first-class *source* content (uploaded/synced `.html` docs
+> rendered like Markdown). This phase generates HTML *output* from Markdown.
+> Both must share one sanitizer schema/allowlist — whichever lands first owns
+> the shared module.
 
 #### Principles
 
@@ -410,10 +502,15 @@ Let a user select a subset of their vault (specific pages and/or whole spaces) a
 
 - Real-time collaborative editing
 - Vector search / RAG embedding pipelines
-- Autonomous agent writes (every write is user-confirmed)
+- Autonomous agent writes (every write is user-confirmed) — external agentic
+  access keeps this invariant protocol-enforced via a propose/approve queue
+  (see `plans/023-design-agentic-access.md`)
 - Multi-agent orchestration
-- PDF / DOCX ingestion
-- Public publishing workflow
+- PDF / DOCX ingestion — *note:* the storage-v2 proposal sketches PDF sources
+  in `raw/`; that stays out of scope unless the Track C spec explicitly
+  re-decides it
+- Public publishing workflow (custom domains / CDN; Phase 9's persona sites
+  are the narrow exception, `noindex` by default)
 
 ## Mock UI features ahead of current phases
 
