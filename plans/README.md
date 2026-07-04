@@ -34,6 +34,8 @@ Every plan carries its own drift check against `fead8f9` — run it first.
 | 021 | DESIGN: folder-first vault mode + storage-v2 adjudication (specs/storage-v2-proposal.md) | P2 | M–L | — | TODO |
 | 022 | DESIGN: first-class HTML documents | P2 | M | — | TODO |
 | 023 | DESIGN: secure agentic access (MCP-class gateway) | P2 | M | 002, 009 first | TODO |
+| 024 | DESIGN: built-in auth gate (OIDC — Keycloak/Cognito) | P2 | M | — | TODO |
+| 025 | Standalone landing page (decoupled from the product) | P3 | M | — | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) |
 REJECTED (one-line rationale — finding fixed independently or approach abandoned)
@@ -52,10 +54,18 @@ REJECTED (one-line rationale — finding fixed independently or approach abandon
   015 before 016 if running both.
 - 018 (root cleanup) before 020 (docs sync) so the layout tables describe the
   cleaned tree. Both edit `CLAUDE.md`; don't run concurrently.
-- 021/022/023 are design plans producing specs in `specs/`; their
-  implementation plans are follow-ups. 022's implementation should follow
-  021's (one document-recognition function). 023's implementation must wait
-  for 002 + 009 (it inherits any read-path gap).
+- 021/022/023/024/025 are design/direction plans producing specs in
+  `specs/`; their implementation plans are follow-ups. 022's implementation
+  should follow 021's (one document-recognition function). 023's
+  implementation must wait for 002 + 009 (it inherits any read-path gap).
+- 024 (human OIDC session gate) and 023 (agent capability tokens) both guard
+  the same route handlers — each spec must state the precedence rule; write
+  them so they don't contradict. 024 is independent to *write* but its
+  implementation is a security boundary — treat with 002/009-level care.
+- 025 (landing page) is additive and blocks nothing; it belongs to the
+  go-public push (Track B) and its launch is gated on the Canopy rename, not
+  on any code plan. Its one hard rule: never couple into the product build
+  or Docker image.
 - Plans touching `.github/workflows/ci.yml`: 003, 004, 019 — sequence them.
 
 ## Findings considered and rejected
@@ -63,8 +73,10 @@ REJECTED (one-line rationale — finding fixed independently or approach abandon
 (Recorded so the next audit doesn't re-litigate.)
 
 - **No authentication on the portal** — by design for the single-user MVP
-  (Phase 6 owns identity). The agentic-access design (023) and the key
-  allowlist (002) narrow the exposure that matters meanwhile.
+  (Phase 6 owns *multi-user* identity). No longer left to "put a proxy in
+  front": plan 024 designs a built-in OIDC gate (Keycloak/Cognito), off by
+  default. The agentic-access design (023) and the key allowlist (002)
+  narrow the exposure that matters meanwhile.
 - **In-memory Fuse index doesn't invalidate across serverless instances** —
   documented MVP limitation (ROADMAP Phase 6 open gaps); 014 improves cost,
   cross-instance coherence stays out of scope until Phase 6.

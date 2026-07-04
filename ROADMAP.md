@@ -111,12 +111,18 @@ read-path gaps a public repo would invite scrutiny of.
 - Pre-public cleanup: plan 018 (root scaffolding), plan 020 (doc drift), and
   the private OSS-readiness checklist (branch cleanup, history squash, tip
   scrub).
+- **Landing page** — [`plans/025-standalone-landing-page.md`](plans/025-standalone-landing-page.md):
+  a Canopy-native marketing site as a static `site/` workspace package,
+  deployed and updated independently of the dockerized product (never part
+  of the container image). Built Canopy-native from the start; its launch is
+  gated on the rename pass + name/domain re-verification, not on any code
+  plan.
 - Order: Wave 1 fixes → rename (cheapest while private) → cleanup/docs →
-  public.
+  public → landing page live.
 
 ### Track C — Platform design specs (decide before building)
 
-Three design spikes produce specs (into `specs/`) whose outcomes re-enter
+Four design spikes produce specs (into `specs/`) whose outcomes re-enter
 this roadmap as numbered phases:
 
 - **Storage v2 / folder-first** —
@@ -137,6 +143,15 @@ this roadmap as numbered phases:
   MCP-class gateway with server-side capability enforcement, propose-queue
   writes (no autonomous writes, protocol-enforced), deny-by-default tokens.
   Implementation waits for plans 002 + 009.
+- **Built-in auth gate** —
+  [`plans/024-design-auth-gate-oidc.md`](plans/024-design-auth-gate-oidc.md):
+  one provider-agnostic OIDC gate (Keycloak + Cognito as acceptance
+  targets), `AUTH_MODE` off by default, deny-by-default subject allowlist,
+  health/`/p/*` exemptions, gate-both-layers like `flagGuard`. This is the
+  portal-entry gate ("may this person enter?") and lands *before* Phase 6's
+  multi-user identity ("who is this among many?"); its session claims are
+  the upgrade path into Phase 6. Must agree with 023 on token-vs-session
+  precedence.
 
 ## Phases
 
