@@ -84,7 +84,9 @@ cp infra/.env.example web/.env.local   # set VAULT_BUCKET etc.
 
 pnpm dev          # Next.js dev server on :3000
 pnpm typecheck
+pnpm test:unit    # vitest unit tests (web/lib pure functions)
 pnpm build        # needs VAULT_BUCKET set (placeholder ok)
+pnpm test:e2e     # Playwright; needs a prior build; mock S3 (MOCK_S3=1), no AWS
 pnpm ingest -- --help
 
 # Curate Lambda
@@ -115,7 +117,7 @@ Hiding the button alone is not control — the route guard is the enforcement.
 | Env var | Feature | Routes gated |
 |---|---|---|
 | `FEATURE_AGENT` | Ask-Wiki chat | `POST /api/chat` |
-| `FEATURE_UPLOAD` | File upload + folder management | `POST /api/upload`, `/api/spaces` |
+| `FEATURE_UPLOAD` | File upload + folder management | `POST /api/upload`, `POST/PATCH/DELETE /api/spaces` (GET is a read path, ungated) |
 | `FEATURE_CURATE` | AI ingest/curate | `/api/curate/*` |
 | `FEATURE_REINDEX` | Re-index | `POST /api/reindex` |
 | `FEATURE_EDITOR` | Page CRUD | `POST/PUT/DELETE /api/docs` |

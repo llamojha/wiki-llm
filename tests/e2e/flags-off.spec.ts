@@ -49,4 +49,12 @@ test.describe('feature flags — all OFF', () => {
     // Without flag guard `docs?view=recent` returns 200 with an empty list.
     expect(res.status()).toBe(200);
   });
+
+  test('GET /api/spaces is a read path — not gated by FEATURE_UPLOAD', async ({ request }) => {
+    // Listing a scope's spaces stays browsable with upload off; only the
+    // mutations (POST/PATCH/DELETE) are gated. The route documents this as
+    // "GET is a read path and is never gated".
+    const res = await request.get('/api/spaces');
+    expect(res.status()).toBe(200);
+  });
 });
