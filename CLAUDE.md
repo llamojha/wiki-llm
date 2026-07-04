@@ -41,11 +41,14 @@ in-memory Fuse.js search replaced Postgres FTS for the MVP.
 wiki-llm/                  (repo root; product name is Vaultmark)
 ├── web/                   Next.js portal (frontend + API route handlers)
 ├── ingest/                TypeScript ingest CLI
+├── video/                 Demo-video workspace
 ├── infra/
 │   ├── docker-compose.yml Local dev stack
 │   ├── lambda/curate/     AI curation Lambda
 │   ├── k8s/               Kubernetes manifests
 │   └── ecs/               ECS Fargate task definition + IAM policy
+├── infra-cdk/             AWS CDK deploy stack
+├── tests/                 Playwright e2e suite (mock-S3 backed)
 ├── docs/                  Configuration, feature flags, deployment guides
 ├── specs/                 Phase acceptance specs
 ├── api/                   Archived FastAPI backend (reference)
@@ -58,7 +61,7 @@ wiki-llm/                  (repo root; product name is Vaultmark)
 **App (`web/`) — the active product**
 - Next.js **16.2** (App Router, Turbopack, React Server Components)
 - React **19**
-- TypeScript **5.7+**, `strict: true`
+- TypeScript **6.x**, `strict: true`
 - Plain CSS (ported from `portal/styles.css`). No Tailwind, no UI lib
 - API: Next.js Route Handlers under `web/app/api/`
 - Search: in-memory Fuse.js built from S3
