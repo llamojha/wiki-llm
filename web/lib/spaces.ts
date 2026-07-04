@@ -193,6 +193,18 @@ export async function renameSpace(
     throw new SpaceError(`Space "${to}" already has content`, 409);
   }
 
+  // Content-collision preflight. The declaration checks above catch a *declared*
+  // `to`; this also refuses a `to` whose prefixes already hold objects (orphaned
+  // content not tied to a declaration). Without it a top-level rename could
+  // silently merge into a non-empty target. Fail fast — before the name claim
+  // or any object move. (Deliberate behavior change; see plan 015.)
+  if (
+    (await prefixHasObjects(sp.generatedPrefix(to))) ||
+    (await prefixHasObjects(sp.authoredPrefix(to)))
+  ) {
+    throw new SpaceError(`Space "${to}" already has content`, 409);
+  }
+
   // Claim `to` by flipping the declaration *before* moving any object. This
   // must happen first: if the declaration flip happened after the move (the
   // old order), a concurrent createSpace/renameSpace targeting the same `to`
