@@ -18,6 +18,25 @@ The vault is the S3 location that holds your Markdown. One vault = one bucket
 | `VAULT_REGION` | no | `us-east-1` | AWS region of the bucket. |
 | `VAULT_ID` | no | `default` | Display id/name of the vault — shown as the top-bar pill and in `/api/vaults`. The pill is hidden while the value is unset/`default`. |
 
+### Audit & usage logs
+
+Audit and chat-usage events are written **one object per event** so concurrent
+writers never lose each other's entries (distinct S3 PUTs never conflict):
+
+- audit events → `_system/log/<timestamp>-<rand>.md` (one Markdown line each)
+- chat-usage events → `_system/usage/<timestamp>-<rand>.json` (one JSON entry each)
+
+Both live under a scope's `_system/` prefix (shared: `_system/…`; per user:
+`users/<id>/_system/…`), so they are excluded from search, the tree, and
+document reads. The legacy single-file `_system/log.md` /
+`_system/usage-log.jsonl` remain as readable history where they already exist;
+nothing rewrites them. To fold the per-event objects back into one file when
+you want a single view:
+
+```bash
+aws s3 cp --recursive s3://<bucket>/<prefix>/_system/log/ ./log/ && cat ./log/*.md > log.md
+```
+
 ## AWS credentials
 
 Credentials are resolved through the **standard AWS credential chain** — env

@@ -56,6 +56,10 @@ export default defineConfig({
         VAULT_PREFIX: '',
         VAULT_REGION: 'us-east-1',
         VAULT_ID: 'default',
+        // A placeholder ARN so POST /api/curate/start gets past its config
+        // guard and reaches the overlapping-job check. No Lambda is ever
+        // invoked in the 409 tests — they short-circuit before the invoke.
+        CURATE_LAMBDA_ARN: 'arn:aws:lambda:eu-central-1:000000000000:function:mock-curate',
         // The default code profile ships most features OFF (see lib/flags.ts).
         // The e2e suite exercises every feature, so turn them all ON here.
         FEATURE_AGENT: 'on',

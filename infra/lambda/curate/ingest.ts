@@ -1,7 +1,7 @@
 import { getObject, getObjectOrNull, putJson, putObject, listObjects } from './s3.js';
 import { converse } from './bedrock.js';
 import { buildExtractionSystemPrompt, buildExtractionUserPrompt } from './prompt.js';
-import { getManifest, saveManifest, addToManifest, computeHash } from './manifest.js';
+import { computeHash, manifestEntry, mergeIntoManifest } from './manifest.js';
 import { placementFromRawKey, sourcePageKey } from './paths.js';
 import {
   parseSourceCard,
@@ -82,13 +82,14 @@ export async function processSource(
   jobId?: string,
   onStage?: StageReporter,
   /**
-   * Serializes the manifest's read-modify-write step. Required when callers
-   * run `processSource` concurrently (e.g. `CURATE_CONCURRENCY > 1`) —
-   * otherwise concurrent workers each read the same baseline
-   * `processed.json`, merge their own file in, and the last writer wins,
-   * silently dropping the other workers' manifest entries.
+   * Serializes the manifest write step. Correctness no longer depends on it:
+   * manifest writes go through `mergeIntoManifest`, a compare-and-swap that is
+   * safe across both concurrent intra-invocation workers AND overlapping
+   * Lambda invocations (each re-reads and re-merges on an ETag conflict rather
+   * than last-writer-wins). The queue is retained only to reduce CAS retry
+   * churn when `CURATE_CONCURRENCY > 1`.
    *
-   * When omitted (single-threaded callers, tests), manifest writes happen
+   * When omitted (single-threaded callers, tests), the CAS write happens
    * inline.
    */
   enqueueManifestWrite?: WriteQueue,
@@ -149,15 +150,14 @@ export async function processSource(
   logTiming(jobId, rawKey, 'write-source-card-and-page', startedAt);
 
   // 5. Update manifest. Final index/log/lint is a separate maintenance pass.
-  // Serialized via enqueueManifestWrite so concurrent workers don't clobber
-  // each other's entries (see param doc).
+  // mergeIntoManifest does a compare-and-swap read-merge-write, so it is safe
+  // across concurrent Lambda invocations (not just intra-invocation workers).
+  // enqueueManifestWrite still serializes intra-invocation writes to reduce
+  // CAS retries, but correctness no longer depends on it.
   await onStage?.('manifest');
   startedAt = nowMs();
-  const writeManifest = async () => {
-    const manifest = await getManifest(bucket, prefix, scope);
-    const updated = addToManifest(manifest, rawKey, hash, outputSpace, [pagePath], cardKey);
-    await saveManifest(bucket, prefix, scope, updated);
-  };
+  const entry = manifestEntry(hash, outputSpace, [pagePath], cardKey);
+  const writeManifest = () => mergeIntoManifest(bucket, prefix, scope, rawKey, entry);
   if (enqueueManifestWrite) {
     await enqueueManifestWrite(writeManifest);
   } else {

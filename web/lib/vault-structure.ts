@@ -1,4 +1,11 @@
-import { getObject, putObject } from '@/lib/s3';
+import {
+  ConcurrencyError,
+  getObject,
+  getObjectWithETag,
+  ObjectAlreadyExistsError,
+  putObject,
+  putObjectIfAbsent,
+} from '@/lib/s3';
 import {
   DEFAULT_USER_ID,
   DEFAULT_USER_ROOT,
@@ -118,9 +125,77 @@ export async function getStructure(): Promise<VaultStructure> {
   }
 }
 
-/** Write structure.json to S3. */
-export async function putStructure(structure: VaultStructure): Promise<void> {
-  await putObject(STRUCTURE_KEY, JSON.stringify(structure, null, 2));
+/**
+ * Read structure.json with its S3 ETag for optimistic concurrency.
+ *
+ * `etag` is `null` when no compare-and-swap is possible: the primary key is
+ * absent (a legacy `structure.json` was read, or the default is returned). In
+ * that case the first write must be unconditional — see `updateStructure`.
+ * The default structure is cloned so callers can mutate it without corrupting
+ * the shared module constant.
+ */
+export async function getStructureWithETag(): Promise<{
+  structure: VaultStructure;
+  etag: string | null;
+}> {
+  try {
+    const { content, etag } = await getObjectWithETag(STRUCTURE_KEY);
+    return { structure: JSON.parse(content) as VaultStructure, etag };
+  } catch {
+    try {
+      const raw = await getObject('structure.json');
+      return { structure: JSON.parse(raw) as VaultStructure, etag: null };
+    } catch {
+      return { structure: structuredClone(DEFAULT_STRUCTURE), etag: null };
+    }
+  }
+}
+
+const MAX_CAS_ATTEMPTS = 3;
+
+/**
+ * Read-mutate-write structure.json with optimistic concurrency.
+ *
+ * `mutate` receives a fresh structure and either mutates it in place and
+ * returns true (persist) or returns false (no-op, e.g. the space already
+ * exists). The whole read+mutate is retried on `ConcurrencyError` up to 3
+ * attempts so a concurrent writer's change is re-read and re-merged instead of
+ * clobbered. Non-concurrency errors thrown from `mutate` (e.g. a
+ * `SpaceError`) propagate immediately and abort the loop.
+ *
+ * When the structure does not exist yet (`etag === null`), the write goes
+ * through `putObjectIfAbsent` (`If-None-Match: *`) instead of an unconditional
+ * `putObject`. Two racing first-writes would otherwise both succeed and the
+ * later one silently drops the earlier one's space declaration with no
+ * `ConcurrencyError` to retry; routing the null-etag branch through the create
+ * precondition forces the loser to hit `ObjectAlreadyExistsError`, which this
+ * loop treats the same as `ConcurrencyError` — re-read and retry.
+ */
+export async function updateStructure(
+  mutate: (structure: VaultStructure) => boolean | Promise<boolean>,
+): Promise<VaultStructure> {
+  let lastConflict: ConcurrencyError | undefined;
+  for (let attempt = 0; attempt < MAX_CAS_ATTEMPTS; attempt++) {
+    const { structure, etag } = await getStructureWithETag();
+    const shouldWrite = await mutate(structure);
+    if (!shouldWrite) return structure;
+    try {
+      const body = JSON.stringify(structure, null, 2);
+      if (etag == null) {
+        await putObjectIfAbsent(STRUCTURE_KEY, body);
+      } else {
+        await putObject(STRUCTURE_KEY, body, etag);
+      }
+      return structure;
+    } catch (err) {
+      if (err instanceof ConcurrencyError || err instanceof ObjectAlreadyExistsError) {
+        lastConflict = err instanceof ConcurrencyError ? err : new ConcurrencyError();
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastConflict ?? new ConcurrencyError();
 }
 
 /**
@@ -141,9 +216,9 @@ export function spacesForScope(
 
 /**
  * Locate the mutable spaces array for a scope inside `structure`, creating the
- * user entry / array as needed. Mutating the returned array and then calling
- * `putStructure(structure)` persists the change. Use this for writes;
- * `spacesForScope` for reads.
+ * user entry / array as needed. Mutate the returned array from inside an
+ * `updateStructure` callback to persist the change under optimistic
+ * concurrency. Use this for writes; `spacesForScope` for reads.
  */
 export function mutableSpacesForScope(
   structure: VaultStructure,
@@ -170,10 +245,11 @@ export async function ensureSpaceInStructure(
   scope: 'shared' | 'user' = 'shared',
   userId?: string,
 ): Promise<void> {
-  const structure = await getStructure();
-  const arr = mutableSpacesForScope(structure, scope, userId);
-  if (arr.some((s) => s.name === space)) return;
-  const label = space.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-  arr.push({ name: space, label, indexed: true });
-  await putStructure(structure);
+  await updateStructure((structure) => {
+    const arr = mutableSpacesForScope(structure, scope, userId);
+    if (arr.some((s) => s.name === space)) return false;
+    const label = space.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    arr.push({ name: space, label, indexed: true });
+    return true;
+  });
 }

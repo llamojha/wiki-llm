@@ -1,16 +1,19 @@
-import { getObject, putObject } from '@/lib/s3';
+import { putObject } from '@/lib/s3';
 import type { ScopePaths } from '@/lib/scope';
 
 /**
- * Append a chat interaction entry to `_system/usage-log.jsonl`.
+ * Record a chat interaction as one object under the scope's `_system/usage/`
+ * prefix (`_system/usage/<ts>-<rand>.json`, one JSON entry per file).
  *
  * Best-effort: failures are warned and swallowed so logging never blocks
  * the user response. Per-scope: shared chats go to shared `_system/`, user
  * chats go to the user's `_system/`.
  *
- * Note: same naive read-modify-write concurrency profile as `log-append.ts`.
- * Acceptable for single-user MVP. A future improvement could batch writes
- * or use S3 conditional puts.
+ * One object per event (like `log-append.ts`) is conflict-free by
+ * construction — concurrent chat turns can no longer overwrite each other the
+ * way the shared `_system/usage-log.jsonl` read-modify-write did. The `.json`
+ * suffix keeps these out of document listings entirely (`listObjects` is
+ * `.md`-only). See `docs/configuration.md` for the layout.
  */
 export type ChatLogEntry = {
   scope: ScopePaths;
@@ -27,16 +30,12 @@ export type ChatLogEntry = {
 
 export async function logChatInteraction(entry: ChatLogEntry): Promise<void> {
   try {
-    const key = entry.scope.systemKey('usage-log.jsonl');
-    let existing = '';
-    try {
-      existing = await getObject(key);
-    } catch {
-      // First write — file doesn't exist yet.
-    }
+    const ts = new Date().toISOString();
+    const rand = Math.random().toString(36).slice(2, 8);
+    const key = entry.scope.systemKey(`usage/${ts.replace(/[:.]/g, '-')}-${rand}.json`);
 
     const line = JSON.stringify({
-      ts: new Date().toISOString(),
+      ts,
       scope: entry.scope.scope,
       userId: entry.scope.userId,
       question: entry.question,
@@ -47,8 +46,7 @@ export async function logChatInteraction(entry: ChatLogEntry): Promise<void> {
       ...(entry.forced ? { forced: true } : {}),
       ...(entry.error ? { error: entry.error } : {}),
     });
-    const content = existing ? `${existing.trimEnd()}\n${line}\n` : `${line}\n`;
-    await putObject(key, content);
+    await putObject(key, `${line}\n`);
   } catch (err) {
     console.warn('[usage-log] write failed:', err);
   }

@@ -10,6 +10,19 @@ import {
 const region = process.env.S3_REGION ?? process.env.VAULT_REGION ?? 'us-east-1';
 let _client: S3Client | null = null;
 
+/**
+ * Thrown by `putJson` when a conditional (`ifMatch`) write is rejected because
+ * the object changed since it was read — HTTP 412 / `PreconditionFailed`.
+ * Mirrors the web app's `ConcurrencyError` (web/lib/s3.ts) so the manifest
+ * compare-and-swap loop reads the same on both sides of the codebase.
+ */
+export class ManifestConflictError extends Error {
+  constructor(message = 'PreconditionFailed') {
+    super(message);
+    this.name = 'ManifestConflictError';
+  }
+}
+
 function client(): S3Client {
   if (!_client) _client = new S3Client({ region });
   return _client;
@@ -36,6 +49,30 @@ export async function getObjectOrNull(bucket: string, prefix: string, key: strin
   }
 }
 
+/**
+ * Fetch an object with its ETag, or `null` if it doesn't exist. The ETag feeds
+ * `putJson`'s `ifMatch` for compare-and-swap manifest writes.
+ */
+export async function getObjectWithETagOrNull(
+  bucket: string,
+  prefix: string,
+  key: string,
+): Promise<{ content: string; etag: string } | null> {
+  try {
+    const res = await client().send(new GetObjectCommand({
+      Bucket: bucket,
+      Key: fullKey(prefix, key),
+    }));
+    return {
+      content: await res.Body!.transformToString('utf-8'),
+      etag: res.ETag ?? '',
+    };
+  } catch (err: unknown) {
+    if ((err as { name?: string }).name === 'NoSuchKey') return null;
+    throw err;
+  }
+}
+
 export async function putObject(bucket: string, prefix: string, key: string, body: string): Promise<void> {
   await client().send(new PutObjectCommand({
     Bucket: bucket,
@@ -45,13 +82,58 @@ export async function putObject(bucket: string, prefix: string, key: string, bod
   }));
 }
 
-export async function putJson(bucket: string, prefix: string, key: string, data: unknown): Promise<void> {
-  await client().send(new PutObjectCommand({
-    Bucket: bucket,
-    Key: fullKey(prefix, key),
-    Body: JSON.stringify(data, null, 2),
-    ContentType: 'application/json',
-  }));
+export async function putJson(
+  bucket: string,
+  prefix: string,
+  key: string,
+  data: unknown,
+  ifMatch?: string,
+): Promise<void> {
+  try {
+    await client().send(new PutObjectCommand({
+      Bucket: bucket,
+      Key: fullKey(prefix, key),
+      Body: JSON.stringify(data, null, 2),
+      ContentType: 'application/json',
+      ...(ifMatch ? { IfMatch: ifMatch } : {}),
+    }));
+  } catch (err: unknown) {
+    const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
+    if (e.name === 'PreconditionFailed' || e.$metadata?.httpStatusCode === 412) {
+      throw new ManifestConflictError();
+    }
+    throw err;
+  }
+}
+
+/**
+ * Create an object only if it does not already exist (`If-None-Match: *`).
+ * Used for the first-write branch of the manifest CAS loop: when no primary
+ * manifest key exists yet, an unconditional `putJson` would let two racing
+ * invocations both "win" and silently drop one's entry. This forces a loser
+ * to re-read and merge instead, mirroring `ManifestConflictError` semantics.
+ */
+export async function putJsonIfAbsent(
+  bucket: string,
+  prefix: string,
+  key: string,
+  data: unknown,
+): Promise<void> {
+  try {
+    await client().send(new PutObjectCommand({
+      Bucket: bucket,
+      Key: fullKey(prefix, key),
+      Body: JSON.stringify(data, null, 2),
+      ContentType: 'application/json',
+      IfNoneMatch: '*',
+    }));
+  } catch (err: unknown) {
+    const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
+    if (e.name === 'PreconditionFailed' || e.$metadata?.httpStatusCode === 412) {
+      throw new ManifestConflictError();
+    }
+    throw err;
+  }
 }
 
 export async function copyObject(bucket: string, prefix: string, srcKey: string, dstKey: string): Promise<void> {

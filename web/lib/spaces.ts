@@ -7,8 +7,8 @@ import { PERSONAL_SPACE, PROVENANCE_ROOTS } from '@/lib/vault-paths';
 import {
   getStructure,
   mutableSpacesForScope,
-  putStructure,
   spacesForScope,
+  updateStructure,
   type SpaceEntry,
 } from '@/lib/vault-structure';
 
@@ -97,12 +97,6 @@ export async function createSpace(
   const name = normalize(rawName);
   validateName(name);
 
-  const structure = await getStructure();
-  const arr = mutableSpacesForScope(structure, scope, userId);
-  if (arr.some((s) => s.name === name)) {
-    throw new SpaceError(`Space "${name}" already exists`, 409);
-  }
-
   const entry: SpaceEntry = {
     name,
     label: labelFor(name),
@@ -110,8 +104,18 @@ export async function createSpace(
     generated: true,
     authored: true,
   };
-  arr.push(entry);
-  await putStructure(structure);
+
+  // Existence check + push run inside the CAS callback so the declaration is
+  // written against a fresh read. Throwing SpaceError from the callback aborts
+  // the retry loop (updateStructure only retries ConcurrencyError).
+  await updateStructure((structure) => {
+    const arr = mutableSpacesForScope(structure, scope, userId);
+    if (arr.some((s) => s.name === name)) {
+      throw new SpaceError(`Space "${name}" already exists`, 409);
+    }
+    arr.push(entry);
+    return true;
+  });
 
   const sp = resolveScope({ scope, userId });
   await appendLog('created', `${sp.authoredPrefix(name)}`, `Space: ${name}`, sp);
@@ -120,10 +124,13 @@ export async function createSpace(
 }
 
 /**
- * Rename a space within a single scope. Re-keys every document under that
- * scope's `generated/<from>/` and `authored/<from>/` to the new prefix, moves
- * the per-space index file, updates the scope's declaration, and regenerates
- * the scope's indexes. Other scopes are untouched.
+ * Rename a space within a single scope. Claims the new name in the scope's
+ * declaration first (under optimistic concurrency), then re-keys every
+ * document under that scope's `generated/<from>/` and `authored/<from>/` to
+ * the new prefix, moves the per-space index file, and regenerates the scope's
+ * indexes. Other scopes are untouched. If the object move fails after the
+ * name is claimed, the declaration is rolled back to `from` so the space
+ * isn't left pointing at a name with no data.
  */
 export async function renameSpace(
   rawFrom: string,
@@ -142,41 +149,82 @@ export async function renameSpace(
     throw new SpaceError('New name is the same as the current name', 400);
   }
 
-  const structure = await getStructure();
-  const arr = mutableSpacesForScope(structure, scope, userId);
-  const idx = arr.findIndex((s) => s.name === from);
-  if (idx === -1) {
+  // Preliminary validation read — fail fast before any S3 mutation so a
+  // nonexistent source (404) or a name collision (409) never re-keys objects
+  // into an existing space's prefix. The authoritative claim below re-checks
+  // both conditions under CAS against a fresh read.
+  const preview = mutableSpacesForScope(await getStructure(), scope, userId);
+  if (!preview.some((s) => s.name === from)) {
     throw new SpaceError(`Space "${from}" not found`, 404);
   }
-  if (arr.some((s) => s.name === to)) {
+  if (preview.some((s) => s.name === to)) {
     throw new SpaceError(`Space "${to}" already exists`, 409);
   }
 
   const sp = resolveScope({ scope, userId });
-  for (const prefixFor of [sp.generatedPrefix, sp.authoredPrefix]) {
-    const fromPrefix = prefixFor(from);
-    const toPrefix = prefixFor(to);
-    const keys = await listObjects(fromPrefix);
-    for (const key of keys) {
-      const rel = key.slice(fromPrefix.length);
-      const content = await getObject(key);
-      await putObject(`${toPrefix}${rel}`, content);
-      await deleteObject(key);
-    }
-  }
-  // Move the per-space index file if one exists in this scope.
-  const fromIndex = sp.systemKey(`indexes/${from}.md`);
-  try {
-    const content = await getObject(fromIndex);
-    await putObject(sp.systemKey(`indexes/${to}.md`), content);
-    await deleteObject(fromIndex);
-  } catch {
-    // No index for this space in this scope — nothing to move.
-  }
 
-  const entry: SpaceEntry = { ...arr[idx], name: to, label: labelFor(to) };
-  arr[idx] = entry;
-  await putStructure(structure);
+  // Claim `to` by flipping the declaration *before* moving any object. This
+  // must happen first: if the declaration flip happened after the move (the
+  // old order), a concurrent createSpace/renameSpace targeting the same `to`
+  // could land its own declaration in the window between our move and our
+  // flip, and our post-move collision check would then throw 409 after we'd
+  // already copied/deleted the source objects — leaving `from`'s declaration
+  // in place while its data sits under `to`'s prefix. Claiming first makes
+  // the declaration change (not the object move) the atomic point that
+  // decides the race: whichever renamer's CAS write lands first wins the
+  // name, and the loser fails fast with no objects touched.
+  //
+  // Re-locate `from` by name on each attempt — a stale array index is invalid
+  // after a CAS retry re-reads the structure.
+  let entry!: SpaceEntry;
+  await updateStructure((structure) => {
+    const arr = mutableSpacesForScope(structure, scope, userId);
+    const idx = arr.findIndex((s) => s.name === from);
+    if (idx === -1) {
+      throw new SpaceError(`Space "${from}" not found`, 404);
+    }
+    if (arr.some((s) => s.name === to)) {
+      throw new SpaceError(`Space "${to}" already exists`, 409);
+    }
+    entry = { ...arr[idx], name: to, label: labelFor(to) };
+    arr[idx] = entry;
+    return true;
+  });
+
+  // Declaration now says `to`, but no objects have moved yet. If anything
+  // below throws, roll the declaration back to `from` so the space isn't
+  // left claimed-but-empty under `to` while its data still sits under `from`.
+  try {
+    for (const prefixFor of [sp.generatedPrefix, sp.authoredPrefix]) {
+      const fromPrefix = prefixFor(from);
+      const toPrefix = prefixFor(to);
+      const keys = await listObjects(fromPrefix);
+      for (const key of keys) {
+        const rel = key.slice(fromPrefix.length);
+        const content = await getObject(key);
+        await putObject(`${toPrefix}${rel}`, content);
+        await deleteObject(key);
+      }
+    }
+    // Move the per-space index file if one exists in this scope.
+    const fromIndex = sp.systemKey(`indexes/${from}.md`);
+    try {
+      const content = await getObject(fromIndex);
+      await putObject(sp.systemKey(`indexes/${to}.md`), content);
+      await deleteObject(fromIndex);
+    } catch {
+      // No index for this space in this scope — nothing to move.
+    }
+  } catch (err) {
+    await updateStructure((structure) => {
+      const arr = mutableSpacesForScope(structure, scope, userId);
+      const idx = arr.findIndex((s) => s.name === to);
+      if (idx === -1) return false;
+      arr[idx] = { ...arr[idx], name: from, label: labelFor(from) };
+      return true;
+    });
+    throw err;
+  }
 
   await regenerateSpaceIndex(to, sp);
   await regenerateMasterIndex(sp);
@@ -202,10 +250,10 @@ export async function deleteSpace(
     throw new SpaceError('The personal space cannot be deleted', 400);
   }
 
-  const structure = await getStructure();
-  const arr = mutableSpacesForScope(structure, scope, userId);
-  const idx = arr.findIndex((s) => s.name === name);
-  if (idx === -1) {
+  // Preliminary validation read — 404 before any deletion, preserving today's
+  // fast-fail. The authoritative splice runs under CAS below.
+  const preview = mutableSpacesForScope(await getStructure(), scope, userId);
+  if (!preview.some((s) => s.name === name)) {
     throw new SpaceError(`Space "${name}" not found`, 404);
   }
 
@@ -220,8 +268,16 @@ export async function deleteSpace(
     // No index for this space in this scope — nothing to delete.
   }
 
-  arr.splice(idx, 1);
-  await putStructure(structure);
+  // Objects deleted above; drop the declaration under optimistic concurrency
+  // with a fresh findIndex per attempt. A concurrent delete that already
+  // removed the entry is a no-op (nothing left to write).
+  await updateStructure((structure) => {
+    const arr = mutableSpacesForScope(structure, scope, userId);
+    const idx = arr.findIndex((s) => s.name === name);
+    if (idx === -1) return false;
+    arr.splice(idx, 1);
+    return true;
+  });
 
   await regenerateMasterIndex(sp);
   await appendLog('deleted', `${sp.authoredPrefix(name)}`, `Deleted space ${name}`, sp);
