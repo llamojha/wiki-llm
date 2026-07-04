@@ -25,8 +25,8 @@ Every plan carries its own drift check against `fead8f9` — run it first.
 | 012 | Parallelize vault-tree S3 listings | P2 | S | 003 | DONE (single Promise.all wave; byte-identical order; added optional vault-tree.test.ts) |
 | 013 | Home view from the cached index (no full-vault reads) | P2 | M | 003, 010 | DONE (getAllEntries backs GET; SearchEntry gained author/tags/starred; star route now invalidates the index) |
 | 014 | Incremental search/index updates | P3 | L | 004, 012, 013 | TODO |
-| 015 | Consolidated movePrefix/purgePrefix (resumable moves) | P2 | M | 003, 004 | TODO |
-| 016 | Decompose the 1167-line UploadModal | P3 | L | 003 | TODO |
+| 015 | Consolidated movePrefix/purgePrefix (resumable moves) | P2 | M | 003, 004 | DONE (web/lib/vault-ops.ts two-phase movePrefix/purgePrefix/prefixHasObjects + copyObject primitive; all 7 loops replaced; +content-collision 409 preflight and non-.md purge — two deliberate behavior changes) |
+| 016 | Decompose the 1167-line UploadModal | P3 | L | 003 | DONE (folder-tree.ts helpers + library/{use-library-state hook, upload/pending/reindex/folders tabs}; shell 196 lines. STOP #4 coupling resolved via the operator-chosen god-hook: all state stays in the always-mounted hook so tab-switch persistence is unchanged — tabs are pure JSX. app-shell + classNames untouched) |
 | 017 | Delete dead vault-path exports + listSpaces collision | P2 | S | — | DONE |
 | 018 | Repo-root cleanup (parity scaffolding, stale context, AGENTS.md) | P2 | S | — | DONE (portal/ intentionally kept) |
 | 019 | Adopt ESLint (lint is a typecheck alias today) | P3 | M | 003, 004 | TODO |
