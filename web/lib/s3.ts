@@ -63,26 +63,6 @@ function trace(op: string, detail: string): void {
   if (DEBUG_S3) console.log(`[s3] ${op} ${detail}${useMock ? ' (mock)' : ''}`);
 }
 
-/** List top-level folders (spaces) in the vault. */
-export async function listSpaces(): Promise<string[]> {
-  trace('LIST', `spaces under ${prefix || '<root>'}`);
-  if (useMock) return mock.listSpaces();
-  const res = await client().send(
-    new ListObjectsV2Command({
-      Bucket: bucket,
-      Prefix: prefix ? `${prefix}/` : '',
-      Delimiter: '/',
-    }),
-  );
-  return (res.CommonPrefixes ?? [])
-    .map((p) => {
-      const full = p.Prefix ?? '';
-      const rel = prefix ? full.slice(prefix.length + 1) : full;
-      return rel.replace(/\/$/, '');
-    })
-    .filter((s) => s.length > 0);
-}
-
 /** List all .md keys under the vault prefix. Returns keys relative to prefix. */
 export async function listObjects(subPrefix = ''): Promise<string[]> {
   trace('LIST', subPrefix || '<root>');

@@ -27,10 +27,10 @@ Every plan carries its own drift check against `fead8f9` — run it first.
 | 014 | Incremental search/index updates | P3 | L | 004, 012, 013 | TODO |
 | 015 | Consolidated movePrefix/purgePrefix (resumable moves) | P2 | M | 003, 004 | TODO |
 | 016 | Decompose the 1167-line UploadModal | P3 | L | 003 | TODO |
-| 017 | Delete dead vault-path exports + listSpaces collision | P2 | S | — | TODO |
-| 018 | Repo-root cleanup (parity scaffolding, stale context, AGENTS.md) | P2 | S | — | TODO |
+| 017 | Delete dead vault-path exports + listSpaces collision | P2 | S | — | DONE |
+| 018 | Repo-root cleanup (parity scaffolding, stale context, AGENTS.md) | P2 | S | — | DONE (portal/ intentionally kept) |
 | 019 | Adopt ESLint (lint is a typecheck alias today) | P3 | M | 003, 004 | TODO |
-| 020 | Docs sync (flag defaults, TS 6, layout, THEME_VAULT_PREFIX) | P2 | S | 018 preferred | TODO |
+| 020 | Docs sync (flag defaults, TS 6, layout, THEME_VAULT_PREFIX) | P2 | S | 018 preferred | DONE (plans/, portal/ left out of trees — outside 4-fix scope) |
 | 021 | DESIGN: folder-first vault mode + storage-v2 adjudication (specs/storage-v2-proposal.md) | P2 | M–L | — | TODO |
 | 022 | DESIGN: first-class HTML documents | P2 | M | — | TODO |
 | 023 | DESIGN: secure agentic access (MCP-class gateway) | P2 | M | 002, 009 first | TODO |

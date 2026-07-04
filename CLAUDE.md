@@ -32,7 +32,7 @@ in-memory Fuse.js search replaced Postgres FTS for the MVP.
 | `infra/k8s/`, `infra/ecs/` | Deployment manifests — see `docs/deploy/` |
 | `docs/` | Configuration, feature-flag, and deployment docs |
 | `api/` | **Archived** FastAPI backend from the pre-pivot shape. Reference only; may be revived for Phase 6 SaaS |
-| `portal/`, `portal-archive/` | Babel-in-browser prototype — design reference, parity signed off. Do not extend |
+| `portal/` | Babel-in-browser prototype — design reference, parity signed off. Do not extend |
 | `legacy/` | Archived `wiki-llm` (Bedrock CLI + curated `wiki/` tree). Frozen reference. See [`legacy/README.md`](legacy/README.md) |
 
 ## Repo layout
@@ -41,11 +41,14 @@ in-memory Fuse.js search replaced Postgres FTS for the MVP.
 wiki-llm/                  (repo root; product name is Vaultmark)
 ├── web/                   Next.js portal (frontend + API route handlers)
 ├── ingest/                TypeScript ingest CLI
+├── video/                 Demo-video workspace
 ├── infra/
 │   ├── docker-compose.yml Local dev stack
 │   ├── lambda/curate/     AI curation Lambda
 │   ├── k8s/               Kubernetes manifests
 │   └── ecs/               ECS Fargate task definition + IAM policy
+├── infra-cdk/             AWS CDK deploy stack
+├── tests/                 Playwright e2e suite (mock-S3 backed)
 ├── docs/                  Configuration, feature flags, deployment guides
 ├── specs/                 Phase acceptance specs
 ├── api/                   Archived FastAPI backend (reference)
@@ -58,7 +61,7 @@ wiki-llm/                  (repo root; product name is Vaultmark)
 **App (`web/`) — the active product**
 - Next.js **16.2** (App Router, Turbopack, React Server Components)
 - React **19**
-- TypeScript **5.7+**, `strict: true`
+- TypeScript **6.x**, `strict: true`
 - Plain CSS (ported from `portal/styles.css`). No Tailwind, no UI lib
 - API: Next.js Route Handlers under `web/app/api/`
 - Search: in-memory Fuse.js built from S3

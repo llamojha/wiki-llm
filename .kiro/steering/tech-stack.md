@@ -13,7 +13,7 @@ All versions pinned to 2026. Do not upgrade without updating this file and CLAUD
 |---|---|---|
 | Next.js | 16.2 | App Router, Turbopack, RSC |
 | React | 19 | UI framework |
-| TypeScript | 5.7+ | Type safety, strict mode |
+| TypeScript | 6.x | Type safety, strict mode |
 | Plain CSS | — | Ported from `portal/styles.css` |
 | `next/font` | — | IBM Plex Sans/Serif, JetBrains Mono |
 | remark + rehype-sanitize | latest | Markdown rendering pipeline |

@@ -29,7 +29,7 @@ Every feature is individually toggleable via [feature flags](docs/feature-flags.
 
 | Layer | Technology |
 |---|---|
-| App | Next.js 16.2, React 19, TypeScript 5.7+ |
+| App | Next.js 16.2, React 19, TypeScript 6.x |
 | API | Next.js Route Handlers (server-side) |
 | Storage | AWS S3 (Markdown blobs) |
 | Search | In-memory fuzzy search (Fuse.js) |
@@ -42,11 +42,14 @@ Every feature is individually toggleable via [feature flags](docs/feature-flags.
 wiki-llm/
 ├── web/          Next.js portal (frontend + API route handlers)
 ├── ingest/       TypeScript CLI for vault init + batch ingest
+├── video/        Demo-video workspace
 ├── infra/
 │   ├── lambda/curate/   AI curation Lambda
 │   ├── k8s/             Kubernetes manifests
 │   ├── ecs/             ECS Fargate task definition + IAM policy
 │   └── docker-compose.yml
+├── infra-cdk/    AWS CDK deploy stack
+├── tests/        Playwright e2e suite (mock-S3 backed)
 ├── docs/         Configuration, feature flags, deployment guides
 ├── specs/        Phase acceptance specs
 ├── api/          FastAPI backend (archived — replaced by Route Handlers)
@@ -89,7 +92,7 @@ AWS credentials are picked up from the standard chain (`~/.aws/credentials`, ins
 
 ### Feature flags
 
-Every feature ships **on** and can be disabled per deployment with `FEATURE_*` env vars (`FEATURE_AGENT`, `FEATURE_UPLOAD`, `FEATURE_CURATE`, `FEATURE_REINDEX`, `FEATURE_EDITOR`, `FEATURE_SEARCH`, `FEATURE_STAR`, `FEATURE_PUBLISHING`). Flags gate both the UI and the API routes. See [`docs/feature-flags.md`](docs/feature-flags.md).
+The ask-wiki agent (`FEATURE_AGENT`) ships **on** by default; every other feature (`FEATURE_UPLOAD`, `FEATURE_CURATE`, `FEATURE_REINDEX`, `FEATURE_EDITOR`, `FEATURE_SEARCH`, `FEATURE_STAR`, `FEATURE_PUBLISHING`) defaults **off** and is opted in per deployment by setting its `FEATURE_*` var (any value except `off`/`false`/`0`/`no`/`disabled`). Flags gate both the UI and the API routes. See [`docs/feature-flags.md`](docs/feature-flags.md).
 
 ### Verification
 

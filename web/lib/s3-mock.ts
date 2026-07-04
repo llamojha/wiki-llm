@@ -63,15 +63,6 @@ class NoSuchKeyError extends Error {
   }
 }
 
-export async function listSpaces(): Promise<string[]> {
-  const out = new Set<string>();
-  for (const key of store().objects.keys()) {
-    const head = key.split('/')[0];
-    if (head) out.add(head);
-  }
-  return [...out];
-}
-
 export async function listObjects(subPrefix = ''): Promise<string[]> {
   const out: string[] = [];
   for (const key of store().objects.keys()) {

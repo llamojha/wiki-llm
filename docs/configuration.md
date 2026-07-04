@@ -126,6 +126,7 @@ authoring guide and variable reference.
 |---|---|---|---|
 | `THEME_DIR` | no | `<app cwd>/themes` (= `web/themes/`) | Directory scanned for `*.css` theme plugin files. |
 | `THEME_DEFAULT` | no | `dark` | Theme id rendered before a visitor picks one (`light`, `dark`, or a plugin's filename slug). |
+| `THEME_VAULT_PREFIX` | no | unset | S3 key prefix (inside the vault) scanned for `*.css` theme plugins at startup; disabled when unset. See [`theming.md`](theming.md). |
 
 ## Debugging
 

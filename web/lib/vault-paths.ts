@@ -1,3 +1,5 @@
+// Vault path constants + key classification. Scoped-prefix resolution is
+// owned by `web/lib/scope.ts` (resolveScope) — keep it there, not here.
 export const USERS_ROOT = 'users';
 // Inlined at build time (NEXT_PUBLIC_*) so server routes and client
 // components agree on the same value. Rebuild after changing it.
@@ -48,28 +50,8 @@ export function authoredPrefix(space: string): string {
   return `${AUTHORED_ROOT}/${space}/`;
 }
 
-export function userPrefix(userId = DEFAULT_USER_ID): string {
-  return `${USERS_ROOT}/${userId}/`;
-}
-
-export function userRawPrefix(userId = DEFAULT_USER_ID): string {
-  return `${USERS_ROOT}/${userId}/raw/`;
-}
-
-export function userGeneratedPrefix(space: string, userId = DEFAULT_USER_ID): string {
-  return `${USERS_ROOT}/${userId}/generated/${space}/`;
-}
-
-export function userAuthoredPrefix(space: string, userId = DEFAULT_USER_ID): string {
-  return `${USERS_ROOT}/${userId}/authored/${space}/`;
-}
-
 export function personalPrefix(userId = DEFAULT_USER_ID): string {
-  return userAuthoredPrefix(PERSONAL_SPACE, userId);
-}
-
-export function userSystemKey(name: string, userId = DEFAULT_USER_ID): string {
-  return `${USERS_ROOT}/${userId}/_system/${name}`.replace(/\/+/g, '/');
+  return `${USERS_ROOT}/${userId}/authored/${PERSONAL_SPACE}/`;
 }
 
 export function systemKey(name: string): string {
@@ -96,20 +78,6 @@ export function sourceTypeFromKey(key: string): 'generated' | 'authored' | 'pers
   if (key.startsWith(`${GENERATED_ROOT}/`) || key.match(/^users\/[^/]+\/generated\//)) return 'generated';
   if (key.match(/^users\/[^/]+\/authored\/personal\//)) return 'personal';
   return 'authored';
-}
-
-export function generatedSpaceFromKey(key: string): string | null {
-  if (key.startsWith(`${GENERATED_ROOT}/`)) {
-    return key.slice(GENERATED_ROOT.length + 1).split('/')[0] || null;
-  }
-  return key.match(/^users\/[^/]+\/generated\/([^/]+)\//)?.[1] ?? null;
-}
-
-export function authoredSpaceFromKey(key: string): string | null {
-  if (key.startsWith(`${AUTHORED_ROOT}/`)) {
-    return key.slice(AUTHORED_ROOT.length + 1).split('/')[0] || null;
-  }
-  return key.match(/^users\/[^/]+\/authored\/([^/]+)\//)?.[1] ?? null;
 }
 
 export function displayPathForKey(key: string): string {
