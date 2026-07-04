@@ -2,7 +2,7 @@ import matter from 'gray-matter';
 import { NextResponse } from 'next/server';
 
 import { fmString, fmStringOr } from '@/lib/frontmatter';
-import { regenerateIndexesForKey } from '@/lib/index-gen';
+import { regenerateIndexesForKey, removeKeyFromIndexes } from '@/lib/index-gen';
 import { appendLog } from '@/lib/log-append';
 import {
   ConcurrencyError,
@@ -11,7 +11,7 @@ import {
   getObjectWithETag,
   putObject,
 } from '@/lib/s3';
-import { invalidateSearchIndex } from '@/lib/search';
+import { removeSearchEntry, upsertSearchEntry } from '@/lib/search';
 import { displayPathForKey, isDocumentKey, sourceTypeFromKey } from '@/lib/vault-paths';
 import { flagGuard } from '@/lib/flags';
 
@@ -125,7 +125,7 @@ export async function PUT(req: Request, { params }: Params) {
   const logTitle = fmStringOr(fm.title, keyToTitle(key));
   await appendLog('edited', key, logTitle);
   await regenerateIndexesForKey(key);
-  invalidateSearchIndex();
+  await upsertSearchEntry(key);
 
   return NextResponse.json({ id: key, title: logTitle });
 }
@@ -157,9 +157,9 @@ export async function DELETE(_req: Request, { params }: Params) {
   }
 
   await deleteObject(key);
-  await regenerateIndexesForKey(key);
+  await removeKeyFromIndexes(key);
   await appendLog('deleted', key, title);
-  invalidateSearchIndex();
+  removeSearchEntry(key);
 
   return new NextResponse(null, { status: 204 });
 }
