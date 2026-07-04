@@ -3,20 +3,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ICONS } from '@/lib/icons';
 import { withBasePath } from '@/lib/base-path';
+import {
+  type FolderNode,
+  SEG_RE,
+  childExists,
+  countFolders,
+  descendantPaths,
+  findFolder,
+  validPath,
+} from '@/lib/folder-tree';
 import { DEFAULT_USER_ID } from '@/lib/vault-paths';
 import type { FeatureFlags } from '@/lib/flags';
 
 export type LibraryTab = 'upload' | 'pending' | 'reindex' | 'folders';
 
 type Scope = 'shared' | 'user';
-
-/** A node in the nested folder tree returned by GET /api/folders. */
-type FolderNode = {
-  name: string;
-  path: string;
-  indexed: number;
-  children: FolderNode[];
-};
 
 type UploadModalProps = {
   open: boolean;
@@ -32,43 +33,7 @@ type UploadModalProps = {
   s3Location: string;
 };
 
-const SEG_RE = /^[a-z0-9][a-z0-9-]*$/;
 const cleanSeg = (s: string): string => s.trim().replace(/^\/+|\/+$/g, '');
-const validPath = (p: string): boolean => p.length > 0 && p.split('/').every((s) => SEG_RE.test(s));
-
-/** Find a node by path segments within a folder tree. */
-function findFolder(list: FolderNode[], segs: string[]): FolderNode | null {
-  let level = list;
-  let node: FolderNode | null = null;
-  for (const seg of segs) {
-    node = level.find((n) => n.name === seg) ?? null;
-    if (!node) return null;
-    level = node.children;
-  }
-  return node;
-}
-
-/** Paths of every descendant folder, relative to `node` (e.g. `a`, `a/b`). */
-function descendantPaths(node: FolderNode, prefix = ''): string[] {
-  let out: string[] = [];
-  for (const c of node.children) {
-    const p = prefix ? `${prefix}/${c.name}` : c.name;
-    out.push(p);
-    out = out.concat(descendantPaths(c, p));
-  }
-  return out;
-}
-
-/** True if a folder already has a child of the given name at `parentSegs`. */
-function childExists(list: FolderNode[], parentSegs: string[], name: string): boolean {
-  const siblings = parentSegs.length === 0 ? list : findFolder(list, parentSegs)?.children ?? [];
-  return siblings.some((n) => n.name === name);
-}
-
-/** Total folder count across the whole tree. */
-function countFolders(list: FolderNode[]): number {
-  return list.reduce((a, n) => a + 1 + countFolders(n.children), 0);
-}
 
 type FileStatus = 'queued' | 'uploading' | 'indexing' | 'indexed' | 'queued-curate' | 'error';
 type UploadFile = { id: string; name: string; size: number; file: File; status: FileStatus; progress: number; error?: string };
