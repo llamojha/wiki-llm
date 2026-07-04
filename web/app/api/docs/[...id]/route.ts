@@ -25,6 +25,18 @@ export async function GET(_req: Request, { params }: Params) {
   const { id } = await params;
   const key = decodeURIComponent(id.join('/'));
 
+  // Read paths are never feature-gated, so this is the only guard preventing
+  // an arbitrary key from fetching `_system/` state, raw uploads, or another
+  // user's private content. Mirror PUT/DELETE's document-key allowlist, but
+  // return 404 (not 400) so a probe cannot distinguish "forbidden" from
+  // "missing" — same body shape as the not-found response below.
+  if (!isDocumentKey(key)) {
+    return NextResponse.json(
+      { detail: `Document not found: ${key}` },
+      { status: 404 },
+    );
+  }
+
   let raw: string;
   let etag: string;
   try {

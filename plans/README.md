@@ -12,14 +12,14 @@ Every plan carries its own drift check against `fead8f9` — run it first.
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
 | 001 | Fix single-space reindex clobbering the master index | P1 | S | — | DONE |
-| 002 | Document-key allowlist on doc GET + star PATCH | P1 | S | — | TODO |
+| 002 | Document-key allowlist on doc GET + star PATCH | P1 | S | — | DONE |
 | 003 | Run the e2e suite in CI + fix mock listing contract | P1 | S | — | TODO |
 | 004 | Unit-test baseline (vitest): scope isolation, sanitization, paths | P1 | M | — | TODO |
-| 005 | Upload size limit | P1 | S | — | TODO |
-| 006 | Agent tool-input parse guard (no silent `{}`) | P2 | S | — | TODO |
+| 005 | Upload size limit | P1 | S | — | DONE |
+| 006 | Agent tool-input parse guard (no silent `{}`) | P2 | S | — | DONE (unit test deferred to 004) |
 | 007 | ETag CAS for structure.json writes | P2 | M | 004 | TODO |
 | 008 | Curate Lambda manifest CAS + overlapping-job 409 | P2 | M | — | TODO |
-| 009 | Security batch: userId validation, error hygiene, js-yaml override | P2 | S | — | TODO |
+| 009 | Security batch: userId validation, error hygiene, js-yaml override | P2 | S | — | DONE (aws-sdk floor already met; scope unit test deferred to 004) |
 | 010 | Frontmatter normalization (replace `as string` casts) | P3 | S | 004 | TODO |
 | 011 | Append-safe logs (object-per-event) | P3 | S–M | 004 | TODO |
 | 012 | Parallelize vault-tree S3 listings | P2 | S | 003 | TODO |

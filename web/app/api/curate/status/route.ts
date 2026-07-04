@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getObject, headObject } from '@/lib/s3';
-import { resolveScope, type Scope } from '@/lib/scope';
+import { type Scope } from '@/lib/scope';
+import { resolveScopeOr400 } from '@/lib/http-scope';
 import { flagGuard } from '@/lib/flags';
 
 // Lambda writes per-stage heartbeats every few seconds, so the job JSON's
@@ -23,7 +24,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ detail: 'job query param required' }, { status: 400 });
   }
 
-  const scope = resolveScope({ scope: scopeName, userId });
+  const scope = resolveScopeOr400({ scope: scopeName, userId });
+  if (scope instanceof NextResponse) return scope;
 
   try {
     const key = scope.systemKey(`jobs/${jobId}.json`);

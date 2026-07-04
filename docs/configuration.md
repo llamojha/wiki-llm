@@ -108,6 +108,15 @@ disable, or to `on` to enable. The container image bakes the defaults in as
 flag, so the full tunable surface is visible per deployment. See
 [`feature-flags.md`](feature-flags.md) for the full reference.
 
+## Uploads
+
+Gated behind `FEATURE_UPLOAD`. The upload route caps the accepted file size to
+protect the shared Next.js process from oversized payloads.
+
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `UPLOAD_MAX_BYTES` | no | `2097152` (2 MiB) | Max accepted size, in bytes, for `POST /api/upload`. Larger files are rejected with `413`. |
+
 ## Theming
 
 Themes are drop-in CSS plugin files — see [`theming.md`](theming.md) for the

@@ -15,7 +15,9 @@ test.describe('feature flags — all OFF', () => {
     { method: 'POST', path: '/api/docs' },
     { method: 'GET', path: '/api/search?q=anything' },
     { method: 'PATCH', path: '/api/star/authored%2Fwiki%2Fonboarding.md' },
-    { method: 'GET', path: '/api/spaces' },
+    // GET /api/spaces and GET /api/folders are read paths and never gated
+    // (see the route docs) — only their mutations are. GET was listed here by
+    // mistake; folders' GET was already correctly excluded.
     { method: 'POST', path: '/api/spaces' },
     { method: 'PATCH', path: '/api/spaces' },
     { method: 'DELETE', path: '/api/spaces?name=anything' },

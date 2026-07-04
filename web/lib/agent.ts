@@ -168,6 +168,10 @@ export async function* runAgent(opts: RunAgentOpts): AsyncGenerator<AgentEvent> 
     const pendingByIndex = new Map<number, PendingToolUse>();
     // Per-turn buffer for text blocks, keyed by content-block index.
     const textByIndex = new Map<number, string>();
+    // tool_use ids whose input JSON failed to parse (truncated/garbled stream).
+    // Dispatch short-circuits these into the error path instead of running the
+    // tool with a silently-substituted `{}`.
+    const parseErrorsByToolUseId = new Map<string, string>();
 
     let stream: AsyncIterable<unknown>;
     try {
@@ -233,7 +237,22 @@ export async function* runAgent(opts: RunAgentOpts): AsyncGenerator<AgentEvent> 
             try {
               parsedInput = JSON.parse(joined);
             } catch {
-              parsedInput = {};
+              // Record the failure instead of silently coercing to `{}` and
+              // dispatching the tool anyway (which yields an opaque
+              // "outside the active scope"/empty-search failure). Dispatch
+              // routes this id through the existing tool-error path so the
+              // model can retry with well-formed input. The block must still
+              // be pushed — Bedrock requires every tool_use to get a
+              // matching tool_result.
+              parseErrorsByToolUseId.set(
+                pending.toolUseId,
+                `tool input for ${pending.name} was not valid JSON ` +
+                  `(${joined.length} chars received; possibly truncated). ` +
+                  `Re-issue the tool call with complete JSON input.`,
+              );
+              console.warn(
+                `[agent] unparseable tool input for ${pending.name}: ${joined.length} chars`,
+              );
             }
           }
           assistantContent.push({
@@ -305,6 +324,20 @@ export async function* runAgent(opts: RunAgentOpts): AsyncGenerator<AgentEvent> 
       if (!toolUseId || !name) continue;
 
       yield { type: 'tool_use', name: name as AgentToolName, input };
+
+      // Input JSON failed to parse upstream — feed the model a corrective
+      // error rather than dispatching the tool with an empty `{}`. Mirrors
+      // the dispatch catch branch below exactly.
+      const parseError = parseErrorsByToolUseId.get(toolUseId);
+      if (parseError) {
+        toolResultContent.push({
+          toolResult: { toolUseId, content: [{ text: parseError }], status: 'error' },
+        });
+        traceRound.tools.push({ name, input: '<unparseable>', ok: false, error: parseError });
+        if (DEBUG_AGENT) console.warn(`[agent]   tool ${name} PARSE-ERROR: ${parseError}`);
+        yield { type: 'tool_result', name: name as AgentToolName, ok: false, error: parseError };
+        continue;
+      }
 
       try {
         const result = await dispatchTool(

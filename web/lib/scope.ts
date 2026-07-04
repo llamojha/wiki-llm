@@ -54,6 +54,33 @@ const SHARED_GENERATED_ROOT = `${GENERATED_ROOT}/`;
 const SHARED_AUTHORED_ROOT = `${AUTHORED_ROOT}/`;
 const SHARED_SYSTEM_PREFIX = `${SYSTEM_ROOT}/`;
 
+/**
+ * userIds become S3 key segments (`users/<id>/…`), so they must be a safe
+ * slug — the same shape as a space name. A userId containing `/` (or other
+ * characters) would write under a different prefix than the one
+ * `inferScopeFromKey` later reconstructs from the key, silently breaking the
+ * scope isolation invariant. Defined locally: importing from `spaces.ts`
+ * would create an import cycle.
+ */
+const USER_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
+
+export class InvalidUserIdError extends Error {
+  constructor(userId: string) {
+    super(`invalid userId: ${JSON.stringify(userId)} — must match ${USER_ID_RE}`);
+    this.name = 'InvalidUserIdError';
+  }
+}
+
+/**
+ * Whether a userId is a safe S3 key segment. Use at a route boundary to reject
+ * before any state-mutating work — `resolveScope` throws too, but some callers
+ * (e.g. `createSpace`) mutate and persist `structure.json` before they reach
+ * it, so validating up front is what actually prevents a bad entry landing.
+ */
+export function isValidUserId(userId: string): boolean {
+  return USER_ID_RE.test(userId);
+}
+
 function joinSlash(...parts: string[]): string {
   return parts.join('/').replace(/\/+/g, '/');
 }
@@ -71,6 +98,7 @@ export function resolveScope(selector: ScopeSelector): ScopePaths {
   }
 
   const userId = selector.userId ?? DEFAULT_USER_ID;
+  if (!USER_ID_RE.test(userId)) throw new InvalidUserIdError(userId);
   const userRoot = `${USERS_ROOT}/${userId}`;
 
   return {
