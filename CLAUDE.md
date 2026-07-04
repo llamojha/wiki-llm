@@ -32,7 +32,7 @@ in-memory Fuse.js search replaced Postgres FTS for the MVP.
 | `infra/k8s/`, `infra/ecs/` | Deployment manifests — see `docs/deploy/` |
 | `docs/` | Configuration, feature-flag, and deployment docs |
 | `api/` | **Archived** FastAPI backend from the pre-pivot shape. Reference only; may be revived for Phase 6 SaaS |
-| `portal/`, `portal-archive/` | Babel-in-browser prototype — design reference, parity signed off. Do not extend |
+| `portal/` | Babel-in-browser prototype — design reference, parity signed off. Do not extend |
 | `legacy/` | Archived `wiki-llm` (Bedrock CLI + curated `wiki/` tree). Frozen reference. See [`legacy/README.md`](legacy/README.md) |
 
 ## Repo layout
