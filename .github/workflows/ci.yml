@@ -28,11 +28,45 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
+      - run: pnpm test
       - run: pnpm build
         env:
           # Placeholder — route modules require a bucket at import time during
           # `next build`. Real deployments set this at runtime.
           VAULT_BUCKET: build-placeholder
+
+  web-e2e:
+    name: web — e2e (Playwright, mock S3)
+    runs-on: ubuntu-latest
+    # Playwright config and specs live at the repo root, not web/ — no
+    # working-directory override here.
+    steps:
+      - uses: actions/checkout@v7
+
+      # pnpm version comes from package.json `packageManager` (pnpm@10.5.0).
+      # Do NOT add a `version:` input here — having both is an error in v4.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm build
+        env:
+          # e2e runs mock-backed (MOCK_S3=1 via playwright.config.ts); the
+          # bucket is only needed so route modules import during `next build`.
+          VAULT_BUCKET: build-placeholder
+      - run: pnpm test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7
 
   api:
     name: api — lint / typecheck / test

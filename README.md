@@ -91,6 +91,17 @@ AWS credentials are picked up from the standard chain (`~/.aws/credentials`, ins
 
 Every feature ships **on** and can be disabled per deployment with `FEATURE_*` env vars (`FEATURE_AGENT`, `FEATURE_UPLOAD`, `FEATURE_CURATE`, `FEATURE_REINDEX`, `FEATURE_EDITOR`, `FEATURE_SEARCH`, `FEATURE_STAR`, `FEATURE_PUBLISHING`). Flags gate both the UI and the API routes. See [`docs/feature-flags.md`](docs/feature-flags.md).
 
+### Verification
+
+```bash
+pnpm typecheck                              # tsc --noEmit
+pnpm test:unit                              # vitest — pure-function unit tests
+VAULT_BUCKET=build-placeholder pnpm build   # required before e2e
+pnpm test:e2e                               # Playwright — runs against an in-memory S3 mock (no AWS)
+```
+
+The e2e suite requires a prior `pnpm build`; it starts flags-on and flags-off Next servers and drives the real API routes with `MOCK_S3=1`. All four run in CI.
+
 ## S3 vault layout
 
 ```
