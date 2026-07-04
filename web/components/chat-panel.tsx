@@ -366,7 +366,7 @@ export function ChatPanel({ open, onClose, onOpenDoc, onDraftFromChat, contextDo
   // Cross-component "ask" event from elsewhere in the app (e.g. home view).
   useEffect(() => {
     const onAsk = (e: Event) => {
-      send((e as CustomEvent<string>).detail);
+      void send((e as CustomEvent<string>).detail);
     };
     window.addEventListener(ASK_EVENT, onAsk);
     return () => window.removeEventListener(ASK_EVENT, onAsk);
@@ -420,7 +420,7 @@ export function ChatPanel({ open, onClose, onOpenDoc, onDraftFromChat, contextDo
       // Clear the refusal from the prior message so the UI doesn't show a stale
       // button after the next response arrives.
       patchMessage(msg.id, { refuse: undefined });
-      send(msg.question, { forceUnsourcedGeneration: true, questionOverride: msg.question });
+      void send(msg.question, { forceUnsourcedGeneration: true, questionOverride: msg.question });
     },
     [patchMessage, send],
   );
@@ -583,7 +583,7 @@ export function ChatPanel({ open, onClose, onOpenDoc, onDraftFromChat, contextDo
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                send(input);
+                void send(input);
               }
             }}
             placeholder="Ask about anything in your docs…"

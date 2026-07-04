@@ -29,7 +29,7 @@ Every plan carries its own drift check against `fead8f9` — run it first.
 | 016 | Decompose the 1167-line UploadModal | P3 | L | 003 | DONE (folder-tree.ts helpers + library/{use-library-state hook, upload/pending/reindex/folders tabs}; shell 196 lines. STOP #4 coupling resolved via the operator-chosen god-hook: all state stays in the always-mounted hook so tab-switch persistence is unchanged — tabs are pure JSX. app-shell + classNames untouched) |
 | 017 | Delete dead vault-path exports + listSpaces collision | P2 | S | — | DONE |
 | 018 | Repo-root cleanup (parity scaffolding, stale context, AGENTS.md) | P2 | S | — | DONE (portal/ intentionally kept) |
-| 019 | Adopt ESLint (lint is a typecheck alias today) | P3 | M | 003, 004 | TODO |
+| 019 | Adopt ESLint (lint is a typecheck alias today) | P3 | M | 003, 004 | DONE (web/eslint.config.mjs flat config: next core-web-vitals + typescript-eslint; eslint pinned to ^9 — plugins don't yet support 10. Baseline 19 errors→0: 6 no-floating-promises fixed with `void`, 1 unescaped entity, and the react-compiler-era react-hooks rules set to `warn`+TODO(ratchet). `lint`→eslint; CI web job runs it. 14 warnings remain by design) |
 | 020 | Docs sync (flag defaults, TS 6, layout, THEME_VAULT_PREFIX) | P2 | S | 018 preferred | DONE (plans/, portal/ left out of trees — outside 4-fix scope) |
 | 021 | DESIGN: folder-first vault mode + storage-v2 adjudication (specs/storage-v2-proposal.md) | P2 | M–L | — | TODO |
 | 022 | DESIGN: first-class HTML documents | P2 | M | — | TODO |

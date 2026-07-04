@@ -98,7 +98,7 @@ export function HomeView({ view, onOpen, onAsk, onAskPrompt, onUpload, prompts, 
             <span>Ask the wiki</span>
             <span className="ask-hero-beta">MVP 2 · beta</span>
           </div>
-          <h2 className="ask-hero-title">Get an answer grounded in your team's docs.</h2>
+          <h2 className="ask-hero-title">Get an answer grounded in your team&apos;s docs.</h2>
           <p className="ask-hero-sub">Cited, permission-filtered, and ready to save as a page in your personal wiki.</p>
           <button className="ask-hero-input" onClick={() => onAsk()}>
             <span style={{ color: 'var(--accent)' }}>{ICONS.spark}</span>

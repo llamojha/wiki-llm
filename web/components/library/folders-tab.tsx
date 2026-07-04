@@ -48,7 +48,7 @@ export function FoldersTab({ lib, onClose, s3Location }: FoldersTabProps) {
               <input ref={editInputRef} className="upload-input" value={editValue}
                      disabled={folderBusy}
                      onChange={(e) => setEditValue(e.target.value)}
-                     onKeyDown={(e) => { if (e.key === 'Enter') submitRename(key); if (e.key === 'Escape') setEditingPath(null); }}
+                     onKeyDown={(e) => { if (e.key === 'Enter') void submitRename(key); if (e.key === 'Escape') setEditingPath(null); }}
                      style={{ flex: 1 }} />
               <div className="folder-item-actions">
                 <button className="icon-btn" disabled={folderBusy} onClick={() => submitRename(key)} title="Confirm">{ICONS.check}</button>
@@ -89,7 +89,7 @@ export function FoldersTab({ lib, onClose, s3Location }: FoldersTabProps) {
                 <input ref={childInputRef} className="upload-input" value={childValue}
                        disabled={folderBusy}
                        onChange={(e) => setChildValue(e.target.value)}
-                       onKeyDown={(e) => { if (e.key === 'Enter') submitAddChild(); if (e.key === 'Escape') setAddingChildPath(null); }}
+                       onKeyDown={(e) => { if (e.key === 'Enter') void submitAddChild(); if (e.key === 'Escape') setAddingChildPath(null); }}
                        placeholder={`new subfolder in ${node.name}`} style={{ flex: 1 }} />
                 <div className="folder-item-actions">
                   <button className="icon-btn" disabled={!childValid || folderBusy} onClick={submitAddChild} title="Create">{ICONS.check}</button>
@@ -112,7 +112,7 @@ export function FoldersTab({ lib, onClose, s3Location }: FoldersTabProps) {
                  disabled={folderBusy}
                  placeholder="handbook  ·  or nested:  handbook/onboarding"
                  onChange={(e) => setNewFolder(e.target.value)}
-                 onKeyDown={(e) => { if (e.key === 'Enter') createFolderReq(); }} />
+                 onKeyDown={(e) => { if (e.key === 'Enter') void createFolderReq(); }} />
           <button className="btn primary" disabled={!newFolderValid || folderBusy} onClick={createFolderReq}>
             {ICONS.plus} Create
           </button>
