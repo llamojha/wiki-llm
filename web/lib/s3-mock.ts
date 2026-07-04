@@ -75,7 +75,9 @@ export async function listSpaces(): Promise<string[]> {
 export async function listObjects(subPrefix = ''): Promise<string[]> {
   const out: string[] = [];
   for (const key of store().objects.keys()) {
-    if (!subPrefix || key.startsWith(subPrefix)) out.push(key);
+    if ((!subPrefix || key.startsWith(subPrefix)) && key.endsWith('.md')) {
+      out.push(key);
+    }
   }
   return out;
 }
