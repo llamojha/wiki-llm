@@ -78,8 +78,9 @@ function spaceFromKey(key: string): string | null {
 
 /**
  * Regenerate the master `index.md` for the given scope. Aggregates every
- * declared `indexed` space's content under that scope. Personal is excluded
- * from the master view.
+ * declared `indexed` space's content under that scope. The reserved `personal`
+ * space is implicit (never declared) — it belongs in the user's own master
+ * catalog but is excluded from the shared view.
  */
 export async function regenerateMasterIndex(
   scope: ScopePaths = resolveScope({ scope: 'shared' }),
@@ -87,8 +88,12 @@ export async function regenerateMasterIndex(
   const structure = await getStructure();
   const spaces = spacesForScope(structure, scope.scope, scope.userId)
     .filter((s) => s.indexed)
-    .map((s) => s.name)
-    .filter((name) => name !== 'personal' || scope.scope === 'user');
+    .map((s) => s.name);
+  // Personal is implicit — never in the declared list — so add it explicitly
+  // for user scope so a user's personal docs stay in their master catalog.
+  if (scope.scope === 'user' && !spaces.includes('personal')) {
+    spaces.push('personal');
+  }
   const sections: string[] = [];
 
   for (const space of spaces.sort()) {
