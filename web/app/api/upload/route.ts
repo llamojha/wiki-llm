@@ -61,6 +61,22 @@ export async function POST(req: Request) {
   const blocked = flagGuard('upload');
   if (blocked) return blocked;
 
+  // Reject before `req.formData()` buffers the whole body into memory — that
+  // parse is the actual DoS surface, so a post-parse `file.size` check alone
+  // is too late. Content-Length covers the entire multipart body (file +
+  // fields + boundaries), so it's an upper bound on the file size: if the
+  // body fits the cap the file does too. Absent/lying Content-Length (e.g.
+  // chunked transfer) still falls through to the exact `file.size` check
+  // below — a fully streaming cap would need a custom multipart parser, out
+  // of scope for the single-user MVP.
+  const contentLength = Number(req.headers.get('content-length'));
+  if (Number.isFinite(contentLength) && contentLength > UPLOAD_MAX_BYTES) {
+    return NextResponse.json(
+      { detail: `request body exceeds the ${UPLOAD_MAX_BYTES}-byte upload limit` },
+      { status: 413 },
+    );
+  }
+
   const form = await req.formData();
   const file = form.get('file') as File | null;
   const space = form.get('space') as string | null;

@@ -71,6 +71,16 @@ export class InvalidUserIdError extends Error {
   }
 }
 
+/**
+ * Whether a userId is a safe S3 key segment. Use at a route boundary to reject
+ * before any state-mutating work — `resolveScope` throws too, but some callers
+ * (e.g. `createSpace`) mutate and persist `structure.json` before they reach
+ * it, so validating up front is what actually prevents a bad entry landing.
+ */
+export function isValidUserId(userId: string): boolean {
+  return USER_ID_RE.test(userId);
+}
+
 function joinSlash(...parts: string[]): string {
   return parts.join('/').replace(/\/+/g, '/');
 }

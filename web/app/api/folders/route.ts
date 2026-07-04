@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { flagGuard } from '@/lib/flags';
+import { userIdGuard } from '@/lib/http-scope';
 import { InvalidUserIdError, type Scope } from '@/lib/scope';
 import {
   SpaceError,
@@ -76,6 +77,8 @@ export async function POST(req: Request) {
   }
 
   const { scope, userId } = resolveTarget(body.scope, body.userId);
+  const bad = userIdGuard(userId);
+  if (bad) return bad;
   try {
     const node = await createFolder(body.path, scope, userId);
     return NextResponse.json(node, { status: 201 });
@@ -99,6 +102,8 @@ export async function PATCH(req: Request) {
   }
 
   const { scope, userId } = resolveTarget(body.scope, body.userId);
+  const bad = userIdGuard(userId);
+  if (bad) return bad;
   try {
     const node = await renameFolder(body.from, body.to, scope, userId);
     return NextResponse.json(node);
@@ -118,6 +123,8 @@ export async function DELETE(req: Request) {
   }
 
   const { scope, userId } = resolveTarget(params.get('scope'), params.get('userId'));
+  const bad = userIdGuard(userId);
+  if (bad) return bad;
   try {
     await deleteFolder(path, scope, userId);
     return new NextResponse(null, { status: 204 });

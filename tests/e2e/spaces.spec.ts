@@ -34,6 +34,20 @@ test.describe('folder management', () => {
     expect(reserved.status()).toBe(400);
   });
 
+  test('rejects an invalid userId without mutating structure.json', async ({ request }) => {
+    const before = (await dumpVault(request))['_system/structure.json'];
+
+    const res = await request.post('/api/spaces', {
+      data: { name: 'notes', scope: 'user', userId: 'a/b' },
+    });
+    expect(res.status()).toBe(400);
+
+    // The guard must run before createSpace persists anything — structure.json
+    // is byte-for-byte unchanged, with no entry under the bogus user.
+    const after = (await dumpVault(request))['_system/structure.json'];
+    expect(after).toBe(before);
+  });
+
   test('rejects creating a duplicate space', async ({ request }) => {
     const res = await request.post('/api/spaces', { data: { name: 'wiki' } });
     expect(res.status()).toBe(409);

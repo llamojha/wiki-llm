@@ -2,10 +2,30 @@ import { NextResponse } from 'next/server';
 
 import {
   InvalidUserIdError,
+  isValidUserId,
   resolveScope,
   type ScopePaths,
   type ScopeSelector,
 } from '@/lib/scope';
+
+/**
+ * Route-boundary guard for a request-supplied `userId`, for handlers that pass
+ * it to a state-mutating helper (`createSpace`, `createFolder`, …) rather than
+ * straight to `resolveScope`. Returns a 400 `NextResponse` for an invalid id,
+ * else `null` — mirrors `flagGuard`:
+ *
+ *   const bad = userIdGuard(userId);
+ *   if (bad) return bad;
+ *
+ * Reject here, before any mutation, so a bad id never persists to
+ * `structure.json`.
+ */
+export function userIdGuard(userId: string | undefined): NextResponse | null {
+  if (userId !== undefined && !isValidUserId(userId)) {
+    return NextResponse.json({ detail: 'invalid userId' }, { status: 400 });
+  }
+  return null;
+}
 
 /**
  * `resolveScope` for route handlers that take a request-supplied `userId`,
