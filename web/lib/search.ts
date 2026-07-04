@@ -114,7 +114,8 @@ export async function searchScoped(
     .slice(0, limit);
 }
 
-function isAllowedByScope(key: string, options: SearchOptions): boolean {
+/** Exported for tests + route reuse. */
+export function isAllowedByScope(key: string, options: SearchOptions): boolean {
   const scope = options.scope ?? 'both';
   if (scope === 'both') return true;
   const inferred = inferScopeFromKey(key);
