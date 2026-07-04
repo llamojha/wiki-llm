@@ -1,4 +1,4 @@
-import { getObject, putObject } from '@/lib/s3';
+import { ConcurrencyError, getObject, getObjectWithETag, putObject } from '@/lib/s3';
 import {
   DEFAULT_USER_ID,
   DEFAULT_USER_ROOT,
@@ -118,9 +118,72 @@ export async function getStructure(): Promise<VaultStructure> {
   }
 }
 
-/** Write structure.json to S3. */
-export async function putStructure(structure: VaultStructure): Promise<void> {
-  await putObject(STRUCTURE_KEY, JSON.stringify(structure, null, 2));
+/**
+ * Read structure.json with its S3 ETag for optimistic concurrency.
+ *
+ * `etag` is `null` when no compare-and-swap is possible: the primary key is
+ * absent (a legacy `structure.json` was read, or the default is returned). In
+ * that case the first write must be unconditional — see `updateStructure`.
+ * The default structure is cloned so callers can mutate it without corrupting
+ * the shared module constant.
+ */
+export async function getStructureWithETag(): Promise<{
+  structure: VaultStructure;
+  etag: string | null;
+}> {
+  try {
+    const { content, etag } = await getObjectWithETag(STRUCTURE_KEY);
+    return { structure: JSON.parse(content) as VaultStructure, etag };
+  } catch {
+    try {
+      const raw = await getObject('structure.json');
+      return { structure: JSON.parse(raw) as VaultStructure, etag: null };
+    } catch {
+      return { structure: structuredClone(DEFAULT_STRUCTURE), etag: null };
+    }
+  }
+}
+
+const MAX_CAS_ATTEMPTS = 3;
+
+/**
+ * Read-mutate-write structure.json with optimistic concurrency.
+ *
+ * `mutate` receives a fresh structure and either mutates it in place and
+ * returns true (persist) or returns false (no-op, e.g. the space already
+ * exists). The whole read+mutate is retried on `ConcurrencyError` up to 3
+ * attempts so a concurrent writer's change is re-read and re-merged instead of
+ * clobbered. Non-concurrency errors thrown from `mutate` (e.g. a
+ * `SpaceError`) propagate immediately and abort the loop.
+ *
+ * When the manifest does not exist yet the first write is unconditional (no
+ * `ifMatch`); two racing first-writes are resolved by the retry on the next
+ * loop, so `putObjectIfAbsent` is deliberately not used here.
+ */
+export async function updateStructure(
+  mutate: (structure: VaultStructure) => boolean | Promise<boolean>,
+): Promise<VaultStructure> {
+  let lastConflict: ConcurrencyError | undefined;
+  for (let attempt = 0; attempt < MAX_CAS_ATTEMPTS; attempt++) {
+    const { structure, etag } = await getStructureWithETag();
+    const shouldWrite = await mutate(structure);
+    if (!shouldWrite) return structure;
+    try {
+      await putObject(
+        STRUCTURE_KEY,
+        JSON.stringify(structure, null, 2),
+        etag ?? undefined,
+      );
+      return structure;
+    } catch (err) {
+      if (err instanceof ConcurrencyError) {
+        lastConflict = err;
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastConflict ?? new ConcurrencyError();
 }
 
 /**
@@ -141,9 +204,9 @@ export function spacesForScope(
 
 /**
  * Locate the mutable spaces array for a scope inside `structure`, creating the
- * user entry / array as needed. Mutating the returned array and then calling
- * `putStructure(structure)` persists the change. Use this for writes;
- * `spacesForScope` for reads.
+ * user entry / array as needed. Mutate the returned array from inside an
+ * `updateStructure` callback to persist the change under optimistic
+ * concurrency. Use this for writes; `spacesForScope` for reads.
  */
 export function mutableSpacesForScope(
   structure: VaultStructure,
@@ -170,10 +233,11 @@ export async function ensureSpaceInStructure(
   scope: 'shared' | 'user' = 'shared',
   userId?: string,
 ): Promise<void> {
-  const structure = await getStructure();
-  const arr = mutableSpacesForScope(structure, scope, userId);
-  if (arr.some((s) => s.name === space)) return;
-  const label = space.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-  arr.push({ name: space, label, indexed: true });
-  await putStructure(structure);
+  await updateStructure((structure) => {
+    const arr = mutableSpacesForScope(structure, scope, userId);
+    if (arr.some((s) => s.name === space)) return false;
+    const label = space.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    arr.push({ name: space, label, indexed: true });
+    return true;
+  });
 }
