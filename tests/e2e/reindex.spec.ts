@@ -92,4 +92,71 @@ test.describe('reindex', () => {
     expect(master).toContain('## Wiki');
     expect(master).toContain('## Articles');
   });
+
+  test('single-space user reindex preserves the implicit personal section', async ({ request }) => {
+    // A user with one declared space (`notes`) alongside the implicit
+    // `personal` space. The default fixture already seeds personal docs under
+    // users/default/authored/personal/.
+    const structure = {
+      version: 3,
+      roots: {
+        raw: 'raw/',
+        generated: 'generated/',
+        authored: 'authored/',
+        users: 'users/',
+        system: '_system/',
+      },
+      defaultUser: 'default',
+      users: [
+        {
+          id: 'default',
+          label: 'My wiki',
+          default: true,
+          prefix: 'users/default/',
+          root: 'users/default/',
+          roots: {
+            raw: 'users/default/raw/',
+            generated: 'users/default/generated/',
+            authored: 'users/default/authored/',
+            system: 'users/default/_system/',
+          },
+          spaces: [
+            { name: 'notes', label: 'Notes', indexed: true, generated: true, authored: true },
+          ],
+        },
+      ],
+      spaces: [
+        { name: 'wiki', label: 'Wiki', indexed: true, generated: true, authored: true },
+        { name: 'personal', label: 'Personal', indexed: false },
+      ],
+      ingest: { space: 'wiki', rawPrefix: 'raw/' },
+    };
+    const noteMd = `---\ntitle: Sprint Notes\nsource_type: authored\n---\n\n# Sprint Notes\n\nRunning notes.\n`;
+    await seedVault(request, {
+      '_system/structure.json': JSON.stringify(structure, null, 2),
+      'users/default/_system/structure.json': JSON.stringify(structure, null, 2),
+      'users/default/authored/notes/sprint.md': noteMd,
+    });
+
+    const userMaster = () => dumpVault(request).then((d) => d['users/default/_system/index.md']);
+
+    // Full user re-index — master must carry both Notes and Personal.
+    const full = await request.post('/api/reindex', { data: { scope: 'user' } });
+    expect(full.ok()).toBeTruthy();
+    await full.text();
+
+    let master = await userMaster();
+    expect(master).toContain('## Notes');
+    expect(master).toContain('## Personal');
+
+    // Re-index only the notes space. The regression: regenerateMasterIndex
+    // dropped the implicit Personal section because it isn't a declared space.
+    const single = await request.post('/api/reindex', { data: { scope: 'user', space: 'notes' } });
+    expect(single.ok()).toBeTruthy();
+    await single.text();
+
+    master = await userMaster();
+    expect(master).toContain('## Notes');
+    expect(master).toContain('## Personal');
+  });
 });
