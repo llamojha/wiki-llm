@@ -88,3 +88,62 @@ test.describe('curate (process pending)', () => {
     });
   });
 });
+
+/**
+ * Overlapping-job guard (plan 008 step 3). These hit the *real*
+ * `POST /api/curate/start` route (via the `request` fixture, which bypasses
+ * `page.route` mocks), asserting it refuses to start a second job while one is
+ * already processing the same scope. A placeholder `CURATE_LAMBDA_ARN` is set
+ * in playwright.config.ts so the route reaches the guard; no Lambda is invoked
+ * because the 409 short-circuits before the invoke, and the terminal-job case
+ * stops at "no raw files" before it.
+ */
+test.describe('curate — overlapping-job guard', () => {
+  const processingJob = (id: string) => JSON.stringify({
+    id,
+    status: 'processing',
+    space: 'wiki',
+    scope: 'shared',
+    total: 3,
+    completed: 1,
+    files: [],
+    startedAt: new Date().toISOString(),
+    completedAt: null,
+    error: null,
+  });
+
+  test('refuses a second start while a job is processing (409)', async ({ request }) => {
+    await seedVault(request, {
+      '_system/jobs/job-active.json': processingJob('job-active'),
+    });
+
+    const res = await request.post('/api/curate/start', { data: { space: 'wiki' } });
+    expect(res.status()).toBe(409);
+    const body = await res.json();
+    expect(body.detail).toContain('already running');
+    expect(body.jobId).toBe('job-active');
+  });
+
+  test('a terminal (done) job does not block a new start', async ({ request }) => {
+    await seedVault(request, {
+      '_system/jobs/job-old.json': JSON.stringify({
+        id: 'job-old',
+        status: 'done',
+        space: 'wiki',
+        scope: 'shared',
+        total: 1,
+        completed: 1,
+        files: [],
+        startedAt: '2026-05-01T00:00:00.000Z',
+        completedAt: '2026-05-01T00:01:00.000Z',
+        error: null,
+      }),
+    });
+
+    // Passes the overlap guard, then stops at "no raw files found" (the default
+    // seed has no raw/ files) — either way, not a 409.
+    const res = await request.post('/api/curate/start', { data: { space: 'wiki' } });
+    expect(res.status()).not.toBe(409);
+    expect(res.status()).toBe(404);
+  });
+});

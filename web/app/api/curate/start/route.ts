@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { LambdaClient, InvokeCommand, InvocationType } from '@aws-sdk/client-lambda';
-import { getObject, listObjects, putObject } from '@/lib/s3';
+import { getObject, headObject, listAllKeys, listObjects, putObject } from '@/lib/s3';
 import { getIngestPolicy } from '@/lib/ingest-policy';
 import { type Scope } from '@/lib/scope';
 import { resolveScopeOr400 } from '@/lib/http-scope';
@@ -11,6 +11,36 @@ const LAMBDA_ARN = process.env.CURATE_LAMBDA_ARN;
 const BUCKET = process.env.VAULT_BUCKET ?? '';
 const PREFIX = process.env.VAULT_PREFIX ?? '';
 const LAMBDA_REGION = process.env.CURATE_LAMBDA_REGION ?? 'eu-central-1';
+
+// A `processing` job whose file has not been touched within this window is
+// treated as dead (the Lambda times out at 5 min and heartbeats the job file
+// every few seconds while working), so a new start is allowed. Anything more
+// recent means a job is genuinely in flight → refuse with 409.
+const STALE_JOB_MS = 10 * 60 * 1000;
+
+/**
+ * Whether the given scope already has a curate job actively processing. Scans
+ * the scope's job files and, for any still marked `processing`, checks the
+ * object's last-modified heartbeat against the staleness window. Returns the
+ * live job's id, or null when the scope is free to start a new job.
+ */
+async function activeJobId(systemKey: (name: string) => string): Promise<string | null> {
+  const keys = await listAllKeys(systemKey('jobs/'));
+  for (const key of keys) {
+    if (!key.endsWith('.json')) continue;
+    let job: { id?: string; status?: string };
+    try {
+      job = JSON.parse(await getObject(key));
+    } catch {
+      continue; // unreadable/partial job file — ignore
+    }
+    if (job.status !== 'processing') continue;
+    const meta = await headObject(key);
+    const ageMs = meta.lastModified ? Date.now() - meta.lastModified.getTime() : Infinity;
+    if (ageMs <= STALE_JOB_MS) return job.id ?? key;
+  }
+  return null;
+}
 
 let _lambda: LambdaClient | null = null;
 function lambdaClient(): LambdaClient {
@@ -65,6 +95,17 @@ export async function POST(req: Request) {
 
   if (space !== policy.space) {
     return NextResponse.json({ detail: `curation currently only supports the ${policy.space} space` }, { status: 400 });
+  }
+
+  // Refuse to start a second job while one is already processing this scope —
+  // overlapping jobs read the same manifest baseline and re-curate files the
+  // other already finished. The client can poll the returned jobId instead.
+  const runningJobId = await activeJobId(scope.systemKey);
+  if (runningJobId) {
+    return NextResponse.json(
+      { detail: 'a curate job is already running for this scope', jobId: runningJobId },
+      { status: 409 },
+    );
   }
 
   const batchLimit = typeof limit === 'number' && Number.isInteger(limit)
