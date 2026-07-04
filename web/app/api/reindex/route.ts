@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import matter from 'gray-matter';
 
 import { getObject, listObjects, putObject } from '@/lib/s3';
+import { regenerateMasterIndex } from '@/lib/index-gen';
 import { getStructure, spacesForScope } from '@/lib/vault-structure';
 import { isDocumentKey } from '@/lib/vault-paths';
 import { resolveScope, type Scope } from '@/lib/scope';
@@ -100,19 +101,29 @@ export async function POST(req: Request) {
           await putObject(scope.systemKey(`indexes/${sk.space}.md`), indexBody);
         }
 
-        // Master index — shared excludes personal, user scope includes everything.
-        const masterSpaces = scope.scope === 'shared'
-          ? spaceKeys.filter((sk) => sk.space !== 'personal')
-          : spaceKeys;
-        const sections: string[] = [];
-        for (const sk of masterSpaces.sort((a, b) => a.space.localeCompare(b.space))) {
-          const lines = spaceLines.get(sk.space);
-          if (!lines?.length) continue;
-          const label = declaredSpaces.find((s) => s.name === sk.space)?.label ?? toTitleCase(sk.space);
-          sections.push(`## ${label}\n${lines.join('\n')}`);
+        // Master index.
+        if (space) {
+          // Single-space mode: the per-space index above is enough. Rebuild the
+          // master from ALL declared spaces so the other sections are not
+          // dropped (spaceKeys only holds the one re-indexed space here).
+          await regenerateMasterIndex(scope);
+        } else {
+          // Full mode: spaceKeys covers every declared space; build inline to
+          // avoid re-reading each document a second time.
+          // Shared excludes personal, user scope includes everything.
+          const masterSpaces = scope.scope === 'shared'
+            ? spaceKeys.filter((sk) => sk.space !== 'personal')
+            : spaceKeys;
+          const sections: string[] = [];
+          for (const sk of masterSpaces.sort((a, b) => a.space.localeCompare(b.space))) {
+            const lines = spaceLines.get(sk.space);
+            if (!lines?.length) continue;
+            const label = declaredSpaces.find((s) => s.name === sk.space)?.label ?? toTitleCase(sk.space);
+            sections.push(`## ${label}\n${lines.join('\n')}`);
+          }
+          const masterBody = `---\ntitle: Index\ntype: nav\nupdated: ${new Date().toISOString()}\n---\n\n${sections.join('\n\n')}\n`;
+          await putObject(scope.systemKey('index.md'), masterBody);
         }
-        const masterBody = `---\ntitle: Index\ntype: nav\nupdated: ${new Date().toISOString()}\n---\n\n${sections.join('\n\n')}\n`;
-        await putObject(scope.systemKey('index.md'), masterBody);
 
         invalidateSearchIndex();
 
