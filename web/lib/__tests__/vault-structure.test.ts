@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { putObject } from '@/lib/s3';
+import { putObject, putObjectIfAbsent } from '@/lib/s3';
 import { __resetWith } from '@/lib/s3-mock';
 import { systemKey } from '@/lib/vault-paths';
 import {
@@ -53,14 +53,35 @@ describe('updateStructure (structure.json CAS)', () => {
     expect(await sharedSpaceNames()).toEqual(['a', 'b']);
   });
 
-  it('writes the first structure unconditionally when none exists', async () => {
+  it('writes the first structure via a create precondition when none exists', async () => {
     // Empty store — getStructureWithETag yields the default with etag=null.
+    // The write must go through putObjectIfAbsent (If-None-Match: *), not an
+    // unconditional putObject.
     await updateStructure((s) => {
       mutableSpacesForScope(s, 'shared').push({ name: 'a', label: 'A', indexed: true });
       return true;
     });
 
     expect(await sharedSpaceNames()).toEqual(['a']);
+  });
+
+  it('retries the create when a racing first-writer wins', async () => {
+    // Two concurrent first-writers both see etag=null. Simulate the other
+    // writer landing "b" via putObjectIfAbsent between our read and our write
+    // — our create must conflict (ObjectAlreadyExistsError) and retry, ending
+    // up with both spaces declared instead of silently dropping "a".
+    let injected = false;
+    await updateStructure(async (s) => {
+      mutableSpacesForScope(s, 'shared').push({ name: 'a', label: 'A', indexed: true });
+      if (!injected) {
+        injected = true;
+        const other = structureWith('b');
+        await putObjectIfAbsent(STRUCTURE_KEY, JSON.stringify(other, null, 2));
+      }
+      return true;
+    });
+
+    expect(await sharedSpaceNames()).toEqual(expect.arrayContaining(['a', 'b']));
   });
 
   it('no-op callback (returns false) does not write', async () => {

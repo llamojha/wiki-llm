@@ -5,6 +5,7 @@ import {
   getObjectWithETagOrNull,
   ManifestConflictError,
   putJson,
+  putJsonIfAbsent,
 } from './s3.js';
 import type { ScopePaths } from './scope.js';
 
@@ -55,8 +56,10 @@ export async function saveManifest(
 /**
  * Read the manifest together with its S3 ETag for compare-and-swap writes.
  * `etag` is `null` when no CAS is possible: the primary manifest is absent, or
- * only the legacy `_processed.json` exists (the first CAS write then lands the
- * primary key unconditionally, migrating the legacy manifest forward).
+ * only the legacy `_processed.json` exists. In that case `mergeWithRetry`
+ * issues a create (`If-None-Match: *`) instead of a conditional overwrite, so
+ * a racing first-writer is forced to conflict and retry rather than silently
+ * losing its entry.
  */
 export async function getManifestWithETag(
   bucket: string,
@@ -124,11 +127,20 @@ const MAX_MANIFEST_CAS_ATTEMPTS = 5;
 
 export type ManifestReader = () => Promise<{ manifest: ProcessedManifest; etag: string | null }>;
 export type ManifestWriter = (manifest: ProcessedManifest, ifMatch?: string) => Promise<void>;
+export type ManifestCreator = (manifest: ProcessedManifest) => Promise<void>;
 
 /**
  * Compare-and-swap engine for a single manifest entry. Re-reads on conflict so
  * a concurrent invocation's entries merge instead of last-writer-wins.
- * Injectable read/write make the retry logic unit-testable without S3.
+ *
+ * When `read()` returns `etag: null` (no primary manifest key exists yet —
+ * fresh scope, or legacy-only manifest) the write goes through `create`
+ * instead of `write`, using an `If-None-Match: *` precondition. That closes
+ * the race where two invocations both observe no manifest and both write
+ * unconditionally: only one create wins, the other gets a conflict and loops
+ * back to re-read/re-merge against what the winner just wrote.
+ *
+ * Injectable read/write/create make the retry logic unit-testable without S3.
  */
 export async function mergeWithRetry(
   read: ManifestReader,
@@ -136,6 +148,7 @@ export async function mergeWithRetry(
   rawKey: string,
   entry: ProcessedFileEntry,
   maxAttempts = MAX_MANIFEST_CAS_ATTEMPTS,
+  create: ManifestCreator = (manifest) => write(manifest),
 ): Promise<void> {
   let lastConflict: ManifestConflictError | undefined;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -144,7 +157,11 @@ export async function mergeWithRetry(
       files: { ...manifest.files, [rawKey]: entry },
     };
     try {
-      await write(merged, etag ?? undefined);
+      if (etag == null) {
+        await create(merged);
+      } else {
+        await write(merged, etag);
+      }
       return;
     } catch (err) {
       if (err instanceof ManifestConflictError) {
@@ -173,5 +190,7 @@ export async function mergeIntoManifest(
     (manifest, ifMatch) => putJson(bucket, prefix, manifestKey(scope), manifest, ifMatch),
     rawKey,
     entry,
+    MAX_MANIFEST_CAS_ATTEMPTS,
+    (manifest) => putJsonIfAbsent(bucket, prefix, manifestKey(scope), manifest),
   );
 }

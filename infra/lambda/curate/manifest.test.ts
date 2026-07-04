@@ -76,15 +76,40 @@ describe('manifest', () => {
       expect(written?.files['raw/a.md']).toEqual(entry('a'));
     });
 
-    it('writes unconditionally (no ifMatch) when no manifest exists yet', async () => {
+    it('creates unconditionally (If-None-Match: *, no ifMatch) when no manifest exists yet', async () => {
       let seenIfMatch: string | undefined = 'sentinel';
+      let createCalled = false;
       await mergeWithRetry(
         async () => ({ manifest: { files: {} }, etag: null }),
         async (_m, ifMatch) => { seenIfMatch = ifMatch; },
         'raw/a.md',
         entry('a'),
+        undefined,
+        async () => { createCalled = true; },
       );
-      expect(seenIfMatch).toBeUndefined();
+      expect(createCalled).toBe(true);
+      expect(seenIfMatch).toBe('sentinel');
+    });
+
+    it('retries via create when a racing first-writer wins the create', async () => {
+      // Both invocations see etag: null. The injected create throws
+      // ManifestConflictError once (losing the race), then the retry re-reads
+      // and this time observes the winner's etag, taking the CAS write path.
+      let createAttempts = 0;
+      let sawEtag: string | null = null;
+      await mergeWithRetry(
+        async () => (createAttempts === 0 ? { manifest: { files: {} }, etag: null } : { manifest: { files: { a: entry('a') } }, etag: 'v1' }),
+        async (_m, ifMatch) => { sawEtag = ifMatch ?? null; },
+        'raw/b.md',
+        entry('b'),
+        undefined,
+        async () => {
+          createAttempts += 1;
+          if (createAttempts === 1) throw new ManifestConflictError();
+        },
+      );
+      expect(createAttempts).toBe(1);
+      expect(sawEtag).toBe('v1');
     });
 
     it('re-reads on conflict so a concurrent entry is not lost', async () => {

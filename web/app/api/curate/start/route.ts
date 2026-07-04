@@ -1,6 +1,17 @@
 import { NextResponse } from 'next/server';
 import { LambdaClient, InvokeCommand, InvocationType } from '@aws-sdk/client-lambda';
-import { getObject, headObject, listAllKeys, listObjects, putObject } from '@/lib/s3';
+import {
+  ConcurrencyError,
+  deleteObject,
+  getObject,
+  getObjectWithETag,
+  headObject,
+  listAllKeys,
+  listObjects,
+  ObjectAlreadyExistsError,
+  putObject,
+  putObjectIfAbsent,
+} from '@/lib/s3';
 import { getIngestPolicy } from '@/lib/ingest-policy';
 import { type Scope } from '@/lib/scope';
 import { resolveScopeOr400 } from '@/lib/http-scope';
@@ -23,6 +34,10 @@ const STALE_JOB_MS = 10 * 60 * 1000;
  * the scope's job files and, for any still marked `processing`, checks the
  * object's last-modified heartbeat against the staleness window. Returns the
  * live job's id, or null when the scope is free to start a new job.
+ *
+ * This is a best-effort scan used only to produce a friendly `jobId` in the
+ * 409 body — the actual race is closed by `claimStartLock` below, which is
+ * the sole authority on whether a new job may start.
  */
 async function activeJobId(systemKey: (name: string) => string): Promise<string | null> {
   const keys = await listAllKeys(systemKey('jobs/'));
@@ -40,6 +55,112 @@ async function activeJobId(systemKey: (name: string) => string): Promise<string 
     if (ageMs <= STALE_JOB_MS) return job.id ?? key;
   }
   return null;
+}
+
+type StartLock = { jobId: string; createdAt: string };
+
+/**
+ * Atomically claim the per-scope curate-start lock, or return the id of the
+ * job already holding it.
+ *
+ * `activeJobId` above is only a scan-then-act check: two concurrent POSTs can
+ * both observe no processing job and both proceed, each starting its own
+ * Lambda invocation with the same manifest baseline. This closes that race
+ * with a single atomic object (`jobs/.lock`):
+ *
+ * - `putObjectIfAbsent` succeeds → we're the only caller that could have
+ *   created it this way; we hold the lock.
+ * - It already exists → read the job it references. If that job is no longer
+ *   `processing` (done/error/cancelled) or its heartbeat is older than
+ *   `STALE_JOB_MS`, the lock is dead: steal it with a CAS `putObject` keyed to
+ *   the stale lock's own ETag, so only one of any number of racing stealers
+ *   wins. If the referenced job is genuinely live, return its id — the caller
+ *   responds 409.
+ *
+ * Returns `null` when the lock is held by the caller (safe to start a job),
+ * or the live job's id when another job is already in flight.
+ */
+async function claimStartLock(
+  systemKey: (name: string) => string,
+  jobId: string,
+): Promise<string | null> {
+  const lockKey = systemKey('jobs/.lock');
+  const lockBody = JSON.stringify({ jobId, createdAt: new Date().toISOString() } satisfies StartLock);
+
+  try {
+    await putObjectIfAbsent(lockKey, lockBody);
+    return null;
+  } catch (err) {
+    if (!(err instanceof ObjectAlreadyExistsError)) throw err;
+  }
+
+  let existing: { content: string; etag: string };
+  try {
+    existing = await getObjectWithETag(lockKey);
+  } catch {
+    // Deleted between our failed create and this read — retry the claim once.
+    try {
+      await putObjectIfAbsent(lockKey, lockBody);
+      return null;
+    } catch (err) {
+      if (!(err instanceof ObjectAlreadyExistsError)) throw err;
+      return 'unknown';
+    }
+  }
+
+  let heldLock: StartLock;
+  try {
+    heldLock = JSON.parse(existing.content) as StartLock;
+  } catch {
+    heldLock = { jobId: 'unknown', createdAt: new Date(0).toISOString() };
+  }
+
+  const heldJobKey = systemKey(`jobs/${heldLock.jobId}.json`);
+  let isLive = false;
+  try {
+    const job = JSON.parse(await getObject(heldJobKey)) as { status?: string };
+    if (job.status === 'processing') {
+      const meta = await headObject(heldJobKey);
+      const ageMs = meta.lastModified ? Date.now() - meta.lastModified.getTime() : Infinity;
+      isLive = ageMs <= STALE_JOB_MS;
+    }
+  } catch {
+    isLive = false; // job file missing/unreadable — treat the lock as dead
+  }
+
+  if (isLive) return heldLock.jobId;
+
+  // Dead lock — steal it. CAS on the stale lock's own ETag so, if several
+  // requests race to steal simultaneously, only one succeeds; the losers loop
+  // back through the live-check above (which will now see our fresh lock).
+  try {
+    await putObject(lockKey, lockBody, existing.etag);
+    return null;
+  } catch (err) {
+    if (err instanceof ConcurrencyError) return heldLock.jobId;
+    throw err;
+  }
+}
+
+/**
+ * Release the start lock if it still references `jobId`. Used when a job
+ * fails to actually start (e.g. the Lambda invoke throws) so the scope isn't
+ * blocked from starting a replacement job until `STALE_JOB_MS` elapses.
+ * Guarded by a re-read so we never delete a lock a later caller has since
+ * claimed for a different job.
+ */
+async function releaseStartLock(
+  systemKey: (name: string) => string,
+  jobId: string,
+): Promise<void> {
+  const lockKey = systemKey('jobs/.lock');
+  try {
+    const { content } = await getObjectWithETag(lockKey);
+    const held = JSON.parse(content) as StartLock;
+    if (held.jobId === jobId) await deleteObject(lockKey);
+  } catch {
+    // Already gone or unreadable — nothing to release.
+  }
 }
 
 let _lambda: LambdaClient | null = null;
@@ -97,9 +218,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ detail: `curation currently only supports the ${policy.space} space` }, { status: 400 });
   }
 
-  // Refuse to start a second job while one is already processing this scope —
-  // overlapping jobs read the same manifest baseline and re-curate files the
-  // other already finished. The client can poll the returned jobId instead.
+  // Fast-path 409 without doing the pending-files scan below — this is a
+  // scan-then-act check only (see `activeJobId`'s docstring); the actual
+  // guard against two concurrent starts is `claimStartLock`, applied right
+  // before the job is created.
   const runningJobId = await activeJobId(scope.systemKey);
   if (runningJobId) {
     return NextResponse.json(
@@ -146,6 +268,18 @@ export async function POST(req: Request) {
   const selected = batchLimit ? pending.slice(0, batchLimit) : pending;
 
   const jobId = `job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  // Atomically claim the per-scope start lock before writing the job file.
+  // This is the actual guard against two concurrent POSTs both passing the
+  // `activeJobId` scan above and both starting a job — see `claimStartLock`.
+  const lockHolderJobId = await claimStartLock(scope.systemKey, jobId);
+  if (lockHolderJobId) {
+    return NextResponse.json(
+      { detail: 'a curate job is already running for this scope', jobId: lockHolderJobId },
+      { status: 409 },
+    );
+  }
+
   const job = {
     id: jobId,
     status: 'processing',
@@ -196,6 +330,10 @@ export async function POST(req: Request) {
       completedAt: new Date().toISOString(),
       error: message,
     }, null, 2));
+    // Release the lock immediately since no Lambda is running to hold it —
+    // otherwise the scope would be blocked from starting a new job until
+    // STALE_JOB_MS elapses even though nothing is actually in flight.
+    await releaseStartLock(scope.systemKey, jobId);
     return NextResponse.json({ detail: 'curation failed to start', jobId }, { status: 502 });
   }
 

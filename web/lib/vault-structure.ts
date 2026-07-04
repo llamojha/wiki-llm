@@ -1,4 +1,11 @@
-import { ConcurrencyError, getObject, getObjectWithETag, putObject } from '@/lib/s3';
+import {
+  ConcurrencyError,
+  getObject,
+  getObjectWithETag,
+  ObjectAlreadyExistsError,
+  putObject,
+  putObjectIfAbsent,
+} from '@/lib/s3';
 import {
   DEFAULT_USER_ID,
   DEFAULT_USER_ROOT,
@@ -156,9 +163,13 @@ const MAX_CAS_ATTEMPTS = 3;
  * clobbered. Non-concurrency errors thrown from `mutate` (e.g. a
  * `SpaceError`) propagate immediately and abort the loop.
  *
- * When the manifest does not exist yet the first write is unconditional (no
- * `ifMatch`); two racing first-writes are resolved by the retry on the next
- * loop, so `putObjectIfAbsent` is deliberately not used here.
+ * When the structure does not exist yet (`etag === null`), the write goes
+ * through `putObjectIfAbsent` (`If-None-Match: *`) instead of an unconditional
+ * `putObject`. Two racing first-writes would otherwise both succeed and the
+ * later one silently drops the earlier one's space declaration with no
+ * `ConcurrencyError` to retry; routing the null-etag branch through the create
+ * precondition forces the loser to hit `ObjectAlreadyExistsError`, which this
+ * loop treats the same as `ConcurrencyError` — re-read and retry.
  */
 export async function updateStructure(
   mutate: (structure: VaultStructure) => boolean | Promise<boolean>,
@@ -169,15 +180,16 @@ export async function updateStructure(
     const shouldWrite = await mutate(structure);
     if (!shouldWrite) return structure;
     try {
-      await putObject(
-        STRUCTURE_KEY,
-        JSON.stringify(structure, null, 2),
-        etag ?? undefined,
-      );
+      const body = JSON.stringify(structure, null, 2);
+      if (etag == null) {
+        await putObjectIfAbsent(STRUCTURE_KEY, body);
+      } else {
+        await putObject(STRUCTURE_KEY, body, etag);
+      }
       return structure;
     } catch (err) {
-      if (err instanceof ConcurrencyError) {
-        lastConflict = err;
+      if (err instanceof ConcurrencyError || err instanceof ObjectAlreadyExistsError) {
+        lastConflict = err instanceof ConcurrencyError ? err : new ConcurrencyError();
         continue;
       }
       throw err;

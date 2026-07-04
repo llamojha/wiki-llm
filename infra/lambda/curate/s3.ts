@@ -106,6 +106,36 @@ export async function putJson(
   }
 }
 
+/**
+ * Create an object only if it does not already exist (`If-None-Match: *`).
+ * Used for the first-write branch of the manifest CAS loop: when no primary
+ * manifest key exists yet, an unconditional `putJson` would let two racing
+ * invocations both "win" and silently drop one's entry. This forces a loser
+ * to re-read and merge instead, mirroring `ManifestConflictError` semantics.
+ */
+export async function putJsonIfAbsent(
+  bucket: string,
+  prefix: string,
+  key: string,
+  data: unknown,
+): Promise<void> {
+  try {
+    await client().send(new PutObjectCommand({
+      Bucket: bucket,
+      Key: fullKey(prefix, key),
+      Body: JSON.stringify(data, null, 2),
+      ContentType: 'application/json',
+      IfNoneMatch: '*',
+    }));
+  } catch (err: unknown) {
+    const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
+    if (e.name === 'PreconditionFailed' || e.$metadata?.httpStatusCode === 412) {
+      throw new ManifestConflictError();
+    }
+    throw err;
+  }
+}
+
 export async function copyObject(bucket: string, prefix: string, srcKey: string, dstKey: string): Promise<void> {
   await client().send(new CopyObjectCommand({
     Bucket: bucket,
