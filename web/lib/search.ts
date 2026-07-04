@@ -78,6 +78,7 @@ function entryForKey(key: string, raw: string): SearchEntry {
   };
 }
 
+
 async function buildIndex(): Promise<SearchIndex> {
   const keys = await listObjects();
   const filtered = keys.filter(isDocumentKey);
