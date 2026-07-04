@@ -20,10 +20,10 @@ Every plan carries its own drift check against `fead8f9` — run it first.
 | 007 | ETag CAS for structure.json writes | P2 | M | 004 | DONE (updateStructure CAS helper; putStructure removed; rename/delete keep a preliminary validation read to avoid clobbering on collision) |
 | 008 | Curate Lambda manifest CAS + overlapping-job 409 | P2 | M | — | DONE (mergeIntoManifest CAS + 409 guard; Lambda deployed out-of-band — redeploy needed. Stale-override path uses job-file heartbeat, not directly e2e-tested) |
 | 009 | Security batch: userId validation, error hygiene, js-yaml override | P2 | S | — | DONE (aws-sdk floor already met; scope unit test deferred to 004) |
-| 010 | Frontmatter normalization (replace `as string` casts) | P3 | S | 004 | TODO |
+| 010 | Frontmatter normalization (replace `as string` casts) | P3 | S | 004 | DONE (web/lib/frontmatter.ts fmString/fmStringOr + tests; also normalized the PUT logTitle / DELETE title reads beyond the listed GET sites) |
 | 011 | Append-safe logs (object-per-event) | P3 | S–M | 004 | DONE (log.md/usage-log.jsonl → per-event objects under _system/log/ + _system/usage/; legacy files kept as history; user-visible log format changed — see PR) |
-| 012 | Parallelize vault-tree S3 listings | P2 | S | 003 | TODO |
-| 013 | Home view from the cached index (no full-vault reads) | P2 | M | 003, 010 | TODO |
+| 012 | Parallelize vault-tree S3 listings | P2 | S | 003 | DONE (single Promise.all wave; byte-identical order; added optional vault-tree.test.ts) |
+| 013 | Home view from the cached index (no full-vault reads) | P2 | M | 003, 010 | DONE (getAllEntries backs GET; SearchEntry gained author/tags/starred; star route now invalidates the index) |
 | 014 | Incremental search/index updates | P3 | L | 004, 012, 013 | TODO |
 | 015 | Consolidated movePrefix/purgePrefix (resumable moves) | P2 | M | 003, 004 | TODO |
 | 016 | Decompose the 1167-line UploadModal | P3 | L | 003 | TODO |

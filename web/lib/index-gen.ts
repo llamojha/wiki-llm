@@ -1,5 +1,6 @@
 import matter from 'gray-matter';
 
+import { fmStringOr } from '@/lib/frontmatter';
 import { getStructure, spacesForScope } from '@/lib/vault-structure';
 import { getObject, listObjects, putObject } from '@/lib/s3';
 import { isDocumentKey } from '@/lib/vault-paths';
@@ -21,9 +22,10 @@ async function buildLine(key: string): Promise<string> {
   try {
     const raw = await getObject(key);
     const { data, content } = matter(raw);
-    const title =
-      (data.title as string) ||
-      toTitleCase(key.replace(/^.*\//, '').replace(/\.md$/, ''));
+    const title = fmStringOr(
+      data.title,
+      toTitleCase(key.replace(/^.*\//, '').replace(/\.md$/, '')),
+    );
     const summary = extractSummary(content);
     return `- ${key} — ${title} — ${summary}`;
   } catch {
