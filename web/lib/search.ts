@@ -1,6 +1,7 @@
 import Fuse from 'fuse.js';
 import matter from 'gray-matter';
 
+import { fmString, fmStringOr } from '@/lib/frontmatter';
 import { getObject, listObjects } from '@/lib/s3';
 import { inferScopeFromKey } from '@/lib/scope';
 import { displayPathForKey, isDocumentKey, sourceTypeFromKey } from '@/lib/vault-paths';
@@ -12,6 +13,9 @@ export interface SearchEntry {
   snippet: string;
   updated: string;
   source_type: string;
+  author: string;
+  tags: string[];
+  starred: boolean;
 }
 
 export interface SearchResult extends SearchEntry {
@@ -26,7 +30,17 @@ export type SearchOptions = {
   folder?: string;
 };
 
-let _promise: Promise<Fuse<SearchEntry>> | null = null;
+/**
+ * The lazily-built index caches both the Fuse instance (for `search`) and the
+ * raw entry array (for `getAllEntries`, which backs the home view). Both are
+ * derived from the same single S3 crawl and invalidated together.
+ */
+interface SearchIndex {
+  fuse: Fuse<SearchEntry>;
+  entries: SearchEntry[];
+}
+
+let _promise: Promise<SearchIndex> | null = null;
 
 function keyToTitle(key: string): string {
   const stem = key.split('/').pop()!.replace(/\.md$/, '');
@@ -43,7 +57,7 @@ function extractSnippet(raw: string, maxChars = 200): string {
   return text.slice(0, maxChars);
 }
 
-async function buildIndex(): Promise<Fuse<SearchEntry>> {
+async function buildIndex(): Promise<SearchIndex> {
   const keys = await listObjects();
   const filtered = keys.filter(isDocumentKey);
 
@@ -56,12 +70,10 @@ async function buildIndex(): Promise<Fuse<SearchEntry>> {
         try {
           const raw = await getObject(key);
           const { data } = matter(raw);
-          const title = (data.title as string) || keyToTitle(key);
+          const title = fmStringOr(data.title, keyToTitle(key));
           const path = displayPathForKey(key);
-          const updated = typeof data.updated === 'string' ? data.updated : '';
-          const sourceType = typeof data.source_type === 'string'
-            ? data.source_type
-            : sourceTypeFromKey(key);
+          const updated = fmString(data.updated);
+          const sourceType = fmStringOr(data.source_type, sourceTypeFromKey(key));
           entries.push({
             id: key,
             title,
@@ -69,6 +81,9 @@ async function buildIndex(): Promise<Fuse<SearchEntry>> {
             snippet: extractSnippet(raw),
             updated,
             source_type: sourceType,
+            author: fmStringOr(data.author, 'unknown'),
+            tags: Array.isArray(data.tags) ? data.tags : data.tags ? [String(data.tags)] : [],
+            starred: data.starred === true,
           });
         } catch {
           // skip unreadable docs
@@ -77,7 +92,7 @@ async function buildIndex(): Promise<Fuse<SearchEntry>> {
     );
   }
 
-  return new Fuse(entries, {
+  const fuse = new Fuse(entries, {
     keys: [
       { name: 'title', weight: 2 },
       { name: 'snippet', weight: 1 },
@@ -86,19 +101,25 @@ async function buildIndex(): Promise<Fuse<SearchEntry>> {
     threshold: 0.4,
     includeScore: true,
   });
+  return { fuse, entries };
 }
 
-function getFuse(): Promise<Fuse<SearchEntry>> {
+function getIndex(): Promise<SearchIndex> {
   if (!_promise) _promise = buildIndex();
   return _promise;
 }
 
 export async function search(q: string, limit = 20): Promise<SearchResult[]> {
   if (!q.trim()) return [];
-  const fuse = await getFuse();
+  const { fuse } = await getIndex();
   return fuse
     .search(q, { limit })
     .map((r) => ({ ...r.item, rank: 1 - (r.score ?? 0) }));
+}
+
+/** All indexed entries (search + home view). Built lazily, cached until invalidated. */
+export async function getAllEntries(): Promise<SearchEntry[]> {
+  return (await getIndex()).entries;
 }
 
 export async function searchScoped(

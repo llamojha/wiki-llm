@@ -2,6 +2,7 @@ import matter from 'gray-matter';
 import { NextResponse } from 'next/server';
 
 import { ConcurrencyError, getObjectWithETag, putObject } from '@/lib/s3';
+import { invalidateSearchIndex } from '@/lib/search';
 import { isDocumentKey } from '@/lib/vault-paths';
 import { flagGuard } from '@/lib/flags';
 
@@ -55,6 +56,11 @@ export async function PATCH(_req: Request, { params }: Params) {
     }
     throw err;
   }
+
+  // The home view's starred filter reads from the cached search index, so a
+  // toggle must invalidate it — otherwise the change wouldn't surface there
+  // until the next unrelated write.
+  invalidateSearchIndex();
 
   return NextResponse.json({ id: key, starred, etag: newEtag });
 }

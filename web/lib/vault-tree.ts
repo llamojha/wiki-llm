@@ -65,11 +65,43 @@ export async function getTree(): Promise<TreeNode[]> {
   const userScope = resolveScope({ scope: 'user', userId: defaultUser });
   const userLabel = structure.users?.find((u) => u.id === defaultUser)?.label || 'My wiki';
 
-  // Build the user's library: personal first, then any other declared spaces
-  // they have content in (both generated and authored).
+  // Declared spaces to walk. Skip `personal` in the user list — it's covered by
+  // the dedicated block below; otherwise an `indexed: true` personal entry would
+  // re-walk the same `users/<id>/authored/personal/` prefix and double every doc.
+  const userSpaces = spacesForScope(structure, 'user', defaultUser).filter(
+    (s) => s.indexed && s.name !== 'personal',
+  );
+  const sharedSpaces = structure.spaces.filter((s) => s.indexed);
+
+  // Fire every S3 LIST concurrently. Latency was previously ~2N+2 sequential
+  // round-trips per tree build; now it is a single wave. Results are bucketed
+  // per space and assembled in the original order below, so the output tree is
+  // byte-identical. `Promise.all` rejects fast — same observable throw contract
+  // as the old serial `await`s.
+  const filterDocs = (keys: string[]) => keys.filter(isDocumentKey);
+  const personalP = listObjects(personalPrefix(defaultUser)).then(filterDocs);
+  const userSpaceP = userSpaces.map((space) => ({
+    space,
+    generated: listObjects(userScope.generatedPrefix(space.name)).then(filterDocs),
+    authored: listObjects(userScope.authoredPrefix(space.name)).then(filterDocs),
+  }));
+  const sharedSpaceP = sharedSpaces.map((space) => ({
+    space,
+    generated: listObjects(generatedPrefix(space.name)).then(filterDocs),
+    authored: listObjects(authoredPrefix(space.name)).then(filterDocs),
+  }));
+
+  await Promise.all([
+    personalP,
+    ...userSpaceP.flatMap((s) => [s.generated, s.authored]),
+    ...sharedSpaceP.flatMap((s) => [s.generated, s.authored]),
+  ]);
+
+  // Assemble the user's library: personal first, then the user's own declared
+  // spaces in declaration order (both generated and authored).
   const userChildren: TreeNode[] = [];
 
-  const personalKeys = (await listObjects(personalPrefix(defaultUser))).filter(isDocumentKey);
+  const personalKeys = await personalP;
   if (personalKeys.length) {
     const personalChildren: TreeNode[] = [];
     addKeys(personalChildren, `__user/personal`, personalPrefix(defaultUser), personalKeys);
@@ -81,14 +113,9 @@ export async function getTree(): Promise<TreeNode[]> {
     });
   }
 
-  // Walk the user's OWN declared spaces (independent of the shared list).
-  // Skip `personal` — it's already covered by the dedicated block above;
-  // otherwise an `indexed: true` personal entry would re-walk the same
-  // `users/<id>/authored/personal/` prefix and double every doc.
-  const userSpaces = spacesForScope(structure, 'user', defaultUser);
-  for (const space of userSpaces.filter((s) => s.indexed && s.name !== 'personal')) {
-    const generated = (await listObjects(userScope.generatedPrefix(space.name))).filter(isDocumentKey);
-    const authored = (await listObjects(userScope.authoredPrefix(space.name))).filter(isDocumentKey);
+  for (const { space, generated: generatedP, authored: authoredP } of userSpaceP) {
+    const generated = await generatedP;
+    const authored = await authoredP;
     if (!generated.length && !authored.length) continue;
     const spaceChildren: TreeNode[] = [];
     addKeys(spaceChildren, `__user/${space.name}`, userScope.generatedPrefix(space.name), generated);
@@ -108,10 +135,11 @@ export async function getTree(): Promise<TreeNode[]> {
     children: userChildren,
   });
 
-  // Shared spaces — one folder per declared `indexed` space.
-  for (const space of structure.spaces.filter((s) => s.indexed)) {
-    const generated = (await listObjects(generatedPrefix(space.name))).filter(isDocumentKey);
-    const authored = (await listObjects(authoredPrefix(space.name))).filter(isDocumentKey);
+  // Shared spaces — one folder per declared `indexed` space. Unlike user spaces,
+  // shared spaces are NOT skipped when empty; preserve that asymmetry.
+  for (const { space, generated: generatedP, authored: authoredP } of sharedSpaceP) {
+    const generated = await generatedP;
+    const authored = await authoredP;
     const children: TreeNode[] = [];
     addKeys(children, space.name, generatedPrefix(space.name), generated);
     addKeys(children, space.name, authoredPrefix(space.name), authored);
