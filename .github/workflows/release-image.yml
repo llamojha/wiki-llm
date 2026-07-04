@@ -18,21 +18,13 @@ name: Release image
 #   vX.Y.Z<suffix> / X.Y<suffix> — on version tags (git tag v1.2.3 && git push --tags)
 #   sha-<short><suffix>     — every published build, for exact rollbacks
 #
-# Pull requests build + scan the amd64 image but never push.
+# Publishing is restricted to the main branch: the workflow only runs on
+# pushes to main, version tags, or a manual dispatch — never on PR branches.
 
 on:
   push:
     branches: [main]
     tags: ['v*']
-  pull_request:
-    paths:
-      - web/**
-      - package.json
-      - pnpm-lock.yaml
-      - pnpm-workspace.yaml
-      - ingest/package.json
-      - video/package.json
-      - .github/workflows/release-image.yml
   workflow_dispatch:
 
 permissions:
