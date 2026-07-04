@@ -17,11 +17,11 @@ Every plan carries its own drift check against `fead8f9` — run it first.
 | 004 | Unit-test baseline (vitest): scope isolation, sanitization, paths | P1 | M | — | DONE |
 | 005 | Upload size limit | P1 | S | — | DONE |
 | 006 | Agent tool-input parse guard (no silent `{}`) | P2 | S | — | DONE (unit test deferred to 004) |
-| 007 | ETag CAS for structure.json writes | P2 | M | 004 | TODO |
-| 008 | Curate Lambda manifest CAS + overlapping-job 409 | P2 | M | — | TODO |
+| 007 | ETag CAS for structure.json writes | P2 | M | 004 | DONE (updateStructure CAS helper; putStructure removed; rename/delete keep a preliminary validation read to avoid clobbering on collision) |
+| 008 | Curate Lambda manifest CAS + overlapping-job 409 | P2 | M | — | DONE (mergeIntoManifest CAS + 409 guard; Lambda deployed out-of-band — redeploy needed. Stale-override path uses job-file heartbeat, not directly e2e-tested) |
 | 009 | Security batch: userId validation, error hygiene, js-yaml override | P2 | S | — | DONE (aws-sdk floor already met; scope unit test deferred to 004) |
 | 010 | Frontmatter normalization (replace `as string` casts) | P3 | S | 004 | TODO |
-| 011 | Append-safe logs (object-per-event) | P3 | S–M | 004 | TODO |
+| 011 | Append-safe logs (object-per-event) | P3 | S–M | 004 | DONE (log.md/usage-log.jsonl → per-event objects under _system/log/ + _system/usage/; legacy files kept as history; user-visible log format changed — see PR) |
 | 012 | Parallelize vault-tree S3 listings | P2 | S | 003 | TODO |
 | 013 | Home view from the cached index (no full-vault reads) | P2 | M | 003, 010 | TODO |
 | 014 | Incremental search/index updates | P3 | L | 004, 012, 013 | TODO |
