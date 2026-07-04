@@ -4,6 +4,7 @@ import type { Message } from '@aws-sdk/client-bedrock-runtime';
 import { runAgent, type AgentEvent } from '@/lib/agent';
 import { getObject } from '@/lib/s3';
 import { resolveScope } from '@/lib/scope';
+import { resolveScopeOr400 } from '@/lib/http-scope';
 import type { ScopeMode } from '@/lib/agent-tools';
 import { logChatInteraction } from '@/lib/usage-log';
 import { flagGuard } from '@/lib/flags';
@@ -53,6 +54,14 @@ export async function POST(req: Request) {
   const scopeMode: ScopeMode = body.scopeMode ?? 'both';
   const userId = body.userId;
 
+  // Validate a request-supplied userId before it reaches loadCatalog /
+  // logScope (both build `users/<id>/…` prefixes), and before the NDJSON
+  // stream opens so the rejection is a normal JSON 400.
+  if (userId !== undefined) {
+    const check = resolveScopeOr400({ scope: 'user', userId });
+    if (check instanceof NextResponse) return check;
+  }
+
   // Resolve catalog: load index.md for the relevant scope(s). Best-effort —
   // an empty catalog still allows the agent to function (it just can't
   // use index-first; it'll fall back to search_vault).
@@ -98,7 +107,10 @@ export async function POST(req: Request) {
           send(ev);
         }
       } catch (err) {
-        const detail = err instanceof Error ? err.message : 'agent crashed';
+        // Keep the crash detail server-side; the generic string is what both
+        // the client frame and the persisted usage-log error field carry.
+        console.error('[chat] agent run failed:', err);
+        const detail = 'agent run failed';
         errorDetail = detail;
         send({ type: 'error', detail });
       } finally {

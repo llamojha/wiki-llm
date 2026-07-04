@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  js-yaml@<3.15.0: ^3.15.0
+
 importers:
 
   .:
@@ -1289,8 +1292,8 @@ packages:
     resolution: {integrity: sha512-7vuh85V5cdDofPyxn58nrPjBktZo0u9x1g8WtjQol+jZDaE+fhN+cIvTj11GndBnMnyfrUOG1sZQxCdjKh+DKg==}
     engines: {node: '>= 10.13.0'}
 
-  js-yaml@3.14.2:
-    resolution: {integrity: sha512-PMSmkqxr106Xa156c2M265Z+FTrPl+oxd/rgOQy2tijQeK5TxQ43psO1ZCwhVOSdnn+RzkzlRz/eY4BgJBYVpg==}
+  js-yaml@3.15.0:
+    resolution: {integrity: sha512-ttBQIIQPDeLjpPOohtUdXuXUVoA2uIB6fEH9HyJ7234s5mBJ5wTx20njxplLZQgLaOfpmPQA7X2t5AX6tIPbog==}
     hasBin: true
 
   json-parse-even-better-errors@2.3.1:
@@ -2445,13 +2448,13 @@ snapshots:
       '@remotion/timeline-utils': 4.0.484
       '@rspack/core': 1.7.11(@swc/helpers@0.5.15)
       '@rspack/plugin-react-refresh': 1.6.1(react-refresh@0.18.0)
-      css-loader: 7.1.4(@rspack/core@1.7.11(@swc/helpers@0.5.15))(webpack@5.105.0(postcss@8.5.16))
+      css-loader: 7.1.4(@rspack/core@1.7.11(@swc/helpers@0.5.15))(webpack@5.105.0(esbuild@0.28.1)(postcss@8.5.16))
       esbuild: 0.28.1
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
       react-refresh: 0.18.0
       remotion: 4.0.484(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      style-loader: 4.0.0(webpack@5.105.0(postcss@8.5.16))
+      style-loader: 4.0.0(webpack@5.105.0(esbuild@0.28.1)(postcss@8.5.16))
       webpack: 5.105.0(esbuild@0.28.1)(postcss@8.5.16)
     transitivePeerDependencies:
       - '@minify-html/node'
@@ -2971,7 +2974,7 @@ snapshots:
       shebang-command: 2.0.0
       which: 2.0.2
 
-  css-loader@7.1.4(@rspack/core@1.7.11(@swc/helpers@0.5.15))(webpack@5.105.0(postcss@8.5.16)):
+  css-loader@7.1.4(@rspack/core@1.7.11(@swc/helpers@0.5.15))(webpack@5.105.0(esbuild@0.28.1)(postcss@8.5.16)):
     dependencies:
       icss-utils: 5.1.0(postcss@8.5.16)
       postcss: 8.5.16
@@ -3121,7 +3124,7 @@ snapshots:
 
   gray-matter@4.0.3:
     dependencies:
-      js-yaml: 3.14.2
+      js-yaml: 3.15.0
       kind-of: 6.0.3
       section-matter: 1.0.0
       strip-bom-string: 1.0.0
@@ -3190,7 +3193,7 @@ snapshots:
       merge-stream: 2.0.0
       supports-color: 8.1.1
 
-  js-yaml@3.14.2:
+  js-yaml@3.15.0:
     dependencies:
       argparse: 1.0.10
       esprima: 4.0.1
@@ -3860,7 +3863,7 @@ snapshots:
 
   strip-final-newline@2.0.0: {}
 
-  style-loader@4.0.0(webpack@5.105.0(postcss@8.5.16)):
+  style-loader@4.0.0(webpack@5.105.0(esbuild@0.28.1)(postcss@8.5.16)):
     dependencies:
       webpack: 5.105.0(esbuild@0.28.1)(postcss@8.5.16)
 

@@ -73,4 +73,51 @@ test.describe('upload modal', () => {
     });
     expect(res.status()).toBe(400);
   });
+
+  test('rejects an oversized file with 413', async ({ request }) => {
+    // Default UPLOAD_MAX_BYTES is 2 MiB; the e2e server does not override it.
+    const oversized = Buffer.alloc(2 * 1024 * 1024 + 1, 0x61);
+    const res = await request.post('/api/upload', {
+      multipart: {
+        file: { name: 'big.md', mimeType: 'text/markdown', buffer: oversized },
+        destination: 'authored',
+        scope: 'shared',
+        space: 'wiki',
+      },
+    });
+    expect(res.status()).toBe(413);
+    expect((await res.json()).detail).toMatch(/limit/);
+  });
+
+  test('rejects an invalid userId with 400', async ({ request }) => {
+    // A `/`-bearing userId would write under a different prefix than the one
+    // inferScopeFromKey later reconstructs — reject it at the scope boundary.
+    const res = await request.post('/api/upload', {
+      multipart: {
+        file: { name: 'x.md', mimeType: 'text/markdown', buffer: Buffer.from('# X\n', 'utf-8') },
+        destination: 'authored',
+        scope: 'user',
+        userId: 'a/b',
+        space: 'wiki',
+      },
+    });
+    expect(res.status()).toBe(400);
+    expect((await res.json()).detail).toMatch(/userId/);
+  });
+
+  test('accepts a small file below the limit', async ({ request }) => {
+    const res = await request.post('/api/upload', {
+      multipart: {
+        file: {
+          name: 'small.md',
+          mimeType: 'text/markdown',
+          buffer: Buffer.from('# Small\n', 'utf-8'),
+        },
+        destination: 'authored',
+        scope: 'shared',
+        space: 'wiki',
+      },
+    });
+    expect(res.status()).toBe(201);
+  });
 });

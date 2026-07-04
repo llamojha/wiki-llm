@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { putObject } from '@/lib/s3';
-import { resolveScope, type Scope } from '@/lib/scope';
+import { type Scope } from '@/lib/scope';
+import { resolveScopeOr400 } from '@/lib/http-scope';
 import { regenerateMasterIndex, regenerateSpaceIndex } from '@/lib/index-gen';
 import { invalidateSearchIndex } from '@/lib/search';
 import { appendLog } from '@/lib/log-append';
@@ -11,6 +12,12 @@ import { flagGuard, isEnabled } from '@/lib/flags';
 const SPACE_RE = /^[a-z0-9][a-z0-9-]*$/;
 // A subfolder is a chain of space-shaped segments (`guides`, `guides/setup`).
 const FOLDER_SEGMENT_RE = /^[a-z0-9][a-z0-9-]*$/;
+
+/** Max accepted upload size in bytes. Override with UPLOAD_MAX_BYTES. */
+const UPLOAD_MAX_BYTES = (() => {
+  const raw = Number(process.env.UPLOAD_MAX_BYTES);
+  return Number.isFinite(raw) && raw > 0 ? raw : 2 * 1024 * 1024; // 2 MiB default
+})();
 
 function sanitizeFilename(name: string): string {
   // Strip path separators, keep only the basename, ensure .md extension
@@ -104,7 +111,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ detail: 'only .md files are accepted' }, { status: 400 });
   }
 
-  const scope = resolveScope({ scope: scopeName, userId });
+  // Cap the payload before reading it into memory (`file.text()` below). The
+  // App Router imposes no legacy body-size limit, so without this an oversized
+  // upload exhausts the shared Next.js process's memory.
+  if (file.size > UPLOAD_MAX_BYTES) {
+    return NextResponse.json(
+      { detail: `file exceeds the ${UPLOAD_MAX_BYTES}-byte upload limit` },
+      { status: 413 },
+    );
+  }
+
+  const scope = resolveScopeOr400({ scope: scopeName, userId });
+  if (scope instanceof NextResponse) return scope;
   const filename = sanitizeFilename(file.name);
   const folderPrefix = folder ? `${folder}/` : '';
   const key = destination === 'raw'

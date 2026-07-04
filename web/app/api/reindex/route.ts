@@ -5,7 +5,8 @@ import { getObject, listObjects, putObject } from '@/lib/s3';
 import { regenerateMasterIndex } from '@/lib/index-gen';
 import { getStructure, spacesForScope } from '@/lib/vault-structure';
 import { isDocumentKey } from '@/lib/vault-paths';
-import { resolveScope, type Scope } from '@/lib/scope';
+import { type Scope } from '@/lib/scope';
+import { resolveScopeOr400 } from '@/lib/http-scope';
 import { invalidateSearchIndex } from '@/lib/search';
 import { flagGuard } from '@/lib/flags';
 
@@ -45,7 +46,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ detail: 'invalid space name' }, { status: 400 });
   }
 
-  const scope = resolveScope({ scope: scopeName ?? 'shared', userId });
+  const scope = resolveScopeOr400({ scope: scopeName ?? 'shared', userId });
+  if (scope instanceof NextResponse) return scope;
   const structure = await getStructure();
   const declaredSpaces = spacesForScope(structure, scope.scope, scope.userId);
 
@@ -129,7 +131,9 @@ export async function POST(req: Request) {
 
         send({ type: 'done', indexed });
       } catch (err) {
-        send({ type: 'error', detail: err instanceof Error ? err.message : 'Unknown error' });
+        // Keep the SDK/internal detail server-side; send a generic frame.
+        console.error('[reindex] failed:', err);
+        send({ type: 'error', detail: 'reindex failed' });
       } finally {
         controller.close();
       }

@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { LambdaClient, InvokeCommand, InvocationType } from '@aws-sdk/client-lambda';
 import { getObject, listObjects, putObject } from '@/lib/s3';
 import { getIngestPolicy } from '@/lib/ingest-policy';
-import { resolveScope, type Scope } from '@/lib/scope';
+import { type Scope } from '@/lib/scope';
+import { resolveScopeOr400 } from '@/lib/http-scope';
 import { resolvePending, type ProcessedManifest } from '@/lib/curate-pending';
 import { flagGuard } from '@/lib/flags';
 
@@ -54,7 +55,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ detail: 'space is required' }, { status: 400 });
   }
 
-  const scope = resolveScope({ scope: scopeName ?? 'shared', userId });
+  const scope = resolveScopeOr400({ scope: scopeName ?? 'shared', userId });
+  if (scope instanceof NextResponse) return scope;
 
   const policy = await getIngestPolicy(scope);
   if (!policy) {
@@ -143,13 +145,17 @@ export async function POST(req: Request) {
     }));
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Lambda invocation failed';
+    // Retain the SDK detail server-side (server log + the job's own error
+    // field in _system/), but return a generic detail to the client so ARNs,
+    // region, and internal reasons don't leak into the response body.
+    console.error('[curate] lambda invoke failed:', err);
     await putObject(jobKey, JSON.stringify({
       ...job,
       status: 'error',
       completedAt: new Date().toISOString(),
       error: message,
     }, null, 2));
-    return NextResponse.json({ detail: message, jobId }, { status: 502 });
+    return NextResponse.json({ detail: 'curation failed to start', jobId }, { status: 502 });
   }
 
   return NextResponse.json({

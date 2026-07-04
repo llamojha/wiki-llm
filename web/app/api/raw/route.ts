@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getObject, listObjects } from '@/lib/s3';
 import { getIngestPolicy } from '@/lib/ingest-policy';
-import { resolveScope, type Scope } from '@/lib/scope';
+import { type Scope } from '@/lib/scope';
+import { resolveScopeOr400 } from '@/lib/http-scope';
 import { resolvePending, type ProcessedManifest } from '@/lib/curate-pending';
 
 const SPACE_RE = /^[a-z0-9][a-z0-9-]*$/;
@@ -34,7 +35,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ detail: 'space query param required' }, { status: 400 });
   }
 
-  const scope = resolveScope({ scope: scopeName, userId });
+  const scope = resolveScopeOr400({ scope: scopeName, userId });
+  if (scope instanceof NextResponse) return scope;
   const policy = await getIngestPolicy(scope);
   if (!policy) {
     return NextResponse.json({ space, count: 0, keys: [], total: 0, detail: 'structure.json does not declare a generated wiki space' });

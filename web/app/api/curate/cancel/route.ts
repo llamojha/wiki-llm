@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getObject, putObject } from '@/lib/s3';
-import { resolveScope, type Scope } from '@/lib/scope';
+import { type Scope } from '@/lib/scope';
+import { resolveScopeOr400 } from '@/lib/http-scope';
 import { flagGuard } from '@/lib/flags';
 
 export async function POST(req: Request) {
@@ -18,7 +19,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ detail: 'jobId is required' }, { status: 400 });
   }
 
-  const scope = resolveScope({ scope: scopeName ?? 'shared', userId });
+  const scope = resolveScopeOr400({ scope: scopeName ?? 'shared', userId });
+  if (scope instanceof NextResponse) return scope;
 
   try {
     const key = scope.systemKey(`jobs/${jobId}.json`);
