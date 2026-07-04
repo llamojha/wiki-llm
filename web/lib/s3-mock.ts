@@ -148,6 +148,15 @@ export async function deleteObject(relKey: string): Promise<void> {
   s.modified.delete(relKey);
 }
 
+export async function copyObject(fromRel: string, toRel: string): Promise<void> {
+  const s = store();
+  const content = s.objects.get(fromRel);
+  if (content == null) throw new NoSuchKeyError(fromRel);
+  s.objects.set(toRel, content);
+  s.etags.set(toRel, etagOf(content));
+  s.modified.set(toRel, new Date());
+}
+
 /** Test-only: replace all stored objects. Used by `/api/__test__/seed`. */
 export function __resetWith(seed: Record<string, string>): void {
   const s = store();

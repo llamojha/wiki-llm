@@ -1,4 +1,5 @@
-import { deleteObject, getObject, listObjects, putObject } from '@/lib/s3';
+import { deleteObject, getObject, putObject } from '@/lib/s3';
+import { movePrefix, prefixHasObjects, purgePrefix } from '@/lib/vault-ops';
 import { regenerateMasterIndex, regenerateSpaceIndex } from '@/lib/index-gen';
 import { appendLog } from '@/lib/log-append';
 import { invalidateSearchIndex } from '@/lib/search';
@@ -163,6 +164,18 @@ export async function renameSpace(
 
   const sp = resolveScope({ scope, userId });
 
+  // Content-collision preflight. The declaration checks above catch a *declared*
+  // `to`; this also refuses a `to` whose prefixes already hold objects (orphaned
+  // content not tied to a declaration). Without it a top-level rename could
+  // silently merge into a non-empty target. Fail fast — before the name claim
+  // or any object move. (Deliberate behavior change; see plan 015.)
+  if (
+    (await prefixHasObjects(sp.generatedPrefix(to))) ||
+    (await prefixHasObjects(sp.authoredPrefix(to)))
+  ) {
+    throw new SpaceError(`Space "${to}" already has content`, 409);
+  }
+
   // Claim `to` by flipping the declaration *before* moving any object. This
   // must happen first: if the declaration flip happened after the move (the
   // old order), a concurrent createSpace/renameSpace targeting the same `to`
@@ -196,15 +209,7 @@ export async function renameSpace(
   // left claimed-but-empty under `to` while its data still sits under `from`.
   try {
     for (const prefixFor of [sp.generatedPrefix, sp.authoredPrefix]) {
-      const fromPrefix = prefixFor(from);
-      const toPrefix = prefixFor(to);
-      const keys = await listObjects(fromPrefix);
-      for (const key of keys) {
-        const rel = key.slice(fromPrefix.length);
-        const content = await getObject(key);
-        await putObject(`${toPrefix}${rel}`, content);
-        await deleteObject(key);
-      }
+      await movePrefix(prefixFor(from), prefixFor(to));
     }
     // Move the per-space index file if one exists in this scope.
     const fromIndex = sp.systemKey(`indexes/${from}.md`);
@@ -259,8 +264,7 @@ export async function deleteSpace(
 
   const sp = resolveScope({ scope, userId });
   for (const prefixFor of [sp.generatedPrefix, sp.authoredPrefix]) {
-    const keys = await listObjects(prefixFor(name));
-    for (const key of keys) await deleteObject(key);
+    await purgePrefix(prefixFor(name));
   }
   try {
     await deleteObject(sp.systemKey(`indexes/${name}.md`));

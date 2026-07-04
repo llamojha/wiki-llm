@@ -1,9 +1,5 @@
-import {
-  deleteObject,
-  getObject,
-  listAllKeys,
-  putObject,
-} from '@/lib/s3';
+import { listAllKeys, putObject } from '@/lib/s3';
+import { movePrefix, prefixHasObjects, purgePrefix } from '@/lib/vault-ops';
 import { regenerateMasterIndex, regenerateSpaceIndex } from '@/lib/index-gen';
 import { appendLog } from '@/lib/log-append';
 import { invalidateSearchIndex } from '@/lib/search';
@@ -218,21 +214,9 @@ export async function renameFolder(
   validateSegment(toLeaf);
 
   if (fromSegs.length === 1) {
+    // `renameSpace` now moves every object (documents AND `.keep` markers) via
+    // vault-ops.movePrefix, so no leftover-marker sweep is needed here.
     const entry = await renameSpace(fromSegs[0], toLeaf, scope, userId);
-    // `renameSpace` re-keys documents via the `.md`-only listing, so any
-    // marker-only nested folders (`.keep`) under the old space are left behind.
-    // Sweep every remaining key across both content roots to the new space.
-    const sp = resolveScope({ scope, userId });
-    for (const prefixFor of [sp.authoredPrefix, sp.generatedPrefix]) {
-      const fromPrefix = prefixFor(fromSegs[0]);
-      const toPrefix = prefixFor(toLeaf);
-      for (const key of await listAllKeys(fromPrefix)) {
-        const rel = key.slice(fromPrefix.length);
-        const content = await getObject(key);
-        await putObject(`${toPrefix}${rel}`, content);
-        await deleteObject(key);
-      }
-    }
     return { name: entry.name, path: entry.name, indexed: 0, children: [] };
   }
 
@@ -252,23 +236,14 @@ export async function renameFolder(
   // anything. Checking inline would let an authored move succeed and then a
   // generated collision throw, leaving the folder half-renamed.
   for (const prefixFor of [sp.authoredPrefix, sp.generatedPrefix]) {
-    if ((await listAllKeys(`${prefixFor(space)}${subTo}`)).length) {
+    if (await prefixHasObjects(`${prefixFor(space)}${subTo}`)) {
       throw new SpaceError(`Folder "${toSegs.join('/')}" already exists`, 409);
     }
   }
 
   let moved = 0;
   for (const prefixFor of [sp.authoredPrefix, sp.generatedPrefix]) {
-    const fromPrefix = `${prefixFor(space)}${subFrom}`;
-    const toPrefix = `${prefixFor(space)}${subTo}`;
-    const keys = await listAllKeys(fromPrefix);
-    for (const key of keys) {
-      const rel = key.slice(fromPrefix.length);
-      const content = await getObject(key);
-      await putObject(`${toPrefix}${rel}`, content);
-      await deleteObject(key);
-      moved += 1;
-    }
+    moved += await movePrefix(`${prefixFor(space)}${subFrom}`, `${prefixFor(space)}${subTo}`);
   }
   if (!moved) {
     throw new SpaceError(`Folder "${rawFrom}" not found`, 404);
@@ -295,16 +270,9 @@ export async function deleteFolder(
   const segs = toSegments(rawPath);
 
   if (segs.length === 1) {
+    // `deleteSpace` now purges every object (documents AND `.keep` markers) via
+    // vault-ops.purgePrefix, so no marker sweep is needed here.
     await deleteSpace(segs[0], scope, userId);
-    // `deleteSpace` removes documents via the `.md`-only listing; purge any
-    // remaining markers (`.keep` for empty nested folders) so the space's
-    // prefixes don't linger and resurface in the folder tree.
-    const sp = resolveScope({ scope, userId });
-    for (const prefixFor of [sp.authoredPrefix, sp.generatedPrefix]) {
-      for (const key of await listAllKeys(prefixFor(segs[0]))) {
-        await deleteObject(key);
-      }
-    }
     return;
   }
 
@@ -314,11 +282,7 @@ export async function deleteFolder(
 
   let removed = 0;
   for (const prefixFor of [sp.authoredPrefix, sp.generatedPrefix]) {
-    const keys = await listAllKeys(`${prefixFor(space)}${sub}`);
-    for (const key of keys) {
-      await deleteObject(key);
-      removed += 1;
-    }
+    removed += await purgePrefix(`${prefixFor(space)}${sub}`);
   }
   if (!removed) {
     throw new SpaceError(`Folder "${rawPath}" not found`, 404);

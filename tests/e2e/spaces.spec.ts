@@ -69,6 +69,21 @@ test.describe('folder management', () => {
     expect(structure.spaces.some((s) => s.name === 'wiki')).toBe(false);
   });
 
+  test('rejects renaming a space onto a name whose prefix has content', async ({ request }) => {
+    // Orphan content under `archive/` — not a declared space, so the name checks
+    // pass, but plan 015's content-collision preflight must still refuse the
+    // rename rather than silently merge `wiki` into it.
+    await seedVault(request, { 'authored/archive/note.md': '# stray\n' });
+
+    const res = await request.patch('/api/spaces', { data: { from: 'wiki', to: 'archive' } });
+    expect(res.status()).toBe(409);
+
+    // Nothing moved: wiki still exists, the orphan is untouched.
+    const dump = await dumpVault(request);
+    expect(Object.keys(dump).some((k) => k.startsWith('authored/wiki/'))).toBe(true);
+    expect(dump['authored/archive/note.md']).toBe('# stray\n');
+  });
+
   test('deletes a space and all of its content', async ({ request }) => {
     const res = await request.delete('/api/spaces?name=wiki');
     expect(res.status()).toBe(204);
