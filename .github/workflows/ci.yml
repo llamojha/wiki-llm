@@ -13,7 +13,7 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # pnpm version comes from package.json `packageManager` (pnpm@10.5.0).
       # Do NOT add a `version:` input here — having both is an error in v4.
@@ -41,7 +41,7 @@ jobs:
       run:
         working-directory: api
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: astral-sh/setup-uv@v7
         with:
