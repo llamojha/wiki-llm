@@ -25,8 +25,8 @@ Every plan carries its own drift check against `fead8f9` — run it first.
 | 012 | Parallelize vault-tree S3 listings | P2 | S | 003 | TODO |
 | 013 | Home view from the cached index (no full-vault reads) | P2 | M | 003, 010 | TODO |
 | 014 | Incremental search/index updates | P3 | L | 004, 012, 013 | TODO |
-| 015 | Consolidated movePrefix/purgePrefix (resumable moves) | P2 | M | 003, 004 | TODO |
-| 016 | Decompose the 1167-line UploadModal | P3 | L | 003 | TODO |
+| 015 | Consolidated movePrefix/purgePrefix (resumable moves) | P2 | M | 003, 004 | DONE (web/lib/vault-ops.ts two-phase movePrefix/purgePrefix/prefixHasObjects + copyObject primitive; all 7 loops replaced; +content-collision 409 preflight and non-.md purge — two deliberate behavior changes) |
+| 016 | Decompose the 1167-line UploadModal | P3 | L | 003 | PARTIAL — step 1 DONE (web/lib/folder-tree.ts helpers extracted + tests). Steps 2-4 (shared hook + 4 tab components) STOPPED per plan STOP #4 (hidden coupling): pendingCount is read by the shell header + tab-bar badge, batchRunning (pending‖reindex running) gates the shell scope toggle, and all tab state survives tab-switches today (modal only unmounts on close) — so the clean "each tab owns its state" split would change behavior. Needs a state-ownership decision. |
 | 017 | Delete dead vault-path exports + listSpaces collision | P2 | S | — | DONE |
 | 018 | Repo-root cleanup (parity scaffolding, stale context, AGENTS.md) | P2 | S | — | DONE (portal/ intentionally kept) |
 | 019 | Adopt ESLint (lint is a typecheck alias today) | P3 | M | 003, 004 | TODO |
