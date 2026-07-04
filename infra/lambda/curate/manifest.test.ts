@@ -1,6 +1,13 @@
 import { describe, it, expect } from '@jest/globals';
-import { computeHash, getPendingFiles, addToManifest } from './manifest.js';
-import type { ProcessedManifest } from './types.js';
+import {
+  addToManifest,
+  computeHash,
+  getPendingFiles,
+  ManifestConflictError,
+  manifestEntry,
+  mergeWithRetry,
+} from './manifest.js';
+import type { ProcessedFileEntry, ProcessedManifest } from './types.js';
 
 describe('manifest', () => {
   describe('computeHash', () => {
@@ -51,6 +58,87 @@ describe('manifest', () => {
       expect(result.files['raw/a.md'].hash).toBe('sha256:abc');
       expect(result.files['raw/a.md'].space).toBe('articles');
       expect(result.files['raw/a.md'].pages).toEqual(['articles/sources/a.md']);
+    });
+  });
+
+  describe('mergeWithRetry (manifest compare-and-swap)', () => {
+    const entry = (hash: string): ProcessedFileEntry =>
+      manifestEntry(hash, 'articles', [`articles/sources/${hash}.md`]);
+
+    it('merges the entry into the manifest and writes it', async () => {
+      let written: ProcessedManifest | undefined;
+      await mergeWithRetry(
+        async () => ({ manifest: { files: {} }, etag: 'v1' }),
+        async (m) => { written = m; },
+        'raw/a.md',
+        entry('a'),
+      );
+      expect(written?.files['raw/a.md']).toEqual(entry('a'));
+    });
+
+    it('writes unconditionally (no ifMatch) when no manifest exists yet', async () => {
+      let seenIfMatch: string | undefined = 'sentinel';
+      await mergeWithRetry(
+        async () => ({ manifest: { files: {} }, etag: null }),
+        async (_m, ifMatch) => { seenIfMatch = ifMatch; },
+        'raw/a.md',
+        entry('a'),
+      );
+      expect(seenIfMatch).toBeUndefined();
+    });
+
+    it('re-reads on conflict so a concurrent entry is not lost', async () => {
+      // A pre-existing entry `a`; this call adds `b`; a concurrent writer lands
+      // `c` between our read and our write, bumping the ETag → 412 on attempt 1.
+      const store = {
+        manifest: { files: { a: entry('a') } } as ProcessedManifest,
+        etag: 'v0',
+        writes: 0,
+      };
+      const write = async (m: ProcessedManifest, ifMatch?: string) => {
+        if (ifMatch !== store.etag) throw new ManifestConflictError();
+        store.manifest = m;
+        store.etag = `v${++store.writes}`;
+      };
+      let injected = false;
+      const read = async () => {
+        const snapshot = { manifest: store.manifest, etag: store.etag };
+        if (!injected) {
+          injected = true;
+          store.manifest = { files: { ...store.manifest.files, c: entry('c') } };
+          store.etag = 'vX';
+        }
+        return snapshot; // deliberately stale — old etag, pre-`c` files
+      };
+
+      await mergeWithRetry(read, write, 'b', entry('b'));
+
+      expect(Object.keys(store.manifest.files).sort()).toEqual(['a', 'b', 'c']);
+    });
+
+    it('throws ManifestConflictError after exhausting retries', async () => {
+      await expect(
+        mergeWithRetry(
+          async () => ({ manifest: { files: {} }, etag: 'always-stale' }),
+          async () => { throw new ManifestConflictError(); },
+          'raw/a.md',
+          entry('a'),
+          3,
+        ),
+      ).rejects.toBeInstanceOf(ManifestConflictError);
+    });
+
+    it('propagates a non-conflict write error without retrying', async () => {
+      let attempts = 0;
+      await expect(
+        mergeWithRetry(
+          async () => ({ manifest: { files: {} }, etag: 'v1' }),
+          async () => { attempts += 1; throw new Error('AccessDenied'); },
+          'raw/a.md',
+          entry('a'),
+        ),
+      ).rejects.toThrow('AccessDenied');
+      expect(attempts).toBe(1);
     });
   });
 });
