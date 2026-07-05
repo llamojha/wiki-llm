@@ -41,6 +41,10 @@ interface SearchIndex {
 }
 
 let _promise: Promise<SearchIndex> | null = null;
+// A synchronous handle on the built index, set once `_promise` resolves. Lets
+// `removeSearchEntry` mutate the live index without awaiting. Cleared together
+// with `_promise` on invalidation.
+let _resolved: SearchIndex | null = null;
 
 function keyToTitle(key: string): string {
   const stem = key.split('/').pop()!.replace(/\.md$/, '');
@@ -57,6 +61,23 @@ function extractSnippet(raw: string, maxChars = 200): string {
   return text.slice(0, maxChars);
 }
 
+/** Build one search entry from a document's raw Markdown. Single source of
+ *  truth shared by the full crawl and the incremental upsert path. */
+function entryForKey(key: string, raw: string): SearchEntry {
+  const { data } = matter(raw);
+  return {
+    id: key,
+    title: fmStringOr(data.title, keyToTitle(key)),
+    path: displayPathForKey(key),
+    snippet: extractSnippet(raw),
+    updated: fmString(data.updated),
+    source_type: fmStringOr(data.source_type, sourceTypeFromKey(key)),
+    author: fmStringOr(data.author, 'unknown'),
+    tags: Array.isArray(data.tags) ? data.tags : data.tags ? [String(data.tags)] : [],
+    starred: data.starred === true,
+  };
+}
+
 async function buildIndex(): Promise<SearchIndex> {
   const keys = await listObjects();
   const filtered = keys.filter(isDocumentKey);
@@ -69,22 +90,7 @@ async function buildIndex(): Promise<SearchIndex> {
       batch.map(async (key) => {
         try {
           const raw = await getObject(key);
-          const { data } = matter(raw);
-          const title = fmStringOr(data.title, keyToTitle(key));
-          const path = displayPathForKey(key);
-          const updated = fmString(data.updated);
-          const sourceType = fmStringOr(data.source_type, sourceTypeFromKey(key));
-          entries.push({
-            id: key,
-            title,
-            path,
-            snippet: extractSnippet(raw),
-            updated,
-            source_type: sourceType,
-            author: fmStringOr(data.author, 'unknown'),
-            tags: Array.isArray(data.tags) ? data.tags : data.tags ? [String(data.tags)] : [],
-            starred: data.starred === true,
-          });
+          entries.push(entryForKey(key, raw));
         } catch {
           // skip unreadable docs
         }
@@ -105,8 +111,55 @@ async function buildIndex(): Promise<SearchIndex> {
 }
 
 function getIndex(): Promise<SearchIndex> {
-  if (!_promise) _promise = buildIndex();
+  if (!_promise) {
+    _promise = buildIndex();
+    // Record the resolved index for the synchronous remove path. A failed
+    // build leaves `_resolved` null so the next call rebuilds from scratch.
+    _promise.then(
+      (idx) => {
+        _resolved = idx;
+      },
+      () => {
+        _promise = null;
+        _resolved = null;
+      },
+    );
+  }
   return _promise;
+}
+
+/**
+ * Upsert one document into the cached index. No-op when the cache is cold or
+ * still building — the pending/next full build reads current S3 and picks the
+ * change up, which is what keeps this safe on serverless. When warm: read the
+ * object once, then mutate Fuse + the entries array with no `await` between the
+ * remove and the add, so a concurrent search sees either the old or new entry,
+ * never a half-updated index.
+ */
+export async function upsertSearchEntry(key: string): Promise<void> {
+  if (!_promise) return;
+  const index = await _promise;
+  let raw: string;
+  try {
+    raw = await getObject(key);
+  } catch {
+    return; // unreadable (e.g. deleted between write and here) — leave as-is
+  }
+  const entry = entryForKey(key, raw);
+  index.fuse.remove((doc) => (doc as SearchEntry).id === key);
+  index.fuse.add(entry);
+  const i = index.entries.findIndex((e) => e.id === key);
+  if (i >= 0) index.entries[i] = entry;
+  else index.entries.push(entry);
+}
+
+/** Remove one document from the cached index. No-op when the cache is cold or
+ *  still building (the pending/next full build already reflects the deletion). */
+export function removeSearchEntry(key: string): void {
+  if (!_resolved) return;
+  _resolved.fuse.remove((doc) => (doc as SearchEntry).id === key);
+  const i = _resolved.entries.findIndex((e) => e.id === key);
+  if (i >= 0) _resolved.entries.splice(i, 1);
 }
 
 export async function search(q: string, limit = 20): Promise<SearchResult[]> {
@@ -144,7 +197,10 @@ export function isAllowedByScope(key: string, options: SearchOptions): boolean {
   return inferred.scope === 'user' && (!options.userId || inferred.userId === options.userId);
 }
 
-/** Clear the cached search index so it rebuilds on next search request. */
+/** Clear the cached search index so it rebuilds on next search request. Used
+ *  by bulk mutations (rename/delete/reindex) where incremental patching would
+ *  be more complex than a full rebuild. */
 export function invalidateSearchIndex(): void {
   _promise = null;
+  _resolved = null;
 }

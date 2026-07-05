@@ -3,7 +3,7 @@ import { putObject } from '@/lib/s3';
 import { type Scope } from '@/lib/scope';
 import { resolveScopeOr400 } from '@/lib/http-scope';
 import { regenerateMasterIndex, regenerateSpaceIndex } from '@/lib/index-gen';
-import { invalidateSearchIndex } from '@/lib/search';
+import { upsertSearchEntry } from '@/lib/search';
 import { appendLog } from '@/lib/log-append';
 import { ensureSpaceInStructure } from '@/lib/vault-structure';
 import { PERSONAL_SPACE } from '@/lib/vault-paths';
@@ -166,7 +166,7 @@ export async function POST(req: Request) {
     await regenerateSpaceIndex(space as string, scope);
     await regenerateMasterIndex(scope);
     await appendLog('created', key, filename.replace(/\.md$/, ''), scope);
-    invalidateSearchIndex();
+    await upsertSearchEntry(key);
   }
 
   return NextResponse.json(

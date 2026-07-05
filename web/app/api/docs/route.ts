@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 import { regenerateIndexesForKey } from '@/lib/index-gen';
 import { appendLog } from '@/lib/log-append';
 import { ObjectAlreadyExistsError, putObjectIfAbsent } from '@/lib/s3';
-import { getAllEntries, invalidateSearchIndex } from '@/lib/search';
+import { getAllEntries, upsertSearchEntry } from '@/lib/search';
 import { displayPathForKey, personalPrefix } from '@/lib/vault-paths';
 import { flagGuard } from '@/lib/flags';
 
@@ -112,7 +112,7 @@ export async function POST(req: Request) {
   }
   await regenerateIndexesForKey(key);
   await appendLog('created', key, title);
-  invalidateSearchIndex();
+  await upsertSearchEntry(key);
 
   return NextResponse.json({ id: key, title, path: displayPathForKey(key) }, { status: 201 });
 }
