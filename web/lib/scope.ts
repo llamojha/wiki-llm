@@ -7,6 +7,7 @@ import {
   SYSTEM_ROOT,
   USERS_ROOT,
 } from '@/lib/vault-paths';
+import { vaultMode } from '@/lib/vault-mode';
 
 /**
  * Scope of a vault operation.
@@ -121,6 +122,9 @@ export function resolveScope(selector: ScopeSelector): ScopePaths {
  * right scope's `_system/`.
  */
 export function inferScopeFromKey(key: string): ScopePaths {
+  // Folders mode is single-tenant: there is no `users/` subtree, so a top-level
+  // folder that happens to be named `users` must NOT be read as a user scope.
+  if (vaultMode() === 'folders') return resolveScope({ scope: 'shared' });
   const userMatch = key.match(/^users\/([^/]+)\//);
   if (userMatch) {
     return resolveScope({ scope: 'user', userId: userMatch[1] });

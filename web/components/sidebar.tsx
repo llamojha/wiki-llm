@@ -54,6 +54,8 @@ function useCurateStatus(scope: Scope): CurateStatus | null {
 type SidebarProps = {
   scope: Scope;
   setScope: (s: Scope) => void;
+  /** Folders mode has one implicit scope — the Shared/My toggle is hidden. */
+  foldersMode?: boolean;
   activeId: string | null;
   onOpen: (id: string) => void;
   onNewPage: () => void;
@@ -103,7 +105,7 @@ function filterByScope(nodes: TreeNodeType[], scope: Scope): TreeNodeType[] {
   return nodes.filter((n) => !(n.type === 'folder' && n.id === 'folder:__user'));
 }
 
-export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, onUpload, onManageFolders, onProcessPending, onReindex, apiTree, flags }: SidebarProps) {
+export function Sidebar({ scope, setScope, foldersMode, activeId, onOpen, onNewPage, onUpload, onManageFolders, onProcessPending, onReindex, apiTree, flags }: SidebarProps) {
   const fullTree = apiTree && apiTree.length > 0 ? apiTreeToLocal(apiTree) : [];
   const tree = filterByScope(fullTree, scope);
   const [openFolders, setOpenFolders] = useState<Set<string>>(DEFAULT_OPEN_FOLDERS);
@@ -118,14 +120,16 @@ export function Sidebar({ scope, setScope, activeId, onOpen, onNewPage, onUpload
   };
   return (
     <aside className="sidebar">
-      <div className="scope-switch">
-        <button className={scope === 'shared' ? 'on' : ''} onClick={() => setScope('shared')}>
-          {ICONS.globe} Shared
-        </button>
-        <button className={scope === 'user' ? 'on' : ''} onClick={() => setScope('user')}>
-          {ICONS.lock} My wiki
-        </button>
-      </div>
+      {!foldersMode && (
+        <div className="scope-switch">
+          <button className={scope === 'shared' ? 'on' : ''} onClick={() => setScope('shared')}>
+            {ICONS.globe} Shared
+          </button>
+          <button className={scope === 'user' ? 'on' : ''} onClick={() => setScope('user')}>
+            {ICONS.lock} My wiki
+          </button>
+        </div>
+      )}
 
       <button className={'nav-row' + (activeId === '__home' ? ' active' : '')} onClick={() => onOpen('__home')}>
         <span className="nav-icon">{ICONS.home}</span>

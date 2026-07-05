@@ -1,9 +1,12 @@
 # Folder-first vault mode
 
-> **Status**: DESIGN (plan 021). Deliverable spec; implementation is a
-> follow-up plan. Also adjudicates [`storage-v2-proposal.md`](storage-v2-proposal.md)
-> (§8) per the 2026-07-04 scope amendment. No default-behavior change ships
-> with this spec.
+> **Status**: IMPLEMENTED (2026-07-05, branch `feat/folders-first-vault-mode`).
+> The minimal folders mode shipped: mode resolution (`web/lib/vault-mode.ts`),
+> mode-aware recognition, folders tree/index/search, folder-direct write paths,
+> and the scope-toggle hide. **Deferred to follow-ups**: the AI curate/raw
+> pipeline in folders mode (§5) and `managed` mode + system page-records (§8).
+> This spec also adjudicates [`storage-v2-proposal.md`](storage-v2-proposal.md)
+> (§8) per the 2026-07-04 scope amendment.
 
 ## Problem
 

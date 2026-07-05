@@ -31,11 +31,14 @@ Every plan carries its own drift check against `fead8f9` — run it first.
 | 018 | Repo-root cleanup (parity scaffolding, stale context, AGENTS.md) | P2 | S | — | DONE (portal/ intentionally kept) |
 | 019 | Adopt ESLint (lint is a typecheck alias today) | P3 | M | 003, 004 | DONE (web/eslint.config.mjs flat config: next core-web-vitals + typescript-eslint; eslint pinned to ^9 — plugins don't yet support 10. Baseline 19 errors→0: 6 no-floating-promises fixed with `void`, 1 unescaped entity, and the react-compiler-era react-hooks rules set to `warn`+TODO(ratchet). `lint`→eslint; CI web job runs it. 14 warnings remain by design) |
 | 020 | Docs sync (flag defaults, TS 6, layout, THEME_VAULT_PREFIX) | P2 | S | 018 preferred | DONE (plans/, portal/ left out of trees — outside 4-fix scope) |
-| 021 | DESIGN: folder-first vault mode + storage-v2 adjudication (specs/storage-v2-proposal.md) | P2 | M–L | — | DONE (specs/folder-first-vault.md — 9 sections incl. storage-v2 §8 adjudication, touch list, 5 open Qs; storage-v2-proposal.md marked adjudicated. Spike couplings via code inspection) |
-| 022 | DESIGN: first-class HTML documents | P2 | M | — | DONE (specs/html-documents.md + landed sanitizer spike web/lib/html.ts + html.test.ts (12 tests); rehype-parse added; unused by routes) |
+| 021 | DESIGN: folder-first vault mode + storage-v2 adjudication (specs/storage-v2-proposal.md) | P2 | M–L | — | DONE (spec) + **IMPLEMENTED PR #71** (folders mode: vault-mode.ts, mode-aware recognition, folders tree/index/search, folder-direct writes, scope-toggle hide). Follow-ups: **026** (§5 curate pipeline), **027** (§8 managed mode) |
+| 022 | DESIGN: first-class HTML documents | P2 | M | — | DONE (spec + sanitizer spike) + **IMPLEMENTED PR #71** (listing widened, render dispatch, metadata, search/index/agent HTML branches, shared in-vault link resolver web/lib/vault-links.ts). Follow-up: **028** (§10 fidelity/hardening) |
 | 023 | DESIGN: secure agentic access (MCP-class gateway) | P2 | M | 002, 009 first | DONE (specs/agentic-access.md — threat model, MCP transport eval, deny-by-default capability tokens, propose-queue invariant, 023↔024 precedence, roadmap) |
 | 024 | DESIGN: built-in auth gate (OIDC — Keycloak/Cognito) | P2 | M | — | DONE (specs/auth-gate.md — seam decision, gate semantics, Keycloak+Cognito recipes, interaction table, AUTH_MODE=none default) |
 | 025 | Standalone landing page (decoupled from the product) | P3 | M | — | PARTIAL — specs/landing-page.md decision record DONE (placement/stack/hosting + content outline + 3 tagline candidates). site/ scaffold (Steps 2-4) deferred: gated on the Canopy rename (Track B) per the plan's own STOP condition |
+| 026 | Folders-mode AI curate/raw pipeline (frontmatter provenance) | P2 | M | 021 | TODO — 021 §5 follow-up. Provenance-in-frontmatter (`origin:`), no hidden `_vaultmark/`, no magic roots (maintainer decision on PR #71) |
+| 027 | Managed mode + system page-records (storage-v2) | P3 | L | 021, prefer 026 | TODO — 021 §8 follow-up. Third vault mode (metadata-derived tree); design spec `specs/managed-mode.md` first; ETag-CAS on records mandatory |
+| 028 | HTML document fidelity & hardening (022 §10) | P3 | M | 022 | TODO — external-image proxy, inline-style allowlist, `data:` images, relative-link edge cases. Each item widens the sanitizer boundary — 002/005-level care |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) |
 REJECTED (one-line rationale — finding fixed independently or approach abandoned)
@@ -67,6 +70,13 @@ REJECTED (one-line rationale — finding fixed independently or approach abandon
   on any code plan. Its one hard rule: never couple into the product build
   or Docker image.
 - Plans touching `.github/workflows/ci.yml`: 003, 004, 019 — sequence them.
+- **026/027/028 are the shipped-021/022 follow-ups** (PR #71 implemented the
+  minimal 021 + 022). 026 (folders-mode curate) and 028 (HTML fidelity) are
+  independent; 027 (managed mode) prefers 026 first (it builds on 026's
+  frontmatter `origin:` vocabulary) and must write `specs/managed-mode.md`
+  before code. All three touch security-sensitive surfaces (curate write paths,
+  a second derived store, the sanitizer boundary) — treat with 002/005/007-level
+  care.
 
 ## Findings considered and rejected
 

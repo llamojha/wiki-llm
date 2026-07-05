@@ -6,6 +6,7 @@ import { getObject, listObjects, putObject } from '@/lib/s3';
 import { regenerateMasterIndex } from '@/lib/index-gen';
 import { getStructure, spacesForScope } from '@/lib/vault-structure';
 import { isDocumentKey } from '@/lib/vault-paths';
+import { ensureVaultMode, vaultMode } from '@/lib/vault-mode';
 import { type Scope } from '@/lib/scope';
 import { resolveScopeOr400 } from '@/lib/http-scope';
 import { invalidateSearchIndex } from '@/lib/search';
@@ -60,6 +61,27 @@ export async function POST(req: Request) {
       };
 
       try {
+        // Folders mode: one flat catalog over all recognized documents, no
+        // per-space index files and no `structure.json`. An optional `space`
+        // filters to a single top-level folder.
+        await ensureVaultMode();
+        if (vaultMode() === 'folders') {
+          const keys = (await listObjects())
+            .filter(isDocumentKey)
+            .filter((k) => !space || k.startsWith(`${space}/`))
+            .sort();
+          send({ type: 'start', total: keys.length, rawCount: 0, spaces: [], scope: 'shared' });
+          let done = 0;
+          for (const key of keys) {
+            done++;
+            send({ type: 'progress', key, indexed: done, total: keys.length });
+          }
+          await regenerateMasterIndex();
+          invalidateSearchIndex();
+          send({ type: 'done', indexed: keys.length });
+          return;
+        }
+
         // Determine which logical spaces to index for this scope.
         let targetSpaces: string[];
         if (space) {

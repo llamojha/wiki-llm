@@ -4,6 +4,8 @@ import matter from 'gray-matter';
 import { fmString, fmStringOr } from '@/lib/frontmatter';
 import { getObject, listObjects } from '@/lib/s3';
 import { inferScopeFromKey } from '@/lib/scope';
+import { ensureVaultMode } from '@/lib/vault-mode';
+import { htmlText, htmlTitle } from '@/lib/html';
 import { displayPathForKey, isDocumentKey, sourceTypeFromKey } from '@/lib/vault-paths';
 
 export interface SearchEntry {
@@ -64,6 +66,21 @@ function extractSnippet(raw: string, maxChars = 200): string {
 /** Build one search entry from a document's raw Markdown. Single source of
  *  truth shared by the full crawl and the incremental upsert path. */
 function entryForKey(key: string, raw: string): SearchEntry {
+  // HTML documents carry no gray-matter frontmatter — title/snippet come from
+  // the parsed document, the rest is key-derived (plan 022).
+  if (key.endsWith('.html')) {
+    return {
+      id: key,
+      title: htmlTitle(raw) ?? keyToTitle(key),
+      path: displayPathForKey(key),
+      snippet: htmlText(raw),
+      updated: '',
+      source_type: 'uploaded',
+      author: 'unknown',
+      tags: [],
+      starred: false,
+    };
+  }
   const { data } = matter(raw);
   return {
     id: key,
@@ -79,6 +96,7 @@ function entryForKey(key: string, raw: string): SearchEntry {
 }
 
 async function buildIndex(): Promise<SearchIndex> {
+  await ensureVaultMode();
   const keys = await listObjects();
   const filtered = keys.filter(isDocumentKey);
 

@@ -64,7 +64,19 @@ function trace(op: string, detail: string): void {
   if (DEBUG_S3) console.log(`[s3] ${op} ${detail}${useMock ? ' (mock)' : ''}`);
 }
 
-/** List all .md keys under the vault prefix. Returns keys relative to prefix. */
+/**
+ * Document file extensions the listing layer surfaces. The single choke point
+ * for "what counts as a document blob" — kept in lockstep with the mock
+ * (`s3-mock.ts`) so e2e and prod agree. `.css` is deliberately NOT here: theme
+ * plugins are `.css` and no write route ever creates one (see `listCssObjects`).
+ */
+export const DOC_LIST_EXTENSIONS = ['.md', '.html'] as const;
+
+function hasListedExtension(rel: string): boolean {
+  return DOC_LIST_EXTENSIONS.some((ext) => rel.endsWith(ext));
+}
+
+/** List document keys (`.md`/`.html`) under the vault prefix, relative to prefix. */
 export async function listObjects(subPrefix = ''): Promise<string[]> {
   trace('LIST', subPrefix || '<root>');
   if (useMock) return mock.listObjects(subPrefix);
@@ -88,7 +100,7 @@ export async function listObjects(subPrefix = ''): Promise<string[]> {
       const rel = key.startsWith(prefix)
         ? key.slice(prefix.length).replace(/^\//, '')
         : key;
-      if (rel.endsWith('.md')) keys.push(rel);
+      if (hasListedExtension(rel)) keys.push(rel);
     }
     token = res.NextContinuationToken;
   } while (token);
@@ -225,6 +237,18 @@ export async function getObjectWithETag(
   return { content, etag };
 }
 
+/**
+ * Content-type for a document write, derived from the key extension. Markdown is
+ * the default; `.html` writes carry `text/html` so a direct S3/CDN fetch renders
+ * correctly (plan 022). The portal itself dispatches on the extension, not this
+ * header, so it is metadata-only for the app.
+ */
+function contentTypeForKey(relKey: string): string {
+  return relKey.endsWith('.html')
+    ? 'text/html; charset=utf-8'
+    : 'text/markdown; charset=utf-8';
+}
+
 /** Write an object to S3. If ifMatch is provided, uses optimistic concurrency. Returns the new ETag. */
 export async function putObject(
   relKey: string,
@@ -246,7 +270,7 @@ export async function putObject(
         Bucket: bucket,
         Key: fullKey(relKey),
         Body: body,
-        ContentType: 'text/markdown; charset=utf-8',
+        ContentType: contentTypeForKey(relKey),
         ...(ifMatch ? { IfMatch: ifMatch } : {}),
       }),
     );
@@ -281,7 +305,7 @@ export async function putObjectIfAbsent(
         Bucket: bucket,
         Key: fullKey(relKey),
         Body: body,
-        ContentType: 'text/markdown; charset=utf-8',
+        ContentType: contentTypeForKey(relKey),
         IfNoneMatch: '*',
       }),
     );

@@ -3,6 +3,7 @@ import { type ApiTreeNode } from '@/lib/api';
 import { getTree } from '@/lib/vault-tree';
 import { FLAGS } from '@/lib/flags';
 import { getThemeRegistry } from '@/lib/theme-registry';
+import { ensureVaultMode } from '@/lib/vault-mode';
 import { vaultDisplayName, vaultS3Location } from '@/lib/vault-paths';
 
 // Render per-request, never prerender. The tree comes from S3 and the flags
@@ -13,7 +14,9 @@ export const dynamic = 'force-dynamic';
 
 export default async function Home() {
   let initialTree: ApiTreeNode[] = [];
+  let foldersMode = false;
   try {
+    foldersMode = (await ensureVaultMode()) === 'folders';
     initialTree = await getTree();
   } catch {
     // S3 not reachable — AppShell renders with empty tree
@@ -27,6 +30,7 @@ export default async function Home() {
       defaultTheme={defaultTheme.id}
       vaultName={vaultDisplayName()}
       s3Location={vaultS3Location()}
+      foldersMode={foldersMode}
     />
   );
 }

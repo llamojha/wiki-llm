@@ -7,6 +7,7 @@ import remarkParse from 'remark-parse';
 import remarkRehype from 'remark-rehype';
 import { unified } from 'unified';
 import type { SanitizedHtml } from '@/lib/types';
+import { rehypeVaultLinks } from '@/lib/vault-links';
 
 // Use default sanitization schema — safe HTML only, no scripts or event handlers.
 // rehype-sanitize strips unsafe tags/attributes by default.
@@ -20,6 +21,9 @@ const processor = unified()
   .use(remarkRehype)
   .use(rehypeSlug)
   .use(rehypeSanitize)
+  // After sanitize so the transform operates on already-trusted nodes and the
+  // output stays within the SanitizedHtml boundary.
+  .use(rehypeVaultLinks)
   .use(rehypeStringify);
 
 /**
