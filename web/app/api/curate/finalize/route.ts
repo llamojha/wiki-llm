@@ -68,8 +68,15 @@ export async function POST(req: Request) {
     return NextResponse.json(job);
   }
 
-  await regenerateSpaceIndex(job.space, scope);
-  await regenerateMasterIndex(scope);
+  // Folders mode has no per-space index — the master index is a flat catalog of
+  // the whole key tree (index-gen already branches on mode). Skip the
+  // space-index regen that would otherwise write a `generated/<space>/index.md`.
+  if (job.mode === 'folders') {
+    await regenerateMasterIndex(scope);
+  } else {
+    await regenerateSpaceIndex(job.space, scope);
+    await regenerateMasterIndex(scope);
+  }
   invalidateSearchIndex();
 
   const updated = {

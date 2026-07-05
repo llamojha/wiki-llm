@@ -88,7 +88,10 @@ function entryForKey(key: string, raw: string): SearchEntry {
     path: displayPathForKey(key),
     snippet: extractSnippet(raw),
     updated: fmString(data.updated),
-    source_type: fmStringOr(data.source_type, sourceTypeFromKey(key)),
+    // Provenance: prefer the canonical `origin` field (plan 026), fall back to
+    // the legacy `source_type`, then key-derived. Purely additive — a doc with
+    // no `origin` frontmatter classifies exactly as before.
+    source_type: fmStringOr(data.origin, fmStringOr(data.source_type, sourceTypeFromKey(key))),
     author: fmStringOr(data.author, 'unknown'),
     tags: Array.isArray(data.tags) ? data.tags : data.tags ? [String(data.tags)] : [],
     starred: data.starred === true,
