@@ -2,6 +2,7 @@ import matter from 'gray-matter';
 import type { Tool } from '@aws-sdk/client-bedrock-runtime';
 
 import { getObject } from '@/lib/s3';
+import { htmlText, htmlTitle } from '@/lib/html';
 import { search } from '@/lib/search';
 import {
   inferScopeFromKey,
@@ -200,12 +201,24 @@ export async function readDocument(
     );
   }
   const raw = await getObject(input.doc_id);
-  const { data, content } = matter(raw);
+  const scope = inferScopeFromKey(input.doc_id).scope;
 
+  // HTML documents: hand the agent extracted plain text (Nova doesn't need tags,
+  // and they waste tokens). High char cap — the agent wants the full document.
+  if (input.doc_id.endsWith('.html')) {
+    return {
+      id: input.doc_id,
+      title: htmlTitle(raw) ?? keyToTitle(input.doc_id),
+      section: 'Source',
+      body: htmlText(raw, 100_000),
+      scope,
+    };
+  }
+
+  const { data, content } = matter(raw);
   const fallbackTitle = keyToTitle(input.doc_id);
   const title = typeof data.title === 'string' && data.title.trim() ? data.title : fallbackTitle;
   const section = extractFirstHeading(content) ?? 'Source';
-  const scope = inferScopeFromKey(input.doc_id).scope;
 
   return { id: input.doc_id, title, section, body: content, scope };
 }
@@ -225,7 +238,7 @@ export function proposePage(input: ProposePageInput): ProposePageResult {
 // ─── Internals ───────────────────────────────────────────────────────────
 
 function keyToTitle(key: string): string {
-  const stem = key.split('/').pop()!.replace(/\.md$/, '');
+  const stem = key.split('/').pop()!.replace(/\.(md|html)$/, '');
   return stem.replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 

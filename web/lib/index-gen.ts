@@ -11,6 +11,7 @@ import {
 } from '@/lib/s3';
 import { isDocumentKey } from '@/lib/vault-paths';
 import { ensureVaultMode, vaultMode } from '@/lib/vault-mode';
+import { htmlText, htmlTitle } from '@/lib/html';
 import { inferScopeFromKey, resolveScope, type ScopePaths } from '@/lib/scope';
 
 function toTitleCase(str: string): string {
@@ -26,18 +27,20 @@ function extractSummary(content: string): string {
 }
 
 async function buildLine(key: string): Promise<string> {
+  const keyTitle = () => toTitleCase(key.replace(/^.*\//, '').replace(/\.(md|html)$/, ''));
   try {
     const raw = await getObject(key);
+    if (key.endsWith('.html')) {
+      // HTML has no frontmatter/Markdown body — derive title + summary from the
+      // parsed document (plan 022).
+      return `- ${key} — ${htmlTitle(raw) ?? keyTitle()} — ${htmlText(raw, 80)}`;
+    }
     const { data, content } = matter(raw);
-    const title = fmStringOr(
-      data.title,
-      toTitleCase(key.replace(/^.*\//, '').replace(/\.(md|html)$/, '')),
-    );
+    const title = fmStringOr(data.title, keyTitle());
     const summary = extractSummary(content);
     return `- ${key} — ${title} — ${summary}`;
   } catch {
-    const title = toTitleCase(key.replace(/^.*\//, '').replace(/\.(md|html)$/, ''));
-    return `- ${key} — ${title} —`;
+    return `- ${key} — ${keyTitle()} —`;
   }
 }
 

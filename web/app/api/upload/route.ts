@@ -124,8 +124,11 @@ export async function POST(req: Request) {
     }
   }
 
-  if (!file.name.endsWith('.md')) {
-    return NextResponse.json({ detail: 'only .md files are accepted' }, { status: 400 });
+  // HTML is a first-class content type (plan 022) — accepted as upload/authored
+  // input alongside Markdown. Curate (raw) stays Markdown-generating, but an
+  // authored `.html` upload lands as a browsable/searchable document.
+  if (!file.name.endsWith('.md') && !file.name.endsWith('.html')) {
+    return NextResponse.json({ detail: 'only .md and .html files are accepted' }, { status: 400 });
   }
 
   // Cap the payload before reading it into memory (`file.text()` below). The

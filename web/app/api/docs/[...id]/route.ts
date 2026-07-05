@@ -9,17 +9,19 @@ import {
   deleteObject,
   getObject,
   getObjectWithETag,
+  headObject,
   putObject,
 } from '@/lib/s3';
 import { removeSearchEntry, upsertSearchEntry } from '@/lib/search';
 import { displayPathForKey, isDocumentKey, sourceTypeFromKey } from '@/lib/vault-paths';
 import { ensureVaultMode } from '@/lib/vault-mode';
+import { htmlTitle } from '@/lib/html';
 import { flagGuard } from '@/lib/flags';
 
 type Params = { params: Promise<{ id: string[] }> };
 
 function keyToTitle(key: string): string {
-  const stem = key.split('/').pop()!.replace(/\.md$/, '');
+  const stem = key.split('/').pop()!.replace(/\.(md|html)$/, '');
   return stem.replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
@@ -53,24 +55,53 @@ export async function GET(_req: Request, { params }: Params) {
     );
   }
 
-  const { data: fm } = matter(raw);
   const prefix = process.env.VAULT_PREFIX ?? '';
   const s3Key = prefix ? `${prefix}/${key}`.replace(/^\//, '') : key;
 
-  const doc = {
-    id: key,
-    title: fmStringOr(fm.title, keyToTitle(key)),
-    path: displayPathForKey(key),
-    s3_key: s3Key,
-    source_type: fmStringOr(fm.source_type, sourceTypeFromKey(key)),
-    updated: fmString(fm.updated),
-    author: fmStringOr(fm.author, 'unknown'),
-    tags: Array.isArray(fm.tags) ? fm.tags : fm.tags ? [String(fm.tags)] : [],
-    starred: fm.starred === true,
-    checksum: etag.replace(/"/g, '').slice(0, 8),
-    etag,
-    raw_markdown: raw,
-  };
+  // HTML documents carry no gray-matter frontmatter — derive metadata from the
+  // document itself (title) and S3 (LastModified). `source_type` is `uploaded`:
+  // HTML is imported content, never the portal's authored output (plan 022).
+  const isHtml = key.endsWith('.html');
+  let doc;
+  if (isHtml) {
+    let updated = '';
+    try {
+      const head = await headObject(key);
+      updated = head.lastModified?.toISOString() ?? '';
+    } catch {
+      // metadata read is best-effort
+    }
+    doc = {
+      id: key,
+      title: htmlTitle(raw) ?? keyToTitle(key),
+      path: displayPathForKey(key),
+      s3_key: s3Key,
+      source_type: 'uploaded',
+      updated,
+      author: 'unknown',
+      tags: [] as string[],
+      starred: false,
+      checksum: etag.replace(/"/g, '').slice(0, 8),
+      etag,
+      raw_markdown: raw,
+    };
+  } else {
+    const { data: fm } = matter(raw);
+    doc = {
+      id: key,
+      title: fmStringOr(fm.title, keyToTitle(key)),
+      path: displayPathForKey(key),
+      s3_key: s3Key,
+      source_type: fmStringOr(fm.source_type, sourceTypeFromKey(key)),
+      updated: fmString(fm.updated),
+      author: fmStringOr(fm.author, 'unknown'),
+      tags: Array.isArray(fm.tags) ? fm.tags : fm.tags ? [String(fm.tags)] : [],
+      starred: fm.starred === true,
+      checksum: etag.replace(/"/g, '').slice(0, 8),
+      etag,
+      raw_markdown: raw,
+    };
+  }
 
   return NextResponse.json(doc);
 }

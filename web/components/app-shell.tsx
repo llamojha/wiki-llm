@@ -5,6 +5,7 @@ import { getDoc, getTree, type ApiDoc, type ApiTreeNode } from '@/lib/api';
 import { stripBasePath, withBasePath } from '@/lib/base-path';
 import { ICONS } from '@/lib/icons';
 import { renderMarkdown } from '@/lib/markdown';
+import { renderHtmlDocument } from '@/lib/html';
 import { type Doc, type LiveDoc, type SanitizedHtml, type Scope } from '@/lib/types';
 import { setDocumentTheme, THEME_STORAGE_KEY, type Theme, type ThemeInfo } from '@/lib/theme';
 import type { FeatureFlags } from '@/lib/flags';
@@ -39,6 +40,15 @@ const DEFAULT_PROMPTS = [
 
 const TOAST_DURATION_MS = 2200;
 const ASK_EVENT = 'wikillm:ask';
+
+/** Render a fetched doc to sanitized HTML, dispatching by extension: `.html`
+ *  docs go through the HTML pipeline, everything else through Markdown. Both
+ *  return the SanitizedHtml brand — the only value DocReader will inline. */
+function renderDoc(api: ApiDoc): Promise<SanitizedHtml> {
+  return api.id.endsWith('.html')
+    ? renderHtmlDocument(api.raw_markdown)
+    : renderMarkdown(api.raw_markdown);
+}
 
 /** Convert an API doc response into a LiveDoc for DocReader. */
 function apiDocToDoc(api: ApiDoc, html: SanitizedHtml): LiveDoc {
@@ -112,7 +122,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
       setDocLoading(true);
       getDoc(initialDocId)
         .then(async (api) => {
-          const html = await renderMarkdown(api.raw_markdown);
+          const html = await renderDoc(api);
           setLiveDoc(apiDocToDoc(api, html));
         })
         .catch(() => showToast('Failed to load document'))
@@ -162,7 +172,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
       setLiveDoc(null);
       getDoc(docId)
         .then(async (api) => {
-          const html = await renderMarkdown(api.raw_markdown);
+          const html = await renderDoc(api);
           setLiveDoc(apiDocToDoc(api, html));
         })
         .catch(() => showToast('Failed to load document'))
@@ -195,7 +205,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
       window.history.pushState(null, '', withBasePath(`/${id}`));
       getDoc(id)
         .then(async (api) => {
-          const html = await renderMarkdown(api.raw_markdown);
+          const html = await renderDoc(api);
           setLiveDoc(apiDocToDoc(api, html));
         })
         .catch(() => showToast('Failed to load document'))
