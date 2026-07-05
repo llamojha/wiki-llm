@@ -7,6 +7,7 @@ import { upsertSearchEntry } from '@/lib/search';
 import { appendLog } from '@/lib/log-append';
 import { ensureSpaceInStructure } from '@/lib/vault-structure';
 import { PERSONAL_SPACE } from '@/lib/vault-paths';
+import { ensureVaultMode, vaultMode } from '@/lib/vault-mode';
 import { flagGuard, isEnabled } from '@/lib/flags';
 
 const SPACE_RE = /^[a-z0-9][a-z0-9-]*$/;
@@ -139,11 +140,19 @@ export async function POST(req: Request) {
 
   const scope = resolveScopeOr400({ scope: scopeName, userId });
   if (scope instanceof NextResponse) return scope;
+  await ensureVaultMode();
+  const folders = vaultMode() === 'folders';
   const filename = sanitizeFilename(file.name);
   const folderPrefix = folder ? `${folder}/` : '';
+  // Folders mode writes directly to the chosen folder (`<space>/<folder>/file`),
+  // with no `authored/<space>/` provenance prefix. The top-level `space` is just
+  // the first path segment.
+  const authoredKey = folders
+    ? `${space}/${folderPrefix}${filename}`
+    : `${scope.authoredPrefix(space as string)}${folderPrefix}${filename}`;
   const key = destination === 'raw'
     ? `${scope.rawPrefix}${folderPrefix}${filename}`
-    : `${scope.authoredPrefix(space as string)}${folderPrefix}${filename}`;
+    : authoredKey;
   const content = await file.text();
 
   try {
@@ -160,7 +169,9 @@ export async function POST(req: Request) {
     // the file lands in S3 (and is reachable by direct URL) but never shows
     // in the sidebar tree, which only walks declared `indexed` spaces. The
     // personal space is reserved and surfaced separately, so never declare it.
-    if (space && space !== PERSONAL_SPACE) {
+    // Folders mode has no `structure.json` — the tree is the key tree, so the
+    // uploaded file shows up with no declaration.
+    if (!folders && space && space !== PERSONAL_SPACE) {
       await ensureSpaceInStructure(space, scope.scope, scope.userId);
     }
     await regenerateSpaceIndex(space as string, scope);

@@ -4,6 +4,7 @@ import matter from 'gray-matter';
 import { fmString, fmStringOr } from '@/lib/frontmatter';
 import { getObject, listObjects } from '@/lib/s3';
 import { inferScopeFromKey } from '@/lib/scope';
+import { ensureVaultMode } from '@/lib/vault-mode';
 import { displayPathForKey, isDocumentKey, sourceTypeFromKey } from '@/lib/vault-paths';
 
 export interface SearchEntry {
@@ -79,6 +80,7 @@ function entryForKey(key: string, raw: string): SearchEntry {
 }
 
 async function buildIndex(): Promise<SearchIndex> {
+  await ensureVaultMode();
   const keys = await listObjects();
   const filtered = keys.filter(isDocumentKey);
 

@@ -10,6 +10,7 @@ import {
   putObject,
 } from '@/lib/s3';
 import { isDocumentKey } from '@/lib/vault-paths';
+import { ensureVaultMode, vaultMode } from '@/lib/vault-mode';
 import { inferScopeFromKey, resolveScope, type ScopePaths } from '@/lib/scope';
 
 function toTitleCase(str: string): string {
@@ -30,14 +31,47 @@ async function buildLine(key: string): Promise<string> {
     const { data, content } = matter(raw);
     const title = fmStringOr(
       data.title,
-      toTitleCase(key.replace(/^.*\//, '').replace(/\.md$/, '')),
+      toTitleCase(key.replace(/^.*\//, '').replace(/\.(md|html)$/, '')),
     );
     const summary = extractSummary(content);
     return `- ${key} — ${title} — ${summary}`;
   } catch {
-    const title = toTitleCase(key.replace(/^.*\//, '').replace(/\.md$/, ''));
+    const title = toTitleCase(key.replace(/^.*\//, '').replace(/\.(md|html)$/, ''));
     return `- ${key} — ${title} —`;
   }
+}
+
+/**
+ * Folders-mode master catalog: one prefix-wide listing of every recognized
+ * document, grouped by top-level folder (root-level docs under "Documents").
+ * There is no per-space `structure.json` and no `users/` scope, so this always
+ * writes the single shared `_system/index.md`. Same byte format as the
+ * provenance master index (`## <Section>` + `- <key> — <title> — <summary>`)
+ * so the agent's catalog reader is mode-agnostic.
+ */
+async function regenerateMasterIndexFolders(): Promise<void> {
+  const keys = (await listObjects()).filter(isDocumentKey).sort();
+
+  const groups = new Map<string, string[]>();
+  for (const key of keys) {
+    const slash = key.indexOf('/');
+    const label = slash === -1 ? 'Documents' : toTitleCase(key.slice(0, slash));
+    (groups.get(label) ?? groups.set(label, []).get(label)!).push(key);
+  }
+
+  const sections: string[] = [];
+  for (const label of [...groups.keys()].sort()) {
+    const groupKeys = groups.get(label)!;
+    const lines: string[] = [];
+    for (let i = 0; i < groupKeys.length; i += 20) {
+      const batch = groupKeys.slice(i, i + 20);
+      lines.push(...(await Promise.all(batch.map(buildLine))));
+    }
+    sections.push(`## ${label}\n${lines.join('\n')}`);
+  }
+
+  const body = `---\ntitle: Index\ntype: nav\nupdated: ${new Date().toISOString()}\n---\n\n${sections.join('\n\n')}\n`;
+  await putObject(resolveScope({ scope: 'shared' }).systemKey('index.md'), body);
 }
 
 /** Assemble a space index file body from its doc lines. Single source of the
@@ -78,6 +112,10 @@ export async function regenerateSpaceIndex(
   space: string,
   scope: ScopePaths = resolveScope({ scope: 'shared' }),
 ): Promise<void> {
+  // Per-space index files are a provenance artifact; folders mode keeps a single
+  // master catalog only.
+  await ensureVaultMode();
+  if (vaultMode() === 'folders') return;
   const keys = [
     ...(await listObjects(scope.generatedPrefix(space))),
     ...(await listObjects(scope.authoredPrefix(space))),
@@ -183,6 +221,13 @@ async function applySpaceIndexPatch(
  * shared) and the space from the key segment after the provenance root.
  */
 export async function regenerateIndexesForKey(key: string): Promise<void> {
+  await ensureVaultMode();
+  if (vaultMode() === 'folders') {
+    // Folders mode has one flat catalog and no per-space CAS patching; a full
+    // rebuild is cheap for the single-user MVP and always correct.
+    await regenerateMasterIndexFolders();
+    return;
+  }
   await patchSpaceIndexForKey(key);
   await patchMasterIndexForKey(key);
 }
@@ -193,6 +238,11 @@ export async function regenerateIndexesForKey(key: string): Promise<void> {
  * (the document no longer exists to read).
  */
 export async function removeKeyFromIndexes(key: string): Promise<void> {
+  await ensureVaultMode();
+  if (vaultMode() === 'folders') {
+    await regenerateMasterIndexFolders();
+    return;
+  }
   await removeKeyFromSpaceIndex(key);
   await removeKeyFromMasterIndex(key);
 }
@@ -218,6 +268,9 @@ function spaceFromKey(key: string): string | null {
 export async function regenerateMasterIndex(
   scope: ScopePaths = resolveScope({ scope: 'shared' }),
 ): Promise<void> {
+  await ensureVaultMode();
+  if (vaultMode() === 'folders') return regenerateMasterIndexFolders();
+
   const structure = await getStructure();
   const spaces = spacesForScope(structure, scope.scope, scope.userId)
     .filter((s) => s.indexed)

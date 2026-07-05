@@ -1,5 +1,7 @@
 // Vault path constants + key classification. Scoped-prefix resolution is
 // owned by `web/lib/scope.ts` (resolveScope) — keep it there, not here.
+import { vaultMode } from '@/lib/vault-mode';
+
 export const USERS_ROOT = 'users';
 // Inlined at build time (NEXT_PUBLIC_*) so server routes and client
 // components agree on the same value. Rebuild after changing it.
@@ -58,8 +60,42 @@ export function systemKey(name: string): string {
   return `${SYSTEM_ROOT}/${name}`.replace(/\/+/g, '/');
 }
 
+/**
+ * File extensions recognized as documents. Markdown is the canonical authored
+ * format; `.html` is a first-class *content* type (plan 022) — imported/rendered
+ * but never authored by the portal.
+ */
+export const DOC_EXTENSIONS = ['.md', '.html'] as const;
+
+/** Whether a key ends in a recognized document extension. */
+export function hasDocExtension(key: string): boolean {
+  return DOC_EXTENSIONS.some((ext) => key.endsWith(ext));
+}
+
+/** Strip a recognized document extension (`.md`/`.html`) from a key. */
+function stripDocExtension(key: string): string {
+  return key.replace(/\.(md|html)$/, '');
+}
+
+/**
+ * Whether an S3 key is a browsable/searchable document. Mode-aware:
+ *
+ * - **provenance**: a `.md`/`.html` under a content root (`generated/`,
+ *   `authored/`, or the per-user mirrors), excluding reserved system files.
+ * - **folders**: any `.md`/`.html` outside `_system/`, minus `.keep` markers.
+ *   Top-level folders *are* the spaces; root-level `index.md`/`log.md` are
+ *   ordinary user docs (only `_system/` is reserved).
+ */
 export function isDocumentKey(key: string): boolean {
-  if (!key.endsWith('.md')) return false;
+  if (!hasDocExtension(key)) return false;
+
+  if (vaultMode() === 'folders') {
+    if (key.startsWith(`${SYSTEM_ROOT}/`)) return false;
+    const filename = key.split('/').pop()!;
+    if (filename === '.keep') return false;
+    return true;
+  }
+
   if (key.startsWith(RAW_PREFIX)) return false;
   if (key.startsWith(`${SYSTEM_ROOT}/`)) return false;
   if (key.match(/^users\/[^/]+\/raw\//)) return false;
@@ -75,12 +111,19 @@ export function isDocumentKey(key: string): boolean {
 }
 
 export function sourceTypeFromKey(key: string): 'generated' | 'authored' | 'personal' {
+  // Folders mode has no provenance roots — everything is user-written content.
+  // Frontmatter `source_type`/`origin` still wins at the read site.
+  if (vaultMode() === 'folders') return 'authored';
   if (key.startsWith(`${GENERATED_ROOT}/`) || key.match(/^users\/[^/]+\/generated\//)) return 'generated';
   if (key.match(/^users\/[^/]+\/authored\/personal\//)) return 'personal';
   return 'authored';
 }
 
 export function displayPathForKey(key: string): string {
+  // Folders mode: the key *is* the display path — no provenance root to strip.
+  if (vaultMode() === 'folders') {
+    return stripDocExtension(key).split('/').join(' / ');
+  }
   let displayKey = key;
   const personal = personalPrefix();
   if (displayKey.startsWith(personal)) {

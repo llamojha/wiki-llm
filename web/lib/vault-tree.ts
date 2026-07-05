@@ -7,6 +7,7 @@ import {
   isDocumentKey,
   personalPrefix,
 } from '@/lib/vault-paths';
+import { ensureVaultMode, vaultMode } from '@/lib/vault-mode';
 import { resolveScope } from '@/lib/scope';
 
 export type TreeNode =
@@ -20,8 +21,47 @@ function stemToTitle(stem: string): string {
 }
 
 function keyToName(key: string): string {
-  const stem = key.split('/').pop()!.replace(/\.md$/, '');
+  const stem = key.split('/').pop()!.replace(/\.(md|html)$/, '');
   return stemToTitle(stem);
+}
+
+/**
+ * Insert a document into the folders-mode tree, creating folder nodes for each
+ * path segment. Folder ids are the cumulative path (`folder:notes/sub`) so they
+ * are stable and human-readable — unlike the provenance builder, there is no
+ * space/prefix indirection here: the key path *is* the tree path.
+ */
+function insertFolders(root: TreeNode[], segments: string[], key: string, ancestry: string): void {
+  if (segments.length === 1) {
+    root.push({ type: 'doc', id: key, name: keyToName(key) });
+    return;
+  }
+  const name = segments[0];
+  const path = ancestry ? `${ancestry}/${name}` : name;
+  const folderId = `folder:${path}`;
+  let folder = root.find(
+    (n): n is TreeNode & { type: 'folder' } => n.type === 'folder' && n.id === folderId,
+  );
+  if (!folder) {
+    folder = { type: 'folder', id: folderId, name: stemToTitle(name), children: [] };
+    root.push(folder);
+  }
+  insertFolders(folder.children, segments.slice(1), key, path);
+}
+
+/**
+ * Folders-mode tree: one prefix-wide listing of every recognized document,
+ * bucketed by path segments. Top-level folders are the spaces; there is no
+ * `structure.json` and no `users/` subtree (single-tenant). Keys are sorted so
+ * the output is deterministic.
+ */
+export async function getFoldersTree(): Promise<TreeNode[]> {
+  const keys = (await listObjects()).filter(isDocumentKey).sort();
+  const tree: TreeNode[] = [];
+  for (const key of keys) {
+    insertFolders(tree, key.split('/').filter(Boolean), key, '');
+  }
+  return tree;
 }
 
 function insert(root: TreeNode[], folderPrefix: string, parts: string[], key: string): void {
@@ -59,6 +99,9 @@ function addKeys(root: TreeNode[], space: string, storagePrefix: string, keys: s
  * `user` returns only `__user`'s children.
  */
 export async function getTree(): Promise<TreeNode[]> {
+  await ensureVaultMode();
+  if (vaultMode() === 'folders') return getFoldersTree();
+
   const structure = await getStructure();
   const tree: TreeNode[] = [];
   const defaultUser = structure.defaultUser || DEFAULT_USER_ID;

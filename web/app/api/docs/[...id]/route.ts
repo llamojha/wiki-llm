@@ -13,6 +13,7 @@ import {
 } from '@/lib/s3';
 import { removeSearchEntry, upsertSearchEntry } from '@/lib/search';
 import { displayPathForKey, isDocumentKey, sourceTypeFromKey } from '@/lib/vault-paths';
+import { ensureVaultMode } from '@/lib/vault-mode';
 import { flagGuard } from '@/lib/flags';
 
 type Params = { params: Promise<{ id: string[] }> };
@@ -25,6 +26,7 @@ function keyToTitle(key: string): string {
 export async function GET(_req: Request, { params }: Params) {
   const { id } = await params;
   const key = decodeURIComponent(id.join('/'));
+  await ensureVaultMode();
 
   // Read paths are never feature-gated, so this is the only guard preventing
   // an arbitrary key from fetching `_system/` state, raw uploads, or another
@@ -79,6 +81,7 @@ export async function PUT(req: Request, { params }: Params) {
 
   const { id } = await params;
   const key = decodeURIComponent(id.join('/'));
+  await ensureVaultMode();
 
   // The editor may only write real documents. Without this, an arbitrary key
   // (e.g. `_themes/evil.css`) could be PUT with arbitrary content — which the
@@ -136,6 +139,7 @@ export async function DELETE(_req: Request, { params }: Params) {
 
   const { id } = await params;
   const key = decodeURIComponent(id.join('/'));
+  await ensureVaultMode();
 
   // Same restriction as PUT: the editor only touches real documents, never
   // system objects or operator-controlled theme files.

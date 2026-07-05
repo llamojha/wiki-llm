@@ -78,9 +78,11 @@ type AppShellProps = {
   vaultName?: string | null;
   /** Resolved S3 destination base (`s3://bucket/prefix/`) for upload previews. */
   s3Location: string;
+  /** Folders mode collapses to a single implicit scope (hides the scope toggle). */
+  foldersMode?: boolean;
 };
 
-export function AppShell({ initialTree, initialDocId, flags, themes, defaultTheme, vaultName, s3Location }: AppShellProps) {
+export function AppShell({ initialTree, initialDocId, flags, themes, defaultTheme, vaultName, s3Location, foldersMode }: AppShellProps) {
   const [scope, setScope] = useState<Scope>('shared');
   const [activeId, setActiveId] = useState<string>(initialDocId ?? '__home');
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -203,7 +205,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
   );
 
   const onNewPage = () => {
-    setScope('user');
+    if (!foldersMode) setScope('user');
     setActiveId('__new');
     setEditing(true);
   };
@@ -240,7 +242,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
    */
   const handleDraftFromChat = (draft: { title: string; body: string }) => {
     setEditorDraft(draft);
-    setScope('user');
+    if (!foldersMode) setScope('user');
     setActiveId('__new');
     setEditing(true);
   };
@@ -269,6 +271,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
       <Sidebar
         scope={scope}
         setScope={setScope}
+        foldersMode={foldersMode}
         activeId={activeId}
         onOpen={openDoc}
         onNewPage={onNewPage}
