@@ -93,6 +93,13 @@ export async function processSource(
    * inline.
    */
   enqueueManifestWrite?: WriteQueue,
+  /**
+   * Folders mode (plan 026): when set, the curated page is written to
+   * `<destination>/<slug>.md` with `origin: generated` frontmatter instead of a
+   * `generated/<space>/sources/...` provenance path. The LLM's space
+   * suggestions are ignored; the output folder is caller-chosen.
+   */
+  destination?: string,
 ): Promise<string[]> {
   // 1. Read source
   await onStage?.('reading');
@@ -101,16 +108,19 @@ export async function processSource(
   const hash = computeHash(sourceContent);
   logTiming(jobId, rawKey, 'read-source', startedAt);
 
-  if (generatedSpaces.length === 0) {
+  const foldersMode = destination !== undefined;
+  if (!foldersMode && generatedSpaces.length === 0) {
     throw new Error('processSource called with empty generatedSpaces — caller must supply at least one fallback');
   }
-  const defaultSpace = generatedSpaces[0];
+  const defaultSpace = foldersMode ? destination : generatedSpaces[0];
 
   // 2. Extract one compact source card. Index/log/global synthesis happen later.
+  // In folders mode there are no spaces to choose from — the destination folder
+  // is fixed by the caller, so the prompt's space hints are cosmetic.
   const system = buildExtractionSystemPrompt();
   const user = buildExtractionUserPrompt({
     space: defaultSpace,
-    allowedSpaces: generatedSpaces,
+    allowedSpaces: foldersMode ? [destination] : generatedSpaces,
     rawKey,
     sourceContent,
     existingPageSummaries: hints.join('\n'),
@@ -122,19 +132,32 @@ export async function processSource(
   logTiming(jobId, rawKey, 'bedrock-extract', startedAt);
 
   const parsedCard = parseSourceCard(response, rawKey);
-  const allowed = new Set(generatedSpaces);
-  const suggested = parsedCard.suggestedSpaces.find((s) => allowed.has(s));
-  const outputSpace = suggested ?? defaultSpace;
-  if (!suggested && parsedCard.suggestedSpaces.length > 0) {
-    console.warn(`[${jobId ?? 'curate'}] ${rawKey} suggestedSpaces=[${parsedCard.suggestedSpaces.join(',')}] not in allowed=[${generatedSpaces.join(',')}] — falling back to ${defaultSpace}`);
-  }
-  // Placement (sub-folder under sources/) is derived deterministically from rawKey —
-  // mirrors raw/ layout, keeps page URLs stable across re-extractions. See specs/sources-foldering.md.
   const placement = placementFromRawKey(rawKey);
   const card = { ...parsedCard, placement };
   const cardKey = sourceCardKey(scope, hash);
-  const pagePath = sourcePageKey(scope.generatedPrefix(outputSpace), placement, sourceSlug(card, rawKey, hash));
-  const pageContent = renderSourcePage(card, rawKey, hash);
+
+  let pagePath: string;
+  let pageContent: string;
+  let manifestSpace: string;
+  if (foldersMode) {
+    // Folders mode: curated page lands directly in the destination folder as a
+    // normal `.md`, provenance carried in `origin: generated` frontmatter.
+    pagePath = `${destination}/${sourceSlug(card, rawKey, hash)}.md`;
+    pageContent = renderSourcePage(card, rawKey, hash, { origin: 'generated' });
+    manifestSpace = destination;
+  } else {
+    const allowed = new Set(generatedSpaces);
+    const suggested = parsedCard.suggestedSpaces.find((s) => allowed.has(s));
+    const outputSpace = suggested ?? defaultSpace;
+    if (!suggested && parsedCard.suggestedSpaces.length > 0) {
+      console.warn(`[${jobId ?? 'curate'}] ${rawKey} suggestedSpaces=[${parsedCard.suggestedSpaces.join(',')}] not in allowed=[${generatedSpaces.join(',')}] — falling back to ${defaultSpace}`);
+    }
+    // Placement (sub-folder under sources/) is derived deterministically from rawKey —
+    // mirrors raw/ layout, keeps page URLs stable across re-extractions. See specs/sources-foldering.md.
+    pagePath = sourcePageKey(scope.generatedPrefix(outputSpace), placement, sourceSlug(card, rawKey, hash));
+    pageContent = renderSourcePage(card, rawKey, hash);
+    manifestSpace = outputSpace;
+  }
 
   // 4. Deterministically write the durable card and source page.
   await onStage?.('writing');
@@ -142,7 +165,7 @@ export async function processSource(
   await putJson(bucket, prefix, cardKey, {
     ...card,
     hash,
-    space: outputSpace,
+    space: manifestSpace,
     sourcePage: pagePath,
     extractedAt: new Date().toISOString(),
   });
@@ -156,7 +179,7 @@ export async function processSource(
   // CAS retries, but correctness no longer depends on it.
   await onStage?.('manifest');
   startedAt = nowMs();
-  const entry = manifestEntry(hash, outputSpace, [pagePath], cardKey);
+  const entry = manifestEntry(hash, manifestSpace, [pagePath], cardKey);
   const writeManifest = () => mergeIntoManifest(bucket, prefix, scope, rawKey, entry);
   if (enqueueManifestWrite) {
     await enqueueManifestWrite(writeManifest);

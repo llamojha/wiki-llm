@@ -80,11 +80,21 @@ export async function handler(event: CurateEvent, context: Context): Promise<voi
   }
 
   // Pass A — load placement hints **once** per invocation, not per file.
-  const ingestSpace = await getGeneratedSpace(bucket, prefix);
-  const generatedSpaces = await getGeneratedSpaces(bucket, prefix);
-  const hintsStart = Date.now();
-  const hints = await loadPlacementHints(bucket, prefix, scope, ingestSpace);
-  console.log(`[${jobId}] Loaded ${hints.length} placement hint(s) in ${Date.now() - hintsStart}ms; allowed spaces=[${generatedSpaces.join(',')}]`);
+  // Folders mode (plan 026) has no structure.json spaces: skip the space
+  // resolution and hints (dup-avoidance is an optimization, not correctness).
+  const foldersMode = event.mode === 'folders' || event.curateEventVersion === 3;
+  const destination = event.destination;
+  let generatedSpaces: string[] = [];
+  let hints: string[] = [];
+  if (foldersMode) {
+    console.log(`[${jobId}] folders mode — writing curated pages to "${destination}" with origin: generated`);
+  } else {
+    const ingestSpace = await getGeneratedSpace(bucket, prefix);
+    generatedSpaces = await getGeneratedSpaces(bucket, prefix);
+    const hintsStart = Date.now();
+    hints = await loadPlacementHints(bucket, prefix, scope, ingestSpace);
+    console.log(`[${jobId}] Loaded ${hints.length} placement hint(s) in ${Date.now() - hintsStart}ms; allowed spaces=[${generatedSpaces.join(',')}]`);
+  }
 
   // All job-JSON writes flow through this queue (Pass B).
   const enqueueWrite = createWriteQueue();
@@ -126,7 +136,7 @@ export async function handler(event: CurateEvent, context: Context): Promise<voi
     });
 
     try {
-      const pages = await processSource(bucket, prefix, space, rawKey, hints, scope, generatedSpaces, jobId, reportStage, enqueueWrite);
+      const pages = await processSource(bucket, prefix, space, rawKey, hints, scope, generatedSpaces, jobId, reportStage, enqueueWrite, foldersMode ? destination : undefined);
       console.log(`[${jobId}] Done ${rawKey}: ${pages.length} page(s) written`);
       const finishedAt = new Date().toISOString();
       await enqueueWrite(async () => {

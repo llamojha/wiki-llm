@@ -21,6 +21,28 @@ export const PROVENANCE_ROOTS = new Set([
   SYSTEM_ROOT,
 ]);
 
+/** A single folder-path segment: lowercase alphanumeric + hyphens. */
+export const FOLDER_SEGMENT_RE = /^[a-z0-9][a-z0-9-]*$/;
+
+/**
+ * Normalize a user-supplied folder path (upload subfolder, curate
+ * source/destination) to a clean slash-joined relative path with no leading or
+ * trailing slashes (e.g. `"guides/setup"`), or `''` when none was given.
+ * Returns `null` when any segment is malformed so callers can reject with a 400
+ * rather than writing to a surprising key — each segment must match
+ * `FOLDER_SEGMENT_RE`, which keeps S3 keys lowercase and rejects `..` traversal.
+ */
+export function normalizeFolderPath(raw: string | null | undefined): string | null {
+  if (!raw) return '';
+  const trimmed = raw.trim().replace(/^\/+|\/+$/g, '');
+  if (!trimmed) return '';
+  const segments = trimmed.split('/').filter(Boolean);
+  for (const seg of segments) {
+    if (!FOLDER_SEGMENT_RE.test(seg)) return null;
+  }
+  return segments.join('/');
+}
+
 /**
  * Vault name for the top-bar pill (server-side; pass to clients as a prop).
  * `VAULT_ID` doubles as the display name; null (unset or the 'default'
