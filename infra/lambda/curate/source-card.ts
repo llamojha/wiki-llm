@@ -96,7 +96,7 @@ function yamlArray(values: string[]): string {
   return `[${values.map(yamlString).join(', ')}]`;
 }
 
-export function renderSourcePage(card: SourceCard, rawKey: string, hash: string): string {
+export function renderSourcePage(card: SourceCard, rawKey: string, hash: string, opts?: { origin?: string }): string {
   const now = new Date().toISOString();
   const claims = card.claims.length
     ? card.claims.map((claim) => {
@@ -108,10 +108,13 @@ export function renderSourcePage(card: SourceCard, rawKey: string, hash: string)
   const concepts = card.concepts.length ? card.concepts.map((c) => `- [[${c}]]`).join('\n') : '- None identified.';
 
   const placementLine = card.placement ? `\nplacement: ${yamlString(card.placement)}` : '';
+  // Folders mode (plan 026): provenance is a frontmatter value, not a folder.
+  // Emitted only when requested so provenance-mode output stays byte-identical.
+  const originLine = opts?.origin ? `\norigin: ${yamlString(opts.origin)}` : '';
   return `---
 title: ${yamlString(card.title)}
 type: source
-source_type: generated
+source_type: generated${originLine}
 sources: ${yamlArray([rawKey])}
 raw_key: ${yamlString(rawKey)}
 raw_hash: ${yamlString(hash)}${placementLine}

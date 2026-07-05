@@ -12,10 +12,12 @@ import {
   putObject,
   putObjectIfAbsent,
 } from '@/lib/s3';
-import { getIngestPolicy } from '@/lib/ingest-policy';
+import { getIngestPolicy, resolveFoldersIngest, isIngestError } from '@/lib/ingest-policy';
 import { type Scope } from '@/lib/scope';
 import { resolveScopeOr400 } from '@/lib/http-scope';
 import { resolvePending, type ProcessedManifest } from '@/lib/curate-pending';
+import { ensureVaultMode, vaultMode } from '@/lib/vault-mode';
+import { isDocumentKey } from '@/lib/vault-paths';
 import { flagGuard } from '@/lib/flags';
 
 const LAMBDA_ARN = process.env.CURATE_LAMBDA_ARN;
@@ -195,6 +197,17 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => ({}));
+
+  // Folders mode has no structure.json spaces or provenance roots: curation
+  // reads a caller-chosen source folder and writes curated pages into a
+  // caller-chosen destination folder, tagged `origin: generated` in
+  // frontmatter (plan 026). Entirely separate contract from the provenance
+  // flow below, which stays byte-identical.
+  await ensureVaultMode();
+  if (vaultMode() === 'folders') {
+    return startFolders(body);
+  }
+
   const { space, limit, scope: scopeName, userId } = body as {
     space?: string;
     limit?: unknown;
@@ -343,5 +356,146 @@ export async function POST(req: Request) {
     remaining: pending.length - selected.length,
     scope: scope.scope,
     userId: scope.userId,
+  });
+}
+
+/**
+ * Folders-mode curate start (plan 026, `curateEventVersion: 3`).
+ *
+ * Reads ordinary user documents from a caller-chosen **source** folder and
+ * dispatches the Lambda to write curated pages into a caller-chosen
+ * **destination** folder, each stamped `origin: generated` in frontmatter — no
+ * `structure.json` space, no `generated/`/`raw/` roots, no `_vaultmark/`. The
+ * vault is single-tenant in folders mode, so the shared scope's `_system/`
+ * owns the job files, start-lock, and processed manifest.
+ */
+async function startFolders(body: unknown): Promise<NextResponse> {
+  if (!LAMBDA_ARN) {
+    return NextResponse.json({ detail: 'CURATE_LAMBDA_ARN not configured' }, { status: 500 });
+  }
+  const { source, destination, limit } = (body ?? {}) as {
+    source?: unknown;
+    destination?: unknown;
+    limit?: unknown;
+  };
+
+  const policy = resolveFoldersIngest(
+    typeof source === 'string' ? source : '',
+    typeof destination === 'string' ? destination : '',
+  );
+  if (isIngestError(policy)) {
+    return NextResponse.json({ detail: policy.error }, { status: 400 });
+  }
+
+  const batchLimit = typeof limit === 'number' && Number.isInteger(limit) ? limit : undefined;
+  if (batchLimit !== undefined && batchLimit < 1) {
+    return NextResponse.json({ detail: 'limit must be a positive integer' }, { status: 400 });
+  }
+
+  // Single-tenant: shared scope owns `_system/` (jobs, lock, manifest).
+  const scope = resolveScopeOr400({ scope: 'shared' });
+  if (scope instanceof NextResponse) return scope;
+
+  const runningJobId = await activeJobId(scope.systemKey);
+  if (runningJobId) {
+    return NextResponse.json(
+      { detail: 'a curate job is already running', jobId: runningJobId },
+      { status: 409 },
+    );
+  }
+
+  // Recognized documents under the source folder, excluding the destination
+  // subtree so curation never re-ingests its own generated output.
+  const destPrefix = `${policy.destination}/`;
+  const sourceKeys = (await listObjects(policy.sourcePrefix)).filter(
+    (key) => isDocumentKey(key) && !key.startsWith(destPrefix),
+  );
+
+  if (sourceKeys.length === 0) {
+    return NextResponse.json({ detail: 'no source documents found' }, { status: 404 });
+  }
+
+  let manifest: ProcessedManifest = { files: {} };
+  try {
+    manifest = JSON.parse(await getObject(scope.systemKey('processed.json')));
+  } catch {
+    // No manifest yet — everything is pending.
+  }
+
+  const pending = await resolvePending(sourceKeys, manifest);
+  if (pending.length === 0) {
+    return NextResponse.json({ detail: 'all source documents already processed' }, { status: 200 });
+  }
+
+  const selected = batchLimit ? pending.slice(0, batchLimit) : pending;
+  const jobId = `job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const lockHolderJobId = await claimStartLock(scope.systemKey, jobId);
+  if (lockHolderJobId) {
+    return NextResponse.json(
+      { detail: 'a curate job is already running', jobId: lockHolderJobId },
+      { status: 409 },
+    );
+  }
+
+  const job = {
+    id: jobId,
+    status: 'processing',
+    mode: 'folders',
+    source: policy.source,
+    destination: policy.destination,
+    // `space` carries the destination for the job/finalize machinery, which is
+    // otherwise space-shaped; folders finalize ignores it beyond labelling.
+    space: policy.destination,
+    scope: scope.scope,
+    userId: scope.userId,
+    total: selected.length,
+    completed: 0,
+    files: selected.map((key) => ({ key, status: 'pending' })),
+    startedAt: new Date().toISOString(),
+    completedAt: null,
+    error: null,
+  };
+
+  const jobKey = scope.systemKey(`jobs/${jobId}.json`);
+  await putObject(jobKey, JSON.stringify(job, null, 2));
+
+  const payload = {
+    curateEventVersion: 3,
+    mode: 'folders',
+    jobId,
+    source: policy.source,
+    destination: policy.destination,
+    space: policy.destination,
+    files: selected,
+    bucket: BUCKET,
+    prefix: PREFIX,
+    scope: scope.scope,
+  };
+  try {
+    await lambdaClient().send(new InvokeCommand({
+      FunctionName: LAMBDA_ARN,
+      InvocationType: InvocationType.Event,
+      Payload: new TextEncoder().encode(JSON.stringify(payload)),
+    }));
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Lambda invocation failed';
+    console.error('[curate] lambda invoke failed:', err);
+    await putObject(jobKey, JSON.stringify({
+      ...job,
+      status: 'error',
+      completedAt: new Date().toISOString(),
+      error: message,
+    }, null, 2));
+    await releaseStartLock(scope.systemKey, jobId);
+    return NextResponse.json({ detail: 'curation failed to start', jobId }, { status: 502 });
+  }
+
+  return NextResponse.json({
+    jobId,
+    total: selected.length,
+    remaining: pending.length - selected.length,
+    source: policy.source,
+    destination: policy.destination,
   });
 }
