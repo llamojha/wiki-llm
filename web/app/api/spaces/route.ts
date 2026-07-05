@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { flagGuard } from '@/lib/flags';
+import { requireSession } from '@/lib/auth-guard';
 import { userIdGuard } from '@/lib/http-scope';
 import { InvalidUserIdError, type Scope } from '@/lib/scope';
 import {
@@ -48,6 +49,9 @@ function resolveTarget(scope: unknown, userId: unknown): { scope: Scope; userId?
 }
 
 export async function GET(req: Request) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
+
   const params = new URL(req.url).searchParams;
   const { scope, userId } = resolveTarget(params.get('scope'), params.get('userId'));
 
@@ -60,6 +64,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
+
   const blocked = flagGuard('upload');
   if (blocked) return blocked;
 
@@ -85,6 +92,9 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
+
   const blocked = flagGuard('upload');
   if (blocked) return blocked;
 
@@ -110,6 +120,9 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
+
   const blocked = flagGuard('upload');
   if (blocked) return blocked;
 

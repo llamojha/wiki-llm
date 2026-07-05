@@ -3,6 +3,7 @@ import { getObject, headObject } from '@/lib/s3';
 import { type Scope } from '@/lib/scope';
 import { resolveScopeOr400 } from '@/lib/http-scope';
 import { flagGuard } from '@/lib/flags';
+import { requireSession } from '@/lib/auth-guard';
 
 // Lambda writes per-stage heartbeats every few seconds, so the job JSON's
 // LastModified should advance well within this window during real work.
@@ -12,6 +13,9 @@ const STALE_AFTER_MS = 90 * 1000;
 const STALE_AFTER_MS_CHAINING = 5 * 60 * 1000;
 
 export async function GET(req: Request) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
+
   const blocked = flagGuard('curate');
   if (blocked) return blocked;
 

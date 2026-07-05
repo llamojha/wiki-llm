@@ -17,6 +17,7 @@ import { displayPathForKey, isDocumentKey, isHtmlKey, sourceTypeFromKey } from '
 import { ensureVaultMode } from '@/lib/vault-mode';
 import { htmlTitle } from '@/lib/html';
 import { flagGuard } from '@/lib/flags';
+import { requireSession } from '@/lib/auth-guard';
 
 type Params = { params: Promise<{ id: string[] }> };
 
@@ -25,7 +26,9 @@ function keyToTitle(key: string): string {
   return stem.replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export async function GET(_req: Request, { params }: Params) {
+export async function GET(req: Request, { params }: Params) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
   const { id } = await params;
   const key = decodeURIComponent(id.join('/'));
   await ensureVaultMode();
@@ -107,6 +110,9 @@ export async function GET(_req: Request, { params }: Params) {
 }
 
 export async function PUT(req: Request, { params }: Params) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
+
   const blocked = flagGuard('editor');
   if (blocked) return blocked;
 
@@ -174,7 +180,10 @@ export async function PUT(req: Request, { params }: Params) {
   return NextResponse.json({ id: key, title: logTitle });
 }
 
-export async function DELETE(_req: Request, { params }: Params) {
+export async function DELETE(req: Request, { params }: Params) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
+
   const blocked = flagGuard('editor');
   if (blocked) return blocked;
 

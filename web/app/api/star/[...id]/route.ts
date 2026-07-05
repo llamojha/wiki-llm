@@ -5,10 +5,13 @@ import { ConcurrencyError, getObjectWithETag, putObject } from '@/lib/s3';
 import { upsertSearchEntry } from '@/lib/search';
 import { isDocumentKey, isHtmlKey } from '@/lib/vault-paths';
 import { flagGuard } from '@/lib/flags';
+import { requireSession } from '@/lib/auth-guard';
 
 type Params = { params: Promise<{ id: string[] }> };
 
-export async function PATCH(_req: Request, { params }: Params) {
+export async function PATCH(req: Request, { params }: Params) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
   const blocked = flagGuard('star');
   if (blocked) return blocked;
 

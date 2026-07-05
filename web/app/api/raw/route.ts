@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireSession } from '@/lib/auth-guard';
 import { getObject, listObjects } from '@/lib/s3';
 import { getIngestPolicy } from '@/lib/ingest-policy';
 import { type Scope } from '@/lib/scope';
@@ -28,6 +29,9 @@ async function getManifest(
 }
 
 export async function GET(req: Request) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
+
   const { searchParams } = new URL(req.url);
   const space = searchParams.get('space');
 
