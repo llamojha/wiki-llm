@@ -1,9 +1,12 @@
 # First-class HTML documents
 
-> **Status**: DESIGN (plan 022). Deliverable = this spec + the landed
-> sanitizer spike (`web/lib/html.ts` + `html.test.ts`, **unused by routes**).
-> Route/UI/search wiring is the follow-up implementation plan. No
-> default-behavior change ships here.
+> **Status**: IMPLEMENTED (2026-07-05, branch `feat/folders-first-vault-mode`).
+> `.html` is now surfaced by the listing choke point, rendered via
+> `renderHtmlDocument`, given derived metadata (title/LastModified/`uploaded`),
+> indexed/searched via `htmlText`, agent-readable, and upload-accepted. A single
+> shared in-vault link resolver (`web/lib/vault-links.ts`) serves both the
+> Markdown and HTML pipelines. **Deferred (spec §10)**: external-image proxy,
+> inline-`style` allowlist, `data:` image URIs, and HTML authoring in the portal.
 >
 > **Sibling security boundaries**: cite plan 002 (document-key allowlist) and
 > plan 005 (upload size limit) — HTML inherits both.
