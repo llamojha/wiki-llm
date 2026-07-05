@@ -5,6 +5,7 @@ import { getDoc, getTree, type ApiDoc, type ApiTreeNode } from '@/lib/api';
 import { stripBasePath, withBasePath } from '@/lib/base-path';
 import { ICONS } from '@/lib/icons';
 import { renderMarkdown } from '@/lib/markdown';
+import { renderHtmlDocument } from '@/lib/html';
 import { type Doc, type LiveDoc, type SanitizedHtml, type Scope } from '@/lib/types';
 import { setDocumentTheme, THEME_STORAGE_KEY, type Theme, type ThemeInfo } from '@/lib/theme';
 import type { FeatureFlags } from '@/lib/flags';
@@ -39,6 +40,15 @@ const DEFAULT_PROMPTS = [
 
 const TOAST_DURATION_MS = 2200;
 const ASK_EVENT = 'wikillm:ask';
+
+/** Render a fetched doc to sanitized HTML, dispatching by extension: `.html`
+ *  docs go through the HTML pipeline, everything else through Markdown. Both
+ *  return the SanitizedHtml brand — the only value DocReader will inline. */
+function renderDoc(api: ApiDoc): Promise<SanitizedHtml> {
+  return api.id.endsWith('.html')
+    ? renderHtmlDocument(api.raw_markdown)
+    : renderMarkdown(api.raw_markdown);
+}
 
 /** Convert an API doc response into a LiveDoc for DocReader. */
 function apiDocToDoc(api: ApiDoc, html: SanitizedHtml): LiveDoc {
@@ -78,9 +88,11 @@ type AppShellProps = {
   vaultName?: string | null;
   /** Resolved S3 destination base (`s3://bucket/prefix/`) for upload previews. */
   s3Location: string;
+  /** Folders mode collapses to a single implicit scope (hides the scope toggle). */
+  foldersMode?: boolean;
 };
 
-export function AppShell({ initialTree, initialDocId, flags, themes, defaultTheme, vaultName, s3Location }: AppShellProps) {
+export function AppShell({ initialTree, initialDocId, flags, themes, defaultTheme, vaultName, s3Location, foldersMode }: AppShellProps) {
   const [scope, setScope] = useState<Scope>('shared');
   const [activeId, setActiveId] = useState<string>(initialDocId ?? '__home');
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -110,7 +122,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
       setDocLoading(true);
       getDoc(initialDocId)
         .then(async (api) => {
-          const html = await renderMarkdown(api.raw_markdown);
+          const html = await renderDoc(api);
           setLiveDoc(apiDocToDoc(api, html));
         })
         .catch(() => showToast('Failed to load document'))
@@ -160,7 +172,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
       setLiveDoc(null);
       getDoc(docId)
         .then(async (api) => {
-          const html = await renderMarkdown(api.raw_markdown);
+          const html = await renderDoc(api);
           setLiveDoc(apiDocToDoc(api, html));
         })
         .catch(() => showToast('Failed to load document'))
@@ -193,7 +205,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
       window.history.pushState(null, '', withBasePath(`/${id}`));
       getDoc(id)
         .then(async (api) => {
-          const html = await renderMarkdown(api.raw_markdown);
+          const html = await renderDoc(api);
           setLiveDoc(apiDocToDoc(api, html));
         })
         .catch(() => showToast('Failed to load document'))
@@ -203,7 +215,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
   );
 
   const onNewPage = () => {
-    setScope('user');
+    if (!foldersMode) setScope('user');
     setActiveId('__new');
     setEditing(true);
   };
@@ -240,7 +252,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
    */
   const handleDraftFromChat = (draft: { title: string; body: string }) => {
     setEditorDraft(draft);
-    setScope('user');
+    if (!foldersMode) setScope('user');
     setActiveId('__new');
     setEditing(true);
   };
@@ -269,6 +281,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
       <Sidebar
         scope={scope}
         setScope={setScope}
+        foldersMode={foldersMode}
         activeId={activeId}
         onOpen={openDoc}
         onNewPage={onNewPage}
@@ -364,6 +377,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
         showToast={showToast}
         flags={flags}
         s3Location={s3Location}
+        foldersMode={foldersMode}
       />
 
       <ToastStack message={toast} />

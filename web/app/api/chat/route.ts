@@ -6,6 +6,8 @@ import { getObject } from '@/lib/s3';
 import { resolveScope } from '@/lib/scope';
 import { resolveScopeOr400 } from '@/lib/http-scope';
 import type { ScopeMode } from '@/lib/agent-tools';
+import { getAllEntries } from '@/lib/search';
+import { ensureVaultMode, vaultMode } from '@/lib/vault-mode';
 import { logChatInteraction } from '@/lib/usage-log';
 import { flagGuard } from '@/lib/flags';
 
@@ -146,6 +148,18 @@ export async function POST(req: Request) {
  * apart and weight relevance accordingly.
  */
 async function loadCatalog(scopeMode: ScopeMode, userId?: string): Promise<string> {
+  // Folders mode has one implicit scope and — in the default browse+agent
+  // deployment — no write path to produce `_system/index.md`. Build the catalog
+  // straight from the live search index so the agent gets a catalog with zero
+  // writes (and never drifts from what's actually in the vault).
+  await ensureVaultMode();
+  if (vaultMode() === 'folders') {
+    const entries = await getAllEntries();
+    return entries
+      .map((e) => `- ${e.id} — ${e.title} — ${e.snippet.slice(0, 80)}`)
+      .join('\n');
+  }
+
   const shared = resolveScope({ scope: 'shared' });
   const user = resolveScope({ scope: 'user', userId });
 

@@ -6,7 +6,10 @@ import { appendLog } from '@/lib/log-append';
 import { ObjectAlreadyExistsError, putObjectIfAbsent } from '@/lib/s3';
 import { getAllEntries, upsertSearchEntry } from '@/lib/search';
 import { displayPathForKey, personalPrefix } from '@/lib/vault-paths';
+import { ensureVaultMode, vaultMode } from '@/lib/vault-mode';
 import { flagGuard } from '@/lib/flags';
+
+const FOLDER_SEGMENT_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 type DocSummary = {
   id: string;
@@ -71,10 +74,11 @@ export async function POST(req: Request) {
   if (blocked) return blocked;
 
   const body = await req.json();
-  const { title, body: content, slug } = body as {
+  const { title, body: content, slug, folder } = body as {
     title?: string;
     body?: string;
     slug?: string;
+    folder?: string;
   };
 
   if (!title || typeof content !== 'string') {
@@ -88,11 +92,31 @@ export async function POST(req: Request) {
   if (!docSlug) {
     return NextResponse.json({ detail: 'slug could not be derived from title' }, { status: 400 });
   }
-  const key = `${personalPrefix()}${docSlug}.md`;
+
+  await ensureVaultMode();
+  const folders = vaultMode() === 'folders';
+
+  // Folders mode has no `users/` personal tree — new pages land in the
+  // user-chosen folder (or the vault root), and provenance is a frontmatter
+  // value rather than a path prefix.
+  let key: string;
+  if (folders) {
+    const segments = (folder ?? '').split('/').map((s) => s.trim()).filter(Boolean);
+    if (segments.some((s) => !FOLDER_SEGMENT_RE.test(s))) {
+      return NextResponse.json(
+        { detail: 'folder segments must be lowercase alphanumeric with hyphens only' },
+        { status: 400 },
+      );
+    }
+    const folderPrefix = segments.length ? `${segments.join('/')}/` : '';
+    key = `${folderPrefix}${docSlug}.md`;
+  } else {
+    key = `${personalPrefix()}${docSlug}.md`;
+  }
 
   const fm = {
     title,
-    source_type: 'personal',
+    source_type: folders ? 'authored' : 'personal',
     author: 'you',
     updated: new Date().toISOString(),
     starred: false,
