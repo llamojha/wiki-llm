@@ -72,6 +72,17 @@ export function hasDocExtension(key: string): boolean {
   return DOC_EXTENSIONS.some((ext) => key.endsWith(ext));
 }
 
+/**
+ * Whether a key is an HTML document. HTML is first-class *content* but is
+ * browse/upload-only (plan 022 §1) — the portal never authors it. Write paths
+ * that round-trip gray-matter and persist `matter.stringify(...)` (editor PUT,
+ * star PATCH) must reject these keys, or they would inject YAML frontmatter
+ * into the `.html` object and corrupt it.
+ */
+export function isHtmlKey(key: string): boolean {
+  return key.endsWith('.html');
+}
+
 /** Strip a recognized document extension (`.md`/`.html`) from a key. */
 function stripDocExtension(key: string): string {
   return key.replace(/\.(md|html)$/, '');
@@ -91,6 +102,11 @@ export function isDocumentKey(key: string): boolean {
 
   if (vaultMode() === 'folders') {
     if (key.startsWith(`${SYSTEM_ROOT}/`)) return false;
+    // Raw pipeline inputs are scratch, not browsable documents — exclude them
+    // even in folders mode so un-curated uploads (present only when curate/raw
+    // is opted in — see spec §5) never leak into the sidebar/search/read route.
+    if (key.startsWith(RAW_PREFIX)) return false;
+    if (key.match(/^users\/[^/]+\/raw\//)) return false;
     const filename = key.split('/').pop()!;
     if (filename === '.keep') return false;
     return true;

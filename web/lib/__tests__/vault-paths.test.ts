@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { displayPathForKey, isDocumentKey, sourceTypeFromKey } from '@/lib/vault-paths';
+import { displayPathForKey, isDocumentKey, isHtmlKey, sourceTypeFromKey } from '@/lib/vault-paths';
 
 /**
  * Path classification underpins routing, search indexing, and display. These
@@ -35,6 +35,21 @@ describe('isDocumentKey', () => {
     expect(isDocumentKey('generated/wiki/log.md')).toBe(false);
     expect(isDocumentKey('generated/wiki/log-2026.md')).toBe(false);
     expect(isDocumentKey('generated/wiki/.keep')).toBe(false);
+  });
+});
+
+/**
+ * HTML is browse/upload-only (plan 022 §1). The Markdown mutation guards (PUT
+ * editor, star PATCH) use this to reject `.html` keys so they never inject YAML
+ * frontmatter into an HTML object.
+ */
+describe('isHtmlKey', () => {
+  it('is true only for .html keys', () => {
+    expect(isHtmlKey('notes/page.html')).toBe(true);
+    expect(isHtmlKey('authored/wiki/a.html')).toBe(true);
+    expect(isHtmlKey('notes/page.md')).toBe(false);
+    expect(isHtmlKey('page.htmlx')).toBe(false);
+    expect(isHtmlKey('page.html.md')).toBe(false);
   });
 });
 

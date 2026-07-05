@@ -32,6 +32,14 @@ describe('folders mode', () => {
       expect(isDocumentKey('notes/.keep')).toBe(false);
     });
 
+    it('excludes raw pipeline inputs (scratch, not browsable)', () => {
+      // With curate/raw opted in, un-curated uploads land under raw/ — they must
+      // not leak into the sidebar/search/read route before curation.
+      expect(isDocumentKey('raw/a.md')).toBe(false);
+      expect(isDocumentKey('raw/sub/b.html')).toBe(false);
+      expect(isDocumentKey('users/default/raw/c.md')).toBe(false);
+    });
+
     it('rejects non-document extensions', () => {
       expect(isDocumentKey('notes/a.txt')).toBe(false);
       expect(isDocumentKey('assets/logo.png')).toBe(false);

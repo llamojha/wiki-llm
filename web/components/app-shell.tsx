@@ -377,6 +377,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
         showToast={showToast}
         flags={flags}
         s3Location={s3Location}
+        foldersMode={foldersMode}
       />
 
       <ToastStack message={toast} />

@@ -43,6 +43,26 @@ describe('ensureVaultMode', () => {
     expect(await ensureVaultMode()).toBe('provenance');
   });
 
+  it('sniffs provenance for a user-scoped-only vault (no structure.json, no shared docs)', async () => {
+    // The old personal-editor flow produces `users/<id>/authored/personal/*`
+    // with no root structure.json and no shared generated/authored docs. Without
+    // the user-scoped probe this would flip to `folders` on restart.
+    __resetWith({ 'users/default/authored/personal/foo.md': '# Foo' });
+    expect(await ensureVaultMode()).toBe('provenance');
+  });
+
+  it('sniffs provenance for user-scoped generated content', async () => {
+    __resetWith({ 'users/default/generated/wiki/bar.md': '# Bar' });
+    expect(await ensureVaultMode()).toBe('provenance');
+  });
+
+  it('does not treat a plain top-level users/ folder as provenance', async () => {
+    // A folders-mode vault may legitimately have a `users/` folder of notes;
+    // only the `users/*/(generated|authored)/` shape is a provenance signal.
+    __resetWith({ 'users/alice/notes.md': '# Notes' });
+    expect(await ensureVaultMode()).toBe('folders');
+  });
+
   it('defaults to folders for a plain folder of Markdown', async () => {
     __resetWith({ 'notes/a.md': '# A', 'projects/b.md': '# B' });
     expect(await ensureVaultMode()).toBe('folders');

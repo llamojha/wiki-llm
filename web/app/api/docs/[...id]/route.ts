@@ -13,7 +13,7 @@ import {
   putObject,
 } from '@/lib/s3';
 import { removeSearchEntry, upsertSearchEntry } from '@/lib/search';
-import { displayPathForKey, isDocumentKey, sourceTypeFromKey } from '@/lib/vault-paths';
+import { displayPathForKey, isDocumentKey, isHtmlKey, sourceTypeFromKey } from '@/lib/vault-paths';
 import { ensureVaultMode } from '@/lib/vault-mode';
 import { htmlTitle } from '@/lib/html';
 import { flagGuard } from '@/lib/flags';
@@ -121,6 +121,16 @@ export async function PUT(req: Request, { params }: Params) {
   if (!isDocumentKey(key)) {
     return NextResponse.json(
       { detail: `Not an editable document key: ${key}` },
+      { status: 400 },
+    );
+  }
+
+  // HTML documents are browse/upload-only (plan 022 §1). The editor persists
+  // gray-matter frontmatter via `matter.stringify(...)`, which would corrupt an
+  // `.html` object — so reject edits here rather than write YAML into HTML.
+  if (isHtmlKey(key)) {
+    return NextResponse.json(
+      { detail: 'HTML documents are read-only and cannot be edited' },
       { status: 400 },
     );
   }

@@ -70,11 +70,20 @@ async function sniff(): Promise<VaultMode> {
   } catch {
     // no structure.json — fall through to the content probe
   }
-  const [generated, authored] = await Promise.all([
+  const [generated, authored, users] = await Promise.all([
     listObjects('generated/'),
     listObjects('authored/'),
+    listObjects('users/'),
   ]);
   if (generated.length || authored.length) return 'provenance';
+  // A vault whose only content is user-scoped (e.g. the old personal-editor
+  // flow: `users/<id>/authored/personal/foo.md`) has no root structure.json or
+  // shared generated/authored docs, but is still provenance — without this
+  // probe it would silently sniff as `folders` and treat `users/` as an
+  // ordinary top-level folder on the next restart.
+  if (users.some((key) => /^users\/[^/]+\/(generated|authored)\//.test(key))) {
+    return 'provenance';
+  }
   return 'folders';
 }
 
