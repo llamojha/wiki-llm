@@ -79,6 +79,7 @@ If you don't deploy the Lambda, disable the feature with `FEATURE_CURATE=off`.
 | `CURATE_LAMBDA_ARN` | for curation | — | ARN of the deployed curate Lambda. Curation start returns an error without it. |
 | `CURATE_LAMBDA_REGION` | no | `eu-central-1` | Region of the Lambda. |
 | `VAULT_USER_ID` | no | `default` | (Lambda + ingest CLI) user id for per-user vault paths `users/<id>/…`. |
+| `FEATURE_CURATE_AUTOSYNTH` | no | off | Opt-in server-side toggle that chains synthesis after a curate extraction batch completes. Not a portal `FEATURE_*` flag (no UI surface, no `flags.ts` entry) — set to `on`/`1`/`true`/`yes` to enable. See `specs/synthesis-pipeline.md`. |
 
 ## Users / personal space
 

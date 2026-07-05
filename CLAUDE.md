@@ -157,3 +157,16 @@ PRD §12 lists `AGENTS.md`, `WIKI_RULES.md`, `INDEX.md`, `LOG.md`, `SOURCES.md`,
 - Don't revive the Bedrock pipeline unprompted. `legacy/` is frozen reference; reach into it only when explicitly porting code out, and prefer rewriting against the new architecture over importing from it.
 - When a PRD open question (§16) blocks a decision, surface it rather than guessing.
 - Prefer editing existing files over creating new ones. The prototype already encodes most product decisions — read it before re-deriving.
+
+## OpenWiki
+
+This repository has documentation located in the /openwiki directory. Start
+here:
+
+- [OpenWiki quickstart](openwiki/quickstart.md)
+
+OpenWiki includes repository overview, architecture notes, workflows,
+domain concepts, operations, integrations, testing guidance, and source
+maps. When working in this repository, read the OpenWiki quickstart first,
+then follow its links to the relevant architecture, workflow, domain,
+operation, and testing notes.
