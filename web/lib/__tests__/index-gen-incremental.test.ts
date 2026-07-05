@@ -135,3 +135,31 @@ describe('incremental master-index patching', () => {
     expect(stripUpdated(patched)).toBe(stripUpdated(full));
   });
 });
+
+describe('concurrent space-index writes (ETag CAS)', () => {
+  beforeEach(() => {
+    __resetWith({
+      [STRUCTURE_KEY]: JSON.stringify(structureWith('wiki'), null, 2),
+      'generated/wiki/seed.md': doc('Seed'),
+    });
+  });
+
+  it('never drops an entry when two same-space patches race', async () => {
+    await regenerateSpaceIndex('wiki'); // index lists only seed
+    // Two new docs, neither yet in the index.
+    await putObject('authored/wiki/a.md', doc('Alpha'));
+    await putObject('authored/wiki/b.md', doc('Beta'));
+
+    // Race their inserts. Without CAS the second writer reads the pre-insert
+    // index and overwrites the first — permanently dropping one entry.
+    await Promise.all([
+      patchSpaceIndexForKey('authored/wiki/a.md'),
+      patchSpaceIndexForKey('authored/wiki/b.md'),
+    ]);
+
+    const index = await getObject(SPACE_INDEX);
+    expect(index).toContain('- generated/wiki/seed.md — ');
+    expect(index).toContain('- authored/wiki/a.md — Alpha — ');
+    expect(index).toContain('- authored/wiki/b.md — Beta — ');
+  });
+});

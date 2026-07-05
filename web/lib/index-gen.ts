@@ -103,28 +103,18 @@ export async function patchSpaceIndexForKey(key: string): Promise<void> {
   const scope = inferScopeFromKey(key);
   const space = spaceFromKey(key);
   if (!space) return;
-  const indexKey = scope.systemKey(`indexes/${space}.md`);
-
-  let raw: string;
-  try {
-    raw = await getObject(indexKey);
-  } catch {
-    await regenerateSpaceIndex(space, scope);
-    return;
-  }
-
-  const lines = parseIndexLines(raw);
-  const newLine = await buildLine(key);
-  const at = lines.findIndex((l) => keyOfIndexLine(l) === key);
-  if (at >= 0) {
-    lines[at] = newLine;
-  } else {
-    let ins = lines.findIndex((l) => indexKeyLess(key, keyOfIndexLine(l)));
-    if (ins < 0) ins = lines.length;
-    lines.splice(ins, 0, newLine);
-  }
-
-  await putObject(indexKey, spaceIndexBody(space, lines));
+  const newLine = await buildLine(key); // one read, outside the CAS loop
+  await applySpaceIndexPatch(space, scope, 'rebuild', (lines) => {
+    const at = lines.findIndex((l) => keyOfIndexLine(l) === key);
+    if (at >= 0) {
+      lines[at] = newLine;
+    } else {
+      let ins = lines.findIndex((l) => indexKeyLess(key, keyOfIndexLine(l)));
+      if (ins < 0) ins = lines.length;
+      lines.splice(ins, 0, newLine);
+    }
+    return 'ok';
+  });
 }
 
 /** Remove a single key's line from its space index (no document read). No-op
@@ -133,17 +123,58 @@ export async function removeKeyFromSpaceIndex(key: string): Promise<void> {
   const scope = inferScopeFromKey(key);
   const space = spaceFromKey(key);
   if (!space) return;
+  await applySpaceIndexPatch(space, scope, 'skip', (lines) => {
+    const idx = lines.findIndex((l) => keyOfIndexLine(l) === key);
+    if (idx < 0) return 'nochange';
+    lines.splice(idx, 1);
+    return 'ok';
+  });
+}
+
+type SpaceEditResult = 'ok' | 'nochange' | 'fallback';
+
+/**
+ * Read a space index, apply `edit` to its doc lines, and write back under an
+ * ETag CAS with a single retry — the same race guard the master patch uses, so
+ * two concurrent same-space writes can never drop each other's entry (each
+ * would otherwise read the same file, insert only its own line, and last-writer
+ * wins). On a lost race the fallback is a full `regenerateSpaceIndex`
+ * (correct-but-slower). `onMissing` picks the behavior when no index exists yet:
+ * `rebuild` (upsert — build it) or `skip` (remove — nothing to do).
+ */
+async function applySpaceIndexPatch(
+  space: string,
+  scope: ScopePaths,
+  onMissing: 'rebuild' | 'skip',
+  edit: (lines: string[]) => SpaceEditResult,
+): Promise<void> {
   const indexKey = scope.systemKey(`indexes/${space}.md`);
-
-  let raw: string;
-  try {
-    raw = await getObject(indexKey);
-  } catch {
-    return;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let raw: string;
+    let etag: string;
+    try {
+      ({ content: raw, etag } = await getObjectWithETag(indexKey));
+    } catch {
+      if (onMissing === 'rebuild') await regenerateSpaceIndex(space, scope);
+      return;
+    }
+    const lines = parseIndexLines(raw);
+    const result = edit(lines);
+    if (result === 'nochange') return;
+    if (result === 'fallback') {
+      await regenerateSpaceIndex(space, scope);
+      return;
+    }
+    try {
+      await putObject(indexKey, spaceIndexBody(space, lines), etag);
+      return;
+    } catch (err) {
+      if (err instanceof ConcurrencyError) continue; // re-read and retry once
+      throw err;
+    }
   }
-
-  const lines = parseIndexLines(raw).filter((l) => keyOfIndexLine(l) !== key);
-  await putObject(indexKey, spaceIndexBody(space, lines));
+  // Two writers raced us — a full rebuild lists live docs and is always correct.
+  await regenerateSpaceIndex(space, scope);
 }
 
 /**
