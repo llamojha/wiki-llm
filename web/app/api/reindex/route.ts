@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import matter from 'gray-matter';
 
+import { fmStringOr } from '@/lib/frontmatter';
 import { getObject, listObjects, putObject } from '@/lib/s3';
 import { regenerateMasterIndex } from '@/lib/index-gen';
 import { getStructure, spacesForScope } from '@/lib/vault-structure';
@@ -24,7 +25,7 @@ async function buildLine(key: string): Promise<string> {
   try {
     const raw = await getObject(key);
     const { data, content } = matter(raw);
-    const title = (data.title as string) || toTitleCase(key.replace(/^.*\//, '').replace(/\.md$/, ''));
+    const title = fmStringOr(data.title, toTitleCase(key.replace(/^.*\//, '').replace(/\.md$/, '')));
     return `- ${key} — ${title} — ${extractSummary(content)}`;
   } catch {
     return `- ${key} — ${toTitleCase(key.replace(/^.*\//, '').replace(/\.md$/, ''))} —`;

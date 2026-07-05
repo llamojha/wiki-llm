@@ -3,14 +3,9 @@ import { NextResponse } from 'next/server';
 
 import { regenerateIndexesForKey } from '@/lib/index-gen';
 import { appendLog } from '@/lib/log-append';
-import { getObject, listObjects, ObjectAlreadyExistsError, putObjectIfAbsent } from '@/lib/s3';
-import { invalidateSearchIndex } from '@/lib/search';
-import {
-  displayPathForKey,
-  isDocumentKey,
-  personalPrefix,
-  sourceTypeFromKey,
-} from '@/lib/vault-paths';
+import { ObjectAlreadyExistsError, putObjectIfAbsent } from '@/lib/s3';
+import { getAllEntries, upsertSearchEntry } from '@/lib/search';
+import { displayPathForKey, personalPrefix } from '@/lib/vault-paths';
 import { flagGuard } from '@/lib/flags';
 
 type DocSummary = {
@@ -33,39 +28,6 @@ function slugify(title: string): string {
     .slice(0, 64);
 }
 
-function keyToTitle(key: string): string {
-  const stem = key.split('/').pop()!.replace(/\.md$/, '');
-  return stem.replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function extractSnippet(content: string): string {
-  return content
-    .replace(/[#*_`>\[\]()!~|]/g, '')
-    .replace(/\n+/g, ' ')
-    .trim()
-    .slice(0, 160);
-}
-
-async function summarizeDoc(key: string): Promise<DocSummary | null> {
-  try {
-    const raw = await getObject(key);
-    const { data: fm, content } = matter(raw);
-    return {
-      id: key,
-      title: (fm.title as string) || keyToTitle(key),
-      path: displayPathForKey(key),
-      source_type: (fm.source_type as string) || sourceTypeFromKey(key),
-      updated: (fm.updated as string) ?? '',
-      author: (fm.author as string) ?? 'unknown',
-      tags: Array.isArray(fm.tags) ? fm.tags : fm.tags ? [String(fm.tags)] : [],
-      starred: fm.starred === true,
-      snippet: extractSnippet(content),
-    };
-  } catch {
-    return null;
-  }
-}
-
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const view = searchParams.get('view') ?? 'recent';
@@ -78,13 +40,21 @@ export async function GET(req: Request) {
     return NextResponse.json({ detail: 'view must be recent or starred' }, { status: 400 });
   }
 
-  const keys = (await listObjects()).filter(isDocumentKey);
-  const docs: DocSummary[] = [];
-  for (let i = 0; i < keys.length; i += 20) {
-    const batch = keys.slice(i, i + 20);
-    const summaries = await Promise.all(batch.map(summarizeDoc));
-    docs.push(...summaries.filter((doc): doc is DocSummary => Boolean(doc)));
-  }
+  // Reuse the cached search index instead of re-crawling every document body.
+  // The index already parses the same frontmatter; the home view is just a
+  // different projection + sort over the same entries.
+  const entries = await getAllEntries();
+  const docs: DocSummary[] = entries.map((e) => ({
+    id: e.id,
+    title: e.title,
+    path: e.path,
+    source_type: e.source_type,
+    updated: e.updated,
+    author: e.author,
+    tags: e.tags,
+    starred: e.starred,
+    snippet: e.snippet,
+  }));
 
   const filtered = view === 'starred' ? docs.filter((doc) => doc.starred) : docs;
   filtered.sort((a, b) => {
@@ -142,7 +112,7 @@ export async function POST(req: Request) {
   }
   await regenerateIndexesForKey(key);
   await appendLog('created', key, title);
-  invalidateSearchIndex();
+  await upsertSearchEntry(key);
 
   return NextResponse.json({ id: key, title, path: displayPathForKey(key) }, { status: 201 });
 }

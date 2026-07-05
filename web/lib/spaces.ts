@@ -1,4 +1,5 @@
-import { deleteObject, getObject, listObjects, putObject } from '@/lib/s3';
+import { deleteObject, getObject, putObject } from '@/lib/s3';
+import { movePrefix, prefixHasObjects, purgePrefix } from '@/lib/vault-ops';
 import { regenerateMasterIndex, regenerateSpaceIndex } from '@/lib/index-gen';
 import { appendLog } from '@/lib/log-append';
 import { invalidateSearchIndex } from '@/lib/search';
@@ -162,6 +163,35 @@ export async function renameSpace(
   }
 
   const sp = resolveScope({ scope, userId });
+  const moveMarker = sp.systemKey(`moves/${from}__${to}.json`);
+
+  // Is this a resume of a previously-interrupted `from`→`to` move? `movePrefix`
+  // is two-phase (copy ALL, then delete ALL sources): if it fails between the
+  // phases, copies are left under `to` while the declaration is rolled back. A
+  // marker written before the move (below) records that intent, so a retry
+  // treats those leftovers as ours rather than a foreign collision. The marker
+  // key encodes both names, so a rename from a DIFFERENT source onto the same
+  // `to` won't match it and still gets the 409 preflight below.
+  let resuming = false;
+  try {
+    await getObject(moveMarker);
+    resuming = true;
+  } catch {
+    // no marker — a fresh move
+  }
+
+  // Content-collision preflight (fresh moves only). The declaration checks above
+  // catch a *declared* `to`; this also refuses a `to` whose prefixes already
+  // hold orphaned objects not tied to a declaration — without it a top-level
+  // rename could silently merge into a non-empty target. Skipped on a resume so
+  // an interrupted move can finish. (Deliberate behavior change; see plan 015.)
+  if (
+    !resuming &&
+    ((await prefixHasObjects(sp.generatedPrefix(to))) ||
+      (await prefixHasObjects(sp.authoredPrefix(to))))
+  ) {
+    throw new SpaceError(`Space "${to}" already has content`, 409);
+  }
 
   // Claim `to` by flipping the declaration *before* moving any object. This
   // must happen first: if the declaration flip happened after the move (the
@@ -191,20 +221,23 @@ export async function renameSpace(
     return true;
   });
 
-  // Declaration now says `to`, but no objects have moved yet. If anything
-  // below throws, roll the declaration back to `from` so the space isn't
-  // left claimed-but-empty under `to` while its data still sits under `from`.
+  // Record move intent BEFORE touching objects, so an interrupted move (crash
+  // or a transient S3 error between the copy and delete phases) is resumable —
+  // a retry finds this marker, skips the content preflight above, and lets the
+  // idempotent `movePrefix` finish. Best-effort: if the marker write itself
+  // fails we still proceed (no worse than before this guard existed).
+  await putObject(
+    moveMarker,
+    JSON.stringify({ from, to, scope: sp.scope, userId: sp.userId, startedAt: new Date().toISOString() }),
+  ).catch(() => {});
+
+  // Declaration now says `to`, but no objects have moved yet. If anything below
+  // throws, roll the declaration back to `from` (and LEAVE the marker so the
+  // next attempt resumes) so the space isn't left claimed-but-empty under `to`
+  // while its data still sits under `from`.
   try {
     for (const prefixFor of [sp.generatedPrefix, sp.authoredPrefix]) {
-      const fromPrefix = prefixFor(from);
-      const toPrefix = prefixFor(to);
-      const keys = await listObjects(fromPrefix);
-      for (const key of keys) {
-        const rel = key.slice(fromPrefix.length);
-        const content = await getObject(key);
-        await putObject(`${toPrefix}${rel}`, content);
-        await deleteObject(key);
-      }
+      await movePrefix(prefixFor(from), prefixFor(to));
     }
     // Move the per-space index file if one exists in this scope.
     const fromIndex = sp.systemKey(`indexes/${from}.md`);
@@ -225,6 +258,11 @@ export async function renameSpace(
     });
     throw err;
   }
+
+  // Move completed — clear the intent marker. (Harmless if it lingers: `to` is
+  // now declared, so a later rename onto it 409s at the declaration check
+  // before the preflight is reached.)
+  await deleteObject(moveMarker).catch(() => {});
 
   await regenerateSpaceIndex(to, sp);
   await regenerateMasterIndex(sp);
@@ -259,8 +297,7 @@ export async function deleteSpace(
 
   const sp = resolveScope({ scope, userId });
   for (const prefixFor of [sp.generatedPrefix, sp.authoredPrefix]) {
-    const keys = await listObjects(prefixFor(name));
-    for (const key of keys) await deleteObject(key);
+    await purgePrefix(prefixFor(name));
   }
   try {
     await deleteObject(sp.systemKey(`indexes/${name}.md`));

@@ -20,22 +20,22 @@ Every plan carries its own drift check against `fead8f9` — run it first.
 | 007 | ETag CAS for structure.json writes | P2 | M | 004 | DONE (updateStructure CAS helper; putStructure removed; rename/delete keep a preliminary validation read to avoid clobbering on collision) |
 | 008 | Curate Lambda manifest CAS + overlapping-job 409 | P2 | M | — | DONE (mergeIntoManifest CAS + 409 guard; Lambda deployed out-of-band — redeploy needed. Stale-override path uses job-file heartbeat, not directly e2e-tested) |
 | 009 | Security batch: userId validation, error hygiene, js-yaml override | P2 | S | — | DONE (aws-sdk floor already met; scope unit test deferred to 004) |
-| 010 | Frontmatter normalization (replace `as string` casts) | P3 | S | 004 | TODO |
+| 010 | Frontmatter normalization (replace `as string` casts) | P3 | S | 004 | DONE (web/lib/frontmatter.ts fmString/fmStringOr + tests; also normalized the PUT logTitle / DELETE title reads beyond the listed GET sites) |
 | 011 | Append-safe logs (object-per-event) | P3 | S–M | 004 | DONE (log.md/usage-log.jsonl → per-event objects under _system/log/ + _system/usage/; legacy files kept as history; user-visible log format changed — see PR) |
-| 012 | Parallelize vault-tree S3 listings | P2 | S | 003 | TODO |
-| 013 | Home view from the cached index (no full-vault reads) | P2 | M | 003, 010 | TODO |
-| 014 | Incremental search/index updates | P3 | L | 004, 012, 013 | TODO |
-| 015 | Consolidated movePrefix/purgePrefix (resumable moves) | P2 | M | 003, 004 | TODO |
-| 016 | Decompose the 1167-line UploadModal | P3 | L | 003 | TODO |
+| 012 | Parallelize vault-tree S3 listings | P2 | S | 003 | DONE (single Promise.all wave; byte-identical order; added optional vault-tree.test.ts) |
+| 013 | Home view from the cached index (no full-vault reads) | P2 | M | 003, 010 | DONE (getAllEntries backs GET; SearchEntry gained author/tags/starred; star route now invalidates the index) |
+| 014 | Incremental search/index updates | P3 | L | 004, 012, 013 | DONE (upsert/removeSearchEntry + patch{Space,Master}IndexForKey on single-key writes; master patch uses ETag CAS + 1 retry, falls back to full rebuild on new-section/empty-section/contention; upload + curate finalize keep full rebuild) |
+| 015 | Consolidated movePrefix/purgePrefix (resumable moves) | P2 | M | 003, 004 | DONE (web/lib/vault-ops.ts two-phase movePrefix/purgePrefix/prefixHasObjects + copyObject primitive; all 7 loops replaced; +content-collision 409 preflight and non-.md purge — two deliberate behavior changes) |
+| 016 | Decompose the 1167-line UploadModal | P3 | L | 003 | DONE (folder-tree.ts helpers + library/{use-library-state hook, upload/pending/reindex/folders tabs}; shell 196 lines. STOP #4 coupling resolved via the operator-chosen god-hook: all state stays in the always-mounted hook so tab-switch persistence is unchanged — tabs are pure JSX. app-shell + classNames untouched) |
 | 017 | Delete dead vault-path exports + listSpaces collision | P2 | S | — | DONE |
 | 018 | Repo-root cleanup (parity scaffolding, stale context, AGENTS.md) | P2 | S | — | DONE (portal/ intentionally kept) |
-| 019 | Adopt ESLint (lint is a typecheck alias today) | P3 | M | 003, 004 | TODO |
+| 019 | Adopt ESLint (lint is a typecheck alias today) | P3 | M | 003, 004 | DONE (web/eslint.config.mjs flat config: next core-web-vitals + typescript-eslint; eslint pinned to ^9 — plugins don't yet support 10. Baseline 19 errors→0: 6 no-floating-promises fixed with `void`, 1 unescaped entity, and the react-compiler-era react-hooks rules set to `warn`+TODO(ratchet). `lint`→eslint; CI web job runs it. 14 warnings remain by design) |
 | 020 | Docs sync (flag defaults, TS 6, layout, THEME_VAULT_PREFIX) | P2 | S | 018 preferred | DONE (plans/, portal/ left out of trees — outside 4-fix scope) |
-| 021 | DESIGN: folder-first vault mode + storage-v2 adjudication (specs/storage-v2-proposal.md) | P2 | M–L | — | TODO |
-| 022 | DESIGN: first-class HTML documents | P2 | M | — | TODO |
-| 023 | DESIGN: secure agentic access (MCP-class gateway) | P2 | M | 002, 009 first | TODO |
-| 024 | DESIGN: built-in auth gate (OIDC — Keycloak/Cognito) | P2 | M | — | TODO |
-| 025 | Standalone landing page (decoupled from the product) | P3 | M | — | TODO |
+| 021 | DESIGN: folder-first vault mode + storage-v2 adjudication (specs/storage-v2-proposal.md) | P2 | M–L | — | DONE (specs/folder-first-vault.md — 9 sections incl. storage-v2 §8 adjudication, touch list, 5 open Qs; storage-v2-proposal.md marked adjudicated. Spike couplings via code inspection) |
+| 022 | DESIGN: first-class HTML documents | P2 | M | — | DONE (specs/html-documents.md + landed sanitizer spike web/lib/html.ts + html.test.ts (12 tests); rehype-parse added; unused by routes) |
+| 023 | DESIGN: secure agentic access (MCP-class gateway) | P2 | M | 002, 009 first | DONE (specs/agentic-access.md — threat model, MCP transport eval, deny-by-default capability tokens, propose-queue invariant, 023↔024 precedence, roadmap) |
+| 024 | DESIGN: built-in auth gate (OIDC — Keycloak/Cognito) | P2 | M | — | DONE (specs/auth-gate.md — seam decision, gate semantics, Keycloak+Cognito recipes, interaction table, AUTH_MODE=none default) |
+| 025 | Standalone landing page (decoupled from the product) | P3 | M | — | PARTIAL — specs/landing-page.md decision record DONE (placement/stack/hosting + content outline + 3 tagline candidates). site/ scaffold (Steps 2-4) deferred: gated on the Canopy rename (Track B) per the plan's own STOP condition |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) |
 REJECTED (one-line rationale — finding fixed independently or approach abandoned)

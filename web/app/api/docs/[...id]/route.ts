@@ -1,7 +1,8 @@
 import matter from 'gray-matter';
 import { NextResponse } from 'next/server';
 
-import { regenerateIndexesForKey } from '@/lib/index-gen';
+import { fmString, fmStringOr } from '@/lib/frontmatter';
+import { regenerateIndexesForKey, removeKeyFromIndexes } from '@/lib/index-gen';
 import { appendLog } from '@/lib/log-append';
 import {
   ConcurrencyError,
@@ -10,7 +11,7 @@ import {
   getObjectWithETag,
   putObject,
 } from '@/lib/s3';
-import { invalidateSearchIndex } from '@/lib/search';
+import { removeSearchEntry, upsertSearchEntry } from '@/lib/search';
 import { displayPathForKey, isDocumentKey, sourceTypeFromKey } from '@/lib/vault-paths';
 import { flagGuard } from '@/lib/flags';
 
@@ -56,14 +57,12 @@ export async function GET(_req: Request, { params }: Params) {
 
   const doc = {
     id: key,
-    title: (fm.title as string) || keyToTitle(key),
+    title: fmStringOr(fm.title, keyToTitle(key)),
     path: displayPathForKey(key),
     s3_key: s3Key,
-    source_type:
-      (fm.source_type as string) ||
-      sourceTypeFromKey(key),
-    updated: (fm.updated as string) ?? '',
-    author: (fm.author as string) ?? 'unknown',
+    source_type: fmStringOr(fm.source_type, sourceTypeFromKey(key)),
+    updated: fmString(fm.updated),
+    author: fmStringOr(fm.author, 'unknown'),
     tags: Array.isArray(fm.tags) ? fm.tags : fm.tags ? [String(fm.tags)] : [],
     starred: fm.starred === true,
     checksum: etag.replace(/"/g, '').slice(0, 8),
@@ -123,10 +122,10 @@ export async function PUT(req: Request, { params }: Params) {
     throw err;
   }
 
-  const logTitle = (fm.title as string) || keyToTitle(key);
+  const logTitle = fmStringOr(fm.title, keyToTitle(key));
   await appendLog('edited', key, logTitle);
   await regenerateIndexesForKey(key);
-  invalidateSearchIndex();
+  await upsertSearchEntry(key);
 
   return NextResponse.json({ id: key, title: logTitle });
 }
@@ -152,15 +151,15 @@ export async function DELETE(_req: Request, { params }: Params) {
   try {
     const raw = await getObject(key);
     const { data: fm } = matter(raw);
-    if (fm.title) title = fm.title as string;
+    title = fmStringOr(fm.title, title);
   } catch {
     // doc may already be gone — proceed with delete anyway
   }
 
   await deleteObject(key);
-  await regenerateIndexesForKey(key);
+  await removeKeyFromIndexes(key);
   await appendLog('deleted', key, title);
-  invalidateSearchIndex();
+  removeSearchEntry(key);
 
   return new NextResponse(null, { status: 204 });
 }

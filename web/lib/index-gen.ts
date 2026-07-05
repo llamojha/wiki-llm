@@ -1,7 +1,14 @@
 import matter from 'gray-matter';
 
+import { fmStringOr } from '@/lib/frontmatter';
 import { getStructure, spacesForScope } from '@/lib/vault-structure';
-import { getObject, listObjects, putObject } from '@/lib/s3';
+import {
+  ConcurrencyError,
+  getObject,
+  getObjectWithETag,
+  listObjects,
+  putObject,
+} from '@/lib/s3';
 import { isDocumentKey } from '@/lib/vault-paths';
 import { inferScopeFromKey, resolveScope, type ScopePaths } from '@/lib/scope';
 
@@ -21,15 +28,49 @@ async function buildLine(key: string): Promise<string> {
   try {
     const raw = await getObject(key);
     const { data, content } = matter(raw);
-    const title =
-      (data.title as string) ||
-      toTitleCase(key.replace(/^.*\//, '').replace(/\.md$/, ''));
+    const title = fmStringOr(
+      data.title,
+      toTitleCase(key.replace(/^.*\//, '').replace(/\.md$/, '')),
+    );
     const summary = extractSummary(content);
     return `- ${key} — ${title} — ${summary}`;
   } catch {
     const title = toTitleCase(key.replace(/^.*\//, '').replace(/\.md$/, ''));
     return `- ${key} — ${title} —`;
   }
+}
+
+/** Assemble a space index file body from its doc lines. Single source of the
+ *  byte format shared by the full rebuild and the incremental patch path. */
+function spaceIndexBody(space: string, lines: string[]): string {
+  return `---\ntitle: ${toTitleCase(space)} Index\ntype: nav\nupdated: ${new Date().toISOString()}\n---\n\n${lines.join('\n')}\n`;
+}
+
+/** Doc lines from an index file — the `- <key> — …` entries under the header. */
+function parseIndexLines(raw: string): string[] {
+  return raw.split('\n').filter((l) => l.startsWith('- '));
+}
+
+/** The key embedded in a `- <key> — <title> — <summary>` line. */
+function keyOfIndexLine(line: string): string {
+  const m = line.match(/^- (.+?) — /);
+  return m ? m[1] : '';
+}
+
+/**
+ * Order a full rebuild produces: generated docs first, then authored, each
+ * lexicographic within its group (S3 ListObjectsV2 returns lexicographic
+ * order, and `regenerate*Index` concatenates the two provenance listings).
+ * `patchSpaceIndexForKey` inserts a new line at the matching position so the
+ * patched file stays byte-equal to a full rebuild.
+ */
+function provenanceRank(key: string): number {
+  return key.includes('/generated/') || key.startsWith('generated/') ? 0 : 1;
+}
+function indexKeyLess(a: string, b: string): boolean {
+  const ra = provenanceRank(a);
+  const rb = provenanceRank(b);
+  return ra !== rb ? ra < rb : a < b;
 }
 
 /** Regenerate a single space's index.md inside the given scope. */
@@ -48,8 +89,92 @@ export async function regenerateSpaceIndex(
     lines.push(...(await Promise.all(batch.map(buildLine))));
   }
 
-  const body = `---\ntitle: ${toTitleCase(space)} Index\ntype: nav\nupdated: ${new Date().toISOString()}\n---\n\n${lines.join('\n')}\n`;
-  await putObject(scope.systemKey(`indexes/${space}.md`), body);
+  await putObject(scope.systemKey(`indexes/${space}.md`), spaceIndexBody(space, lines));
+}
+
+/**
+ * Upsert a single key's line in its space index with ONE document read,
+ * instead of re-listing and re-reading the whole space. In-place replace for
+ * an existing key; sorted insert for a new one. Falls back to a full rebuild
+ * when the index file doesn't exist yet (first doc in a new space) or the
+ * key's space can't be inferred.
+ */
+export async function patchSpaceIndexForKey(key: string): Promise<void> {
+  const scope = inferScopeFromKey(key);
+  const space = spaceFromKey(key);
+  if (!space) return;
+  const newLine = await buildLine(key); // one read, outside the CAS loop
+  await applySpaceIndexPatch(space, scope, 'rebuild', (lines) => {
+    const at = lines.findIndex((l) => keyOfIndexLine(l) === key);
+    if (at >= 0) {
+      lines[at] = newLine;
+    } else {
+      let ins = lines.findIndex((l) => indexKeyLess(key, keyOfIndexLine(l)));
+      if (ins < 0) ins = lines.length;
+      lines.splice(ins, 0, newLine);
+    }
+    return 'ok';
+  });
+}
+
+/** Remove a single key's line from its space index (no document read). No-op
+ *  when the index or space is absent. */
+export async function removeKeyFromSpaceIndex(key: string): Promise<void> {
+  const scope = inferScopeFromKey(key);
+  const space = spaceFromKey(key);
+  if (!space) return;
+  await applySpaceIndexPatch(space, scope, 'skip', (lines) => {
+    const idx = lines.findIndex((l) => keyOfIndexLine(l) === key);
+    if (idx < 0) return 'nochange';
+    lines.splice(idx, 1);
+    return 'ok';
+  });
+}
+
+type SpaceEditResult = 'ok' | 'nochange' | 'fallback';
+
+/**
+ * Read a space index, apply `edit` to its doc lines, and write back under an
+ * ETag CAS with a single retry — the same race guard the master patch uses, so
+ * two concurrent same-space writes can never drop each other's entry (each
+ * would otherwise read the same file, insert only its own line, and last-writer
+ * wins). On a lost race the fallback is a full `regenerateSpaceIndex`
+ * (correct-but-slower). `onMissing` picks the behavior when no index exists yet:
+ * `rebuild` (upsert — build it) or `skip` (remove — nothing to do).
+ */
+async function applySpaceIndexPatch(
+  space: string,
+  scope: ScopePaths,
+  onMissing: 'rebuild' | 'skip',
+  edit: (lines: string[]) => SpaceEditResult,
+): Promise<void> {
+  const indexKey = scope.systemKey(`indexes/${space}.md`);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let raw: string;
+    let etag: string;
+    try {
+      ({ content: raw, etag } = await getObjectWithETag(indexKey));
+    } catch {
+      if (onMissing === 'rebuild') await regenerateSpaceIndex(space, scope);
+      return;
+    }
+    const lines = parseIndexLines(raw);
+    const result = edit(lines);
+    if (result === 'nochange') return;
+    if (result === 'fallback') {
+      await regenerateSpaceIndex(space, scope);
+      return;
+    }
+    try {
+      await putObject(indexKey, spaceIndexBody(space, lines), etag);
+      return;
+    } catch (err) {
+      if (err instanceof ConcurrencyError) continue; // re-read and retry once
+      throw err;
+    }
+  }
+  // Two writers raced us — a full rebuild lists live docs and is always correct.
+  await regenerateSpaceIndex(space, scope);
 }
 
 /**
@@ -58,10 +183,18 @@ export async function regenerateSpaceIndex(
  * shared) and the space from the key segment after the provenance root.
  */
 export async function regenerateIndexesForKey(key: string): Promise<void> {
-  const scope = inferScopeFromKey(key);
-  const space = spaceFromKey(key);
-  if (space) await regenerateSpaceIndex(space, scope);
-  await regenerateMasterIndex(scope);
+  await patchSpaceIndexForKey(key);
+  await patchMasterIndexForKey(key);
+}
+
+/**
+ * Index maintenance for a DELETED key: drop its line from the space index and
+ * the master. Mirrors `regenerateIndexesForKey` but removes rather than upserts
+ * (the document no longer exists to read).
+ */
+export async function removeKeyFromIndexes(key: string): Promise<void> {
+  await removeKeyFromSpaceIndex(key);
+  await removeKeyFromMasterIndex(key);
 }
 
 function spaceFromKey(key: string): string | null {
@@ -113,4 +246,122 @@ export async function regenerateMasterIndex(
 
   const body = `---\ntitle: Index\ntype: nav\nupdated: ${new Date().toISOString()}\n---\n\n${sections.join('\n\n')}\n`;
   await putObject(scope.systemKey('index.md'), body);
+}
+
+// --- Incremental master-index patching ------------------------------------
+//
+// The master index is a shared, derived file; patching it in place is a
+// read-modify-write, the same hazard class as plans 007/011. It is safe here
+// because (a) the file is derived and self-heals on the next full reindex and
+// (b) this is the single-user MVP. We still guard with an ETag compare-and-swap
+// plus one retry, then fall back to a full `regenerateMasterIndex` — so a lost
+// race degrades to correct-but-slower, never to corruption.
+
+/** Bump the frontmatter `updated:` line in a master index's split lines. */
+function bumpMasterUpdated(lines: string[]): void {
+  const i = lines.findIndex((l) => l.startsWith('updated: '));
+  if (i >= 0) lines[i] = `updated: ${new Date().toISOString()}`;
+}
+
+type MasterEditResult = 'ok' | 'nochange' | 'fallback';
+
+/**
+ * Read the master index, apply `edit` to its lines, and write back under an
+ * ETag CAS with a single retry. `edit` returns `nochange` (write nothing),
+ * `fallback` (the surgical patch can't stay byte-equal — do a full rebuild),
+ * or `ok` (persist the mutated lines). A missing master or exhausted retries
+ * also fall back to a full rebuild.
+ */
+async function applyMasterPatch(
+  scope: ScopePaths,
+  edit: (lines: string[]) => MasterEditResult,
+): Promise<void> {
+  const indexKey = scope.systemKey('index.md');
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let raw: string;
+    let etag: string;
+    try {
+      ({ content: raw, etag } = await getObjectWithETag(indexKey));
+    } catch {
+      await regenerateMasterIndex(scope);
+      return;
+    }
+    const lines = raw.split('\n');
+    const result = edit(lines);
+    if (result === 'nochange') return;
+    if (result === 'fallback') {
+      await regenerateMasterIndex(scope);
+      return;
+    }
+    bumpMasterUpdated(lines);
+    try {
+      await putObject(indexKey, lines.join('\n'), etag);
+      return;
+    } catch (err) {
+      if (err instanceof ConcurrencyError) continue; // re-read and retry once
+      throw err;
+    }
+  }
+  // Two writers raced us — a full rebuild is always correct.
+  await regenerateMasterIndex(scope);
+}
+
+/** The `[start+1, end)` doc-line range of the `## <label>` section, or null. */
+function sectionRange(lines: string[], label: string): { start: number; end: number } | null {
+  const start = lines.indexOf(`## ${label}`);
+  if (start < 0) return null;
+  let end = start + 1;
+  while (end < lines.length && lines[end].startsWith('- ')) end++;
+  return { start, end };
+}
+
+/**
+ * Upsert one key's line in the master index with ONE document read. Falls back
+ * to a full rebuild when the key's `## <space>` section doesn't exist yet (a
+ * new space's first doc), which is where a surgical insert couldn't reproduce
+ * section ordering.
+ */
+export async function patchMasterIndexForKey(key: string): Promise<void> {
+  const scope = inferScopeFromKey(key);
+  const space = spaceFromKey(key);
+  if (!space) {
+    await regenerateMasterIndex(scope);
+    return;
+  }
+  const newLine = await buildLine(key);
+  await applyMasterPatch(scope, (lines) => {
+    const range = sectionRange(lines, toTitleCase(space));
+    if (!range) return 'fallback';
+    const docLines = lines.slice(range.start + 1, range.end);
+    const at = docLines.findIndex((l) => keyOfIndexLine(l) === key);
+    if (at >= 0) {
+      docLines[at] = newLine;
+    } else {
+      let ins = docLines.findIndex((l) => indexKeyLess(key, keyOfIndexLine(l)));
+      if (ins < 0) ins = docLines.length;
+      docLines.splice(ins, 0, newLine);
+    }
+    lines.splice(range.start + 1, range.end - (range.start + 1), ...docLines);
+    return 'ok';
+  });
+}
+
+/**
+ * Remove one key's line from the master index (no document read). If that
+ * empties the section, fall back to a full rebuild so the now-empty
+ * `## <space>` header is dropped (a full rebuild skips empty spaces).
+ */
+export async function removeKeyFromMasterIndex(key: string): Promise<void> {
+  const scope = inferScopeFromKey(key);
+  const space = spaceFromKey(key);
+  if (!space) return;
+  await applyMasterPatch(scope, (lines) => {
+    const range = sectionRange(lines, toTitleCase(space));
+    if (!range) return 'nochange'; // key isn't catalogued — nothing to do
+    const kept = lines.slice(range.start + 1, range.end).filter((l) => keyOfIndexLine(l) !== key);
+    if (kept.length === (range.end - range.start - 1)) return 'nochange'; // not present
+    if (kept.length === 0) return 'fallback'; // section empties — rebuild drops it
+    lines.splice(range.start + 1, range.end - (range.start + 1), ...kept);
+    return 'ok';
+  });
 }

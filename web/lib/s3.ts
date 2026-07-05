@@ -8,6 +8,7 @@
  */
 
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
@@ -301,5 +302,22 @@ export async function deleteObject(relKey: string): Promise<void> {
   if (useMock) return mock.deleteObject(relKey);
   await client().send(
     new DeleteObjectCommand({ Bucket: bucket, Key: fullKey(relKey) }),
+  );
+}
+
+/**
+ * Server-side copy of one object (S3 CopyObject — no body round-trip through
+ * the app). Used by `vault-ops.movePrefix` for two-phase, resumable moves.
+ */
+export async function copyObject(fromRel: string, toRel: string): Promise<void> {
+  trace('COPY', `${fromRel} → ${toRel}`);
+  if (useMock) return mock.copyObject(fromRel, toRel);
+  await client().send(
+    new CopyObjectCommand({
+      Bucket: bucket,
+      Key: fullKey(toRel),
+      // CopySource is `bucket/key` and must be URL-encoded per SDK requirements.
+      CopySource: encodeURIComponent(`${bucket}/${fullKey(fromRel)}`),
+    }),
   );
 }
