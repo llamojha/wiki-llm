@@ -31,11 +31,11 @@ Every plan carries its own drift check against `fead8f9` — run it first.
 | 018 | Repo-root cleanup (parity scaffolding, stale context, AGENTS.md) | P2 | S | — | DONE (portal/ intentionally kept) |
 | 019 | Adopt ESLint (lint is a typecheck alias today) | P3 | M | 003, 004 | DONE (web/eslint.config.mjs flat config: next core-web-vitals + typescript-eslint; eslint pinned to ^9 — plugins don't yet support 10. Baseline 19 errors→0: 6 no-floating-promises fixed with `void`, 1 unescaped entity, and the react-compiler-era react-hooks rules set to `warn`+TODO(ratchet). `lint`→eslint; CI web job runs it. 14 warnings remain by design) |
 | 020 | Docs sync (flag defaults, TS 6, layout, THEME_VAULT_PREFIX) | P2 | S | 018 preferred | DONE (plans/, portal/ left out of trees — outside 4-fix scope) |
-| 021 | DESIGN: folder-first vault mode + storage-v2 adjudication (specs/storage-v2-proposal.md) | P2 | M–L | — | TODO |
-| 022 | DESIGN: first-class HTML documents | P2 | M | — | TODO |
-| 023 | DESIGN: secure agentic access (MCP-class gateway) | P2 | M | 002, 009 first | TODO |
-| 024 | DESIGN: built-in auth gate (OIDC — Keycloak/Cognito) | P2 | M | — | TODO |
-| 025 | Standalone landing page (decoupled from the product) | P3 | M | — | TODO |
+| 021 | DESIGN: folder-first vault mode + storage-v2 adjudication (specs/storage-v2-proposal.md) | P2 | M–L | — | DONE (specs/folder-first-vault.md — 9 sections incl. storage-v2 §8 adjudication, touch list, 5 open Qs; storage-v2-proposal.md marked adjudicated. Spike couplings via code inspection) |
+| 022 | DESIGN: first-class HTML documents | P2 | M | — | DONE (specs/html-documents.md + landed sanitizer spike web/lib/html.ts + html.test.ts (12 tests); rehype-parse added; unused by routes) |
+| 023 | DESIGN: secure agentic access (MCP-class gateway) | P2 | M | 002, 009 first | DONE (specs/agentic-access.md — threat model, MCP transport eval, deny-by-default capability tokens, propose-queue invariant, 023↔024 precedence, roadmap) |
+| 024 | DESIGN: built-in auth gate (OIDC — Keycloak/Cognito) | P2 | M | — | DONE (specs/auth-gate.md — seam decision, gate semantics, Keycloak+Cognito recipes, interaction table, AUTH_MODE=none default) |
+| 025 | Standalone landing page (decoupled from the product) | P3 | M | — | PARTIAL — specs/landing-page.md decision record DONE (placement/stack/hosting + content outline + 3 tagline candidates). site/ scaffold (Steps 2-4) deferred: gated on the Canopy rename (Track B) per the plan's own STOP condition |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) |
 REJECTED (one-line rationale — finding fixed independently or approach abandoned)
