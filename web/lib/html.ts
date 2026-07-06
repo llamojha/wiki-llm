@@ -3,6 +3,8 @@ import rehypeSanitize from 'rehype-sanitize';
 import rehypeStringify from 'rehype-stringify';
 import { unified } from 'unified';
 
+import { isEnabled } from '@/lib/flags';
+import { rehypeFilterDataImages, rehypeFilterStyles, vaultSanitizeSchema } from '@/lib/sanitize-schema';
 import type { SanitizedHtml } from '@/lib/types';
 import { rehypeVaultLinks } from '@/lib/vault-links';
 
@@ -69,10 +71,13 @@ function extractBody() {
 const renderer = unified()
   .use(rehypeParse)
   .use(extractBody)
-  .use(rehypeSanitize)
+  .use(rehypeSanitize, vaultSanitizeSchema)
+  // Post-sanitize transforms: filter dangerous CSS values and oversized/non-image data URIs.
+  .use(rehypeFilterStyles)
+  .use(rehypeFilterDataImages)
   // After sanitize: rewrite in-vault links, strip external images. Shared with
   // the Markdown pipeline so there is exactly one in-vault link resolver.
-  .use(rehypeVaultLinks)
+  .use(rehypeVaultLinks, { imageProxy: isEnabled('imageProxy') })
   .use(rehypeStringify);
 
 /**

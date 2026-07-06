@@ -46,3 +46,62 @@ describe('in-vault link resolver (HTML pipeline)', () => {
     expect(html).toContain('assets/local.png');
   });
 });
+
+describe('relative-link rewriting completeness (plan 028, task 4)', () => {
+  it('preserves fragment on in-vault link', async () => {
+    const html = await renderHtmlDocument('<a href="notes/setup.md#install">link</a>');
+    expect(html).toContain('href="/notes/setup.md#install"');
+  });
+
+  it('preserves query on in-vault link', async () => {
+    const html = await renderHtmlDocument('<a href="notes/setup.md?v=2">link</a>');
+    expect(html).toContain('href="/notes/setup.md?v=2"');
+  });
+
+  it('preserves both query and fragment', async () => {
+    const html = await renderHtmlDocument('<a href="notes/setup.md?v=2#install">link</a>');
+    expect(html).toContain('href="/notes/setup.md?v=2#install"');
+  });
+
+  it('handles ./ prefix paths', async () => {
+    const html = await renderHtmlDocument('<a href="./local/page.md">link</a>');
+    expect(html).toContain('href="/local/page.md"');
+  });
+
+  it('handles ../ prefix paths', async () => {
+    const html = await renderHtmlDocument('<a href="../other/page.html">link</a>');
+    expect(html).toContain('href="/other/page.html"');
+  });
+
+  it('handles multiple ../ prefix paths', async () => {
+    const html = await renderHtmlDocument('<a href="../../root/page.md">link</a>');
+    expect(html).toContain('href="/root/page.md"');
+  });
+
+  it('leaves fragment-only links untouched', async () => {
+    const html = await renderHtmlDocument('<a href="#local-anchor">link</a>');
+    expect(html).toContain('href="#local-anchor"');
+  });
+
+  it('leaves query-only links untouched', async () => {
+    const html = await renderHtmlDocument('<a href="?filter=active">link</a>');
+    expect(html).toContain('href="?filter=active"');
+  });
+
+  it('leaves external links untouched', async () => {
+    const html = await renderHtmlDocument('<a href="https://example.com/page.html">link</a>');
+    expect(html).toContain('href="https://example.com/page.html"');
+  });
+
+  it('leaves non-doc relative links untouched (no .md/.html extension)', async () => {
+    // TODO: future /api/assets/ route could handle these
+    const html = await renderHtmlDocument('<a href="./images/diagram.png">link</a>');
+    expect(html).toContain('href="./images/diagram.png"');
+  });
+
+  it('preserves relative <img src> for local assets', async () => {
+    // TODO: future /api/assets/ route could resolve these
+    const html = await renderHtmlDocument('<img src="./images/photo.png" alt="photo">');
+    expect(html).toContain('src="./images/photo.png"');
+  });
+});
