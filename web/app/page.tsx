@@ -16,7 +16,8 @@ export default async function Home() {
   let initialTree: ApiTreeNode[] = [];
   let foldersMode = false;
   try {
-    foldersMode = (await ensureVaultMode()) === 'folders';
+    const mode = await ensureVaultMode();
+    foldersMode = mode === 'folders' || mode === 'managed';
     initialTree = await getTree();
   } catch {
     // S3 not reachable — AppShell renders with empty tree

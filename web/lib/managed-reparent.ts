@@ -1,7 +1,7 @@
 import matter from 'gray-matter';
 
 import { getObject, getObjectWithETag, listObjects, putObject } from '@/lib/s3';
-import { isDocumentKey } from '@/lib/vault-paths';
+import { isDocumentKey, isHtmlKey } from '@/lib/vault-paths';
 import { ensureVaultMode } from '@/lib/vault-mode';
 import {
   isRealPageId,
@@ -37,6 +37,9 @@ export async function reparentManagedPage(
   await ensureVaultMode();
   if (!isDocumentKey(key)) {
     throw new ManagedPageError(`Not a managed page: ${key}`, 400);
+  }
+  if (isHtmlKey(key)) {
+    throw new ManagedPageError('Cannot re-parent HTML documents', 400);
   }
 
   // Read the target with its ETag for the compare-and-swap write.

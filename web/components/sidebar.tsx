@@ -81,6 +81,9 @@ function apiTreeToLocal(nodes: ApiTreeNode[]): TreeNodeType[] {
     if (n.type === 'folder') {
       return { id: n.id, type: 'folder' as const, name: n.name, children: apiTreeToLocal(n.children) };
     }
+    if (n.children && n.children.length > 0) {
+      return { id: n.id, type: 'doc' as const, name: n.name, children: apiTreeToLocal(n.children) };
+    }
     return { id: n.id, type: 'doc' as const, name: n.name };
   });
 }
@@ -88,8 +91,12 @@ function apiTreeToLocal(nodes: ApiTreeNode[]): TreeNodeType[] {
 function countDocs(nodes: TreeNodeType[]): number {
   let count = 0;
   for (const n of nodes) {
-    if (n.type === 'doc') count++;
-    else if (n.type === 'folder') count += countDocs(n.children);
+    if (n.type === 'doc') {
+      count++;
+      if (n.children) count += countDocs(n.children);
+    } else if (n.type === 'folder') {
+      count += countDocs(n.children);
+    }
   }
   return count;
 }
