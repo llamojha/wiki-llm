@@ -1,10 +1,10 @@
 # How to Deploy to AWS ECS Fargate
 
-A step-by-step, repeatable guide for building the Vaultmark web container and
+A step-by-step, repeatable guide for building the Canopy web container and
 running it on ECS Fargate, plus the two non-obvious gotchas that will bite you
 if you skip them.
 
-Vaultmark is a single stateless container — S3 is the only state, and the ECS
+Canopy is a single stateless container — S3 is the only state, and the ECS
 **task role** grants AWS access with no static keys. That makes it a clean fit
 for Fargate.
 
@@ -38,7 +38,7 @@ This guide uses `ARM64`; swap the value if you need X86_64.
 Build from the **repo root** (the pnpm workspace lockfile lives there):
 
 ```bash
-docker build --platform linux/arm64 -f web/Dockerfile -t vaultmark:latest .
+docker build --platform linux/arm64 -f web/Dockerfile -t canopy:latest .
 ```
 
 Then smoke-test it locally against your real bucket before pushing. Supply AWS
@@ -50,7 +50,7 @@ docker run -d --name vm-smoke -p 3001:3000 \
   -e VAULT_BUCKET=<bucket> \
   -e VAULT_REGION=<bucket-region> \
   -e VAULT_PREFIX=<prefix> \
-  vaultmark:latest
+  canopy:latest
 
 # Expect HTTP 200 from both:
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3001/api/health
@@ -69,15 +69,15 @@ docker rm -f vm-smoke
 ## 2. Create the ECR repository and push the image
 
 ```bash
-aws ecr create-repository --repository-name vaultmark \
+aws ecr create-repository --repository-name canopy \
   --region <region> --image-scanning-configuration scanOnPush=true
 
 aws ecr get-login-password --region <region> \
   | docker login --username AWS --password-stdin \
       <account-id>.dkr.ecr.<region>.amazonaws.com
 
-docker tag vaultmark:latest <account-id>.dkr.ecr.<region>.amazonaws.com/vaultmark:latest
-docker push <account-id>.dkr.ecr.<region>.amazonaws.com/vaultmark:latest
+docker tag canopy:latest <account-id>.dkr.ecr.<region>.amazonaws.com/canopy:latest
+docker push <account-id>.dkr.ecr.<region>.amazonaws.com/canopy:latest
 ```
 
 ## 3. Create the IAM roles
@@ -87,7 +87,7 @@ Two roles with different jobs.
 **Execution role** — used by ECS itself to pull the image and write logs:
 
 ```bash
-aws iam create-role --role-name vaultmark-execution \
+aws iam create-role --role-name canopy-execution \
   --assume-role-policy-document '{
     "Version": "2012-10-17",
     "Statement": [{
@@ -97,7 +97,7 @@ aws iam create-role --role-name vaultmark-execution \
     }]
   }'
 
-aws iam attach-role-policy --role-name vaultmark-execution \
+aws iam attach-role-policy --role-name canopy-execution \
   --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
 ```
 
@@ -105,7 +105,7 @@ aws iam attach-role-policy --role-name vaultmark-execution \
 Bedrock) access:
 
 ```bash
-aws iam create-role --role-name vaultmark-task \
+aws iam create-role --role-name canopy-task \
   --assume-role-policy-document '{
     "Version": "2012-10-17",
     "Statement": [{
@@ -115,8 +115,8 @@ aws iam create-role --role-name vaultmark-task \
     }]
   }'
 
-aws iam put-role-policy --role-name vaultmark-task \
-  --policy-name vaultmark-portal \
+aws iam put-role-policy --role-name canopy-task \
+  --policy-name canopy-portal \
   --policy-document '{
     "Version": "2012-10-17",
     "Statement": [
@@ -152,7 +152,7 @@ Drop the `BedrockInvoke` statement if you run with `FEATURE_AGENT=off` and
 ## 4. Create the log group and register the task definition
 
 ```bash
-aws logs create-log-group --log-group-name /ecs/vaultmark --region <region>
+aws logs create-log-group --log-group-name /ecs/canopy --region <region>
 ```
 
 Register the task definition. Note the two corrected values highlighted in the
@@ -161,7 +161,7 @@ gotchas: `VAULT_PREFIX` set to your real prefix, and the health check using
 
 ```bash
 aws ecs register-task-definition --region <region> --cli-input-json '{
-  "family": "vaultmark",
+  "family": "canopy",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "512",
@@ -170,11 +170,11 @@ aws ecs register-task-definition --region <region> --cli-input-json '{
     "cpuArchitecture": "ARM64",
     "operatingSystemFamily": "LINUX"
   },
-  "executionRoleArn": "arn:aws:iam::<account-id>:role/vaultmark-execution",
-  "taskRoleArn": "arn:aws:iam::<account-id>:role/vaultmark-task",
+  "executionRoleArn": "arn:aws:iam::<account-id>:role/canopy-execution",
+  "taskRoleArn": "arn:aws:iam::<account-id>:role/canopy-task",
   "containerDefinitions": [{
     "name": "web",
-    "image": "<account-id>.dkr.ecr.<region>.amazonaws.com/vaultmark:latest",
+    "image": "<account-id>.dkr.ecr.<region>.amazonaws.com/canopy:latest",
     "essential": true,
     "portMappings": [{ "containerPort": 3000, "protocol": "tcp" }],
     "environment": [
@@ -196,7 +196,7 @@ aws ecs register-task-definition --region <region> --cli-input-json '{
     "logConfiguration": {
       "logDriver": "awslogs",
       "options": {
-        "awslogs-group": "/ecs/vaultmark",
+        "awslogs-group": "/ecs/canopy",
         "awslogs-region": "<region>",
         "awslogs-stream-prefix": "web"
       }
@@ -208,17 +208,17 @@ aws ecs register-task-definition --region <region> --cli-input-json '{
 ## 5. Create the cluster, security group, and service
 
 ```bash
-aws ecs create-cluster --cluster-name vaultmark \
+aws ecs create-cluster --cluster-name canopy \
   --capacity-providers FARGATE --region <region>
 ```
 
 Create a security group for the task. For a **validation** deployment that you
 reach directly (no load balancer), allow inbound `3000` from **your IP only** —
-Vaultmark has no built-in auth, so never open it to `0.0.0.0/0`:
+Canopy has no built-in auth, so never open it to `0.0.0.0/0`:
 
 ```bash
-aws ec2 create-security-group --group-name vaultmark-task-sg \
-  --description "Vaultmark Fargate task SG" \
+aws ec2 create-security-group --group-name canopy-task-sg \
+  --description "Canopy Fargate task SG" \
   --vpc-id <vpc-id> --region <region>
 
 aws ec2 authorize-security-group-ingress --group-id <sg-id> --region <region> \
@@ -231,9 +231,9 @@ NAT gateway — ideal for a quick validation:
 
 ```bash
 aws ecs create-service --region <region> \
-  --cluster vaultmark \
-  --service-name vaultmark \
-  --task-definition vaultmark \
+  --cluster canopy \
+  --service-name canopy \
+  --task-definition canopy \
   --desired-count 1 \
   --launch-type FARGATE \
   --network-configuration 'awsvpcConfiguration={
@@ -252,15 +252,15 @@ aws ecs create-service --region <region> \
 
 ```bash
 # Get the running task
-TASK=$(aws ecs list-tasks --cluster vaultmark --desired-status RUNNING \
+TASK=$(aws ecs list-tasks --cluster canopy --desired-status RUNNING \
   --region <region> --query 'taskArns[0]' --output text)
 
 # Check lastStatus + healthStatus (want RUNNING + HEALTHY)
-aws ecs describe-tasks --cluster vaultmark --tasks "$TASK" --region <region> \
+aws ecs describe-tasks --cluster canopy --tasks "$TASK" --region <region> \
   --query 'tasks[0].[lastStatus,healthStatus]' --output text
 
 # Resolve the task's public IP
-ENI=$(aws ecs describe-tasks --cluster vaultmark --tasks "$TASK" --region <region> \
+ENI=$(aws ecs describe-tasks --cluster canopy --tasks "$TASK" --region <region> \
   --query "tasks[0].attachments[0].details[?name=='networkInterfaceId'].value | [0]" --output text)
 aws ec2 describe-network-interfaces --network-interface-ids "$ENI" --region <region> \
   --query 'NetworkInterfaces[0].Association.PublicIp' --output text
@@ -275,22 +275,22 @@ Open `http://<task-public-ip>:3000` from the IP you allow-listed.
 Inspect logs anytime:
 
 ```bash
-aws logs tail /ecs/vaultmark --region <region> --follow
+aws logs tail /ecs/canopy --region <region> --follow
 ```
 
 ## 7. Deploying updates
 
 ```bash
 docker build --platform linux/arm64 -f web/Dockerfile \
-  -t <account-id>.dkr.ecr.<region>.amazonaws.com/vaultmark:latest .
-docker push <account-id>.dkr.ecr.<region>.amazonaws.com/vaultmark:latest
+  -t <account-id>.dkr.ecr.<region>.amazonaws.com/canopy:latest .
+docker push <account-id>.dkr.ecr.<region>.amazonaws.com/canopy:latest
 
-aws ecs update-service --cluster vaultmark --service vaultmark \
+aws ecs update-service --cluster canopy --service canopy \
   --force-new-deployment --region <region>
 ```
 
 Config changes (env vars, feature flags) are a new task-definition revision
-followed by `update-service --task-definition vaultmark:<n>`. `NEXT_PUBLIC_*`
+followed by `update-service --task-definition canopy:<n>`. `NEXT_PUBLIC_*`
 vars are baked in at image build time — rebuild to change them.
 
 ---

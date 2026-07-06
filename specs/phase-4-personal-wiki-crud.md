@@ -4,7 +4,7 @@
 
 ## Goal
 
-Make Vaultmark a complete personal wiki: users can create, edit, and delete pages through the portal with full data integrity, per-page URLs, and starred documents.
+Make Canopy a complete personal wiki: users can create, edit, and delete pages through the portal with full data integrity, per-page URLs, and starred documents.
 
 ## User Story
 

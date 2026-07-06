@@ -46,7 +46,7 @@ Fix the contract while wiring up CI so the suite tests real semantics.
 - `playwright.config.ts` (repo root) — `testDir: './tests/e2e'`, two
   `webServer` entries: flags-ON server on port 3030 and flags-OFF server on
   3031, both started with
-  `pnpm --filter @vaultmark/web exec next start --port <port>` — i.e. **a
+  `pnpm --filter @canopy/web exec next start --port <port>` — i.e. **a
   prior `pnpm build` is required**. `workers: 1`, `fullyParallel: false`
   (mock store is per-process). Reporter: `process.env.CI ? [['github'], ['list']] : 'list'`.
 - `web/lib/s3.ts:87-116` — real `listObjects` filters `if (rel.endsWith('.md')) keys.push(rel);`.

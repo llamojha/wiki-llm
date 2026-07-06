@@ -52,12 +52,12 @@ describe('authConfig', () => {
 
   it('reads OIDC config and splits allowlists on commas/whitespace', () => {
     process.env.OIDC_ISSUER = 'https://idp.example.com/realms/vault';
-    process.env.OIDC_CLIENT_ID = 'vaultmark';
+    process.env.OIDC_CLIENT_ID = 'canopy';
     process.env.AUTH_ALLOWED_SUBJECTS = 'sub-1, sub-2  sub-3';
     process.env.AUTH_ALLOWED_EMAILS = 'a@x.com\nb@x.com';
     const cfg = authConfig();
     expect(cfg.issuer).toBe('https://idp.example.com/realms/vault');
-    expect(cfg.clientId).toBe('vaultmark');
+    expect(cfg.clientId).toBe('canopy');
     expect(cfg.allowedSubjects).toEqual(['sub-1', 'sub-2', 'sub-3']);
     expect(cfg.allowedEmails).toEqual(['a@x.com', 'b@x.com']);
   });

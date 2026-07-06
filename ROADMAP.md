@@ -1,8 +1,7 @@
-# Vaultmark — Roadmap
+# Canopy — Roadmap
 
-Engineering plan derived from [`prd_vaultmark_markdown_llm_wiki.md`](prd_vaultmark_markdown_llm_wiki.md). Source of truth for sequencing and scope.
+Engineering plan derived from [`prd_canopy_markdown_llm_wiki.md`](prd_canopy_markdown_llm_wiki.md). Source of truth for sequencing and scope.
 
-> **Pending rename: Vaultmark → Canopy.** The product is being renamed to **Canopy**. The rename itself hasn't been executed yet — see [`specs/rename-to-canopy.md`](specs/rename-to-canopy.md) for the decision record and the checklist to carry it out. Until that PR lands, "Vaultmark" remains correct throughout this repo.
 
 ## Decisions log
 
@@ -104,7 +103,7 @@ read-path gaps a public repo would invite scrutiny of.
 
 ### Track B — Canopy rename & go-public
 
-- Execute the **Vaultmark → Canopy** rename as one deliberate pass:
+- Execute the **Canopy → Canopy** rename as one deliberate pass:
   [`specs/rename-to-canopy.md`](specs/rename-to-canopy.md) (decision record +
   checklist; repo slug, image names, and `VAULT_*` env vars explicitly
   deferred there).
@@ -164,7 +163,7 @@ Just enough scaffolding to start Phase 1.
 - [x] `next/font` configured for IBM Plex Sans, IBM Plex Serif, JetBrains Mono (replace prototype's Google Fonts CDN)
 - [x] Drop `portal/styles.css` into `web/app/globals.css` (verbatim, for parity)
 - [x] Confirm dev server renders an empty shell with the right fonts and theme tokens
-- [x] `README.md` rewritten for Vaultmark (this PR)
+- [x] `README.md` rewritten for Canopy (this PR)
 - [x] `ROADMAP.md` (this PR)
 
 Deferred from this phase: `api/`, `infra/`, CI. They land when Phase 2 needs them.
@@ -199,7 +198,7 @@ Decisions made during the port that diverge from the original step plan. Documen
 
 **`'use client'` placement — boundary-only (Step 2).** Plan said "establish 'use client' boundaries — most components will be 'use client'." Adopted minimum: only `app-shell.tsx` carries the directive, plus `home-view.tsx` and `toc.tsx` where hooks are used at component scope. Children of a client tree become client-bundled implicitly via the import graph.
 
-**Theme bootstrap script (Step 2, not in original plan).** Added an inline `<script>` in `<head>` that synchronously reads `localStorage['vaultmark-theme']` and sets `data-theme` before React hydrates. Eliminates the dark/light flash on reload. Standard practice; flagged because it wasn't pre-planned.
+**Theme bootstrap script (Step 2, not in original plan).** Added an inline `<script>` in `<head>` that synchronously reads `localStorage['canopy-theme']` and sets `data-theme` before React hydrates. Eliminates the dark/light flash on reload. Standard practice; flagged because it wasn't pre-planned.
 
 **Date hydration handling (Step 3, not in original plan).** `HomeView` shows `new Date().toDateString()`. SSR'd on the server, hydrated on the client — those values can differ across the request boundary. Wrapped in a `useState('') + useEffect(() => setToday(...))` pattern so the date appears post-mount; renders empty during SSR. Avoids hydration warnings without `suppressHydrationWarning`.
 
@@ -415,7 +414,7 @@ Only after MVP 2 is stable. Exploratory — scope will be refined when Phase 5 s
 
 ### Phase 8 — HTML Publishing & Visual Artifacts (deferred)
 
-Derived presentation layer for Markdown vault content. This phase responds to the emerging AI-engineering pattern where finished human-facing deliverables are often better as HTML artifacts than raw Markdown, while preserving Vaultmark's core rule: **Markdown remains canonical; HTML is disposable and regenerable.**
+Derived presentation layer for Markdown vault content. This phase responds to the emerging AI-engineering pattern where finished human-facing deliverables are often better as HTML artifacts than raw Markdown, while preserving Canopy's core rule: **Markdown remains canonical; HTML is disposable and regenerable.**
 
 > **Related but distinct:** [`plans/022-design-html-document-support.md`](plans/022-design-html-document-support.md)
 > designs HTML as first-class *source* content (uploaded/synced `.html` docs

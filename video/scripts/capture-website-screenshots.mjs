@@ -7,8 +7,8 @@ import { chromium } from 'playwright';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../..');
 const outputDir = path.resolve(repoRoot, 'video/public/screens');
-const port = process.env.VAULTMARK_CAPTURE_PORT || '3100';
-const baseUrl = process.env.VAULTMARK_CAPTURE_URL || `http://127.0.0.1:${port}`;
+const port = process.env.CANOPY_CAPTURE_PORT || '3100';
+const baseUrl = process.env.CANOPY_CAPTURE_URL || `http://127.0.0.1:${port}`;
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -51,7 +51,7 @@ async function main() {
 
   const server = spawn(
     'pnpm',
-    ['--filter', '@vaultmark/web', 'exec', 'next', 'dev', '--hostname', '127.0.0.1', '--port', port],
+    ['--filter', '@canopy/web', 'exec', 'next', 'dev', '--hostname', '127.0.0.1', '--port', port],
     {
       cwd: repoRoot,
       stdio: ['ignore', 'pipe', 'pipe'],

@@ -1,6 +1,6 @@
 # OpenWiki quickstart
 
-Vaultmark (repo name `wiki-llm`; a decided-but-not-yet-executed rename to
+Canopy (repo name `wiki-llm`; a decided-but-not-yet-executed rename to
 **Canopy** is tracked in [`specs/rename-to-canopy.md`](../specs/rename-to-canopy.md))
 is an S3-backed Markdown knowledge portal. Markdown objects in a bucket are
 the durable source of truth; a single Next.js app renders, searches, and lets
@@ -59,7 +59,7 @@ rather than deleted outright.
 - `README.md` — install, quickstart, feature-flag summary.
 - `CLAUDE.md` — the maintained codebase operating guide (current state table,
   stack, conventions, operating notes for agents).
-- `prd_vaultmark_markdown_llm_wiki.md` — authoritative product spec.
+- `prd_canopy_markdown_llm_wiki.md` — authoritative product spec.
 - `ROADMAP.md` — phases and the decisions log.
 - `docs/configuration.md`, `docs/feature-flags.md` — full env var and flag
   reference (more detailed than this wiki; this wiki explains *why*, those

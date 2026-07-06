@@ -14,7 +14,7 @@
 ## Why
 
 The maintainer wants external agents (Claude Code, IDE agents, other LLM tools)
-to work against a Vaultmark vault. The obvious shape is an MCP server — but
+to work against a Canopy vault. The obvious shape is an MCP server — but
 plain MCP over stdio/HTTP with ambient credentials is a real worry: the portal
 has **no auth layer** (single-user MVP by design), so any network-exposed
 agentic endpoint is an unauthenticated read/write channel into the knowledge
@@ -63,7 +63,7 @@ autonomous agent writes … a hard constraint, not a preference" —
 | **D. Signed capability URLs (per-doc grants)** | narrow-sharing only | good for one-off shares | rejected as the primary — poor fit for interactive search loops |
 
 **Recommendation: both MCP transports over ONE internal gateway module.** stdio
-for local (`vaultmark mcp` next to your creds, no port), streamable-HTTP for
+for local (`canopy mcp` next to your creds, no port), streamable-HTTP for
 hosted. The gateway wraps `agent-tools.ts`; **all security properties live in
 the gateway, not the protocol**:
 

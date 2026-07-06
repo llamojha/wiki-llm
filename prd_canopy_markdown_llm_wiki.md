@@ -1,3 +1,5 @@
+> Previously titled 'Vaultmark'. Renamed to Canopy (July 2026).
+
 # PRD.md — Vaultmark
 
 ## 1. Executive Summary

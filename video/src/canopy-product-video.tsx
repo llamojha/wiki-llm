@@ -187,7 +187,7 @@ function PortalMock({ frame }: { frame: number }) {
       }}
     >
       <div style={{ background: '#ebe4d8', padding: 28, borderRight: `1px solid ${colors.line}` }}>
-        <div style={{ fontSize: 27, fontWeight: 820, marginBottom: 28 }}>Vaultmark</div>
+        <div style={{ fontSize: 27, fontWeight: 820, marginBottom: 28 }}>Canopy</div>
         {['Engineering', 'Runbooks', 'Personal', 'Generated'].map((item, i) => (
           <div
             key={item}
@@ -210,7 +210,7 @@ function PortalMock({ frame }: { frame: number }) {
       <div style={{ padding: 44 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 44 }}>
           <Label>Searchable S3 vault</Label>
-          <div style={{ fontFamily: 'JetBrains Mono, monospace', color: colors.muted, fontSize: 18 }}>s3://vaultmark/</div>
+          <div style={{ fontFamily: 'JetBrains Mono, monospace', color: colors.muted, fontSize: 18 }}>s3://canopy/</div>
         </div>
         <h2 style={{ margin: 0, fontSize: 56, letterSpacing: 0 }}>Incident Response Runbook</h2>
         <p style={{ fontSize: 27, lineHeight: 1.45, color: colors.muted, width: 710 }}>
@@ -454,7 +454,7 @@ function Closing({ product }: { product: string }) {
   );
 }
 
-export function VaultmarkProductVideo(props: VideoProps) {
+export function CanopyProductVideo(props: VideoProps) {
   return (
     <AbsoluteFill>
       <Sequence from={scenes[0].from} durationInFrames={scenes[0].duration}>

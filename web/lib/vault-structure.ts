@@ -27,7 +27,7 @@ import {
  */
 
 export type SpaceEntry = {
-  /** S3 prefix name (e.g. "articles", "wiki", "vaultmark") */
+  /** S3 prefix name (e.g. "articles", "wiki", "canopy") */
   name: string;
   /** Display label in the sidebar */
   label: string;

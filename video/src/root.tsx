@@ -9,14 +9,14 @@ export const VIDEO_HEIGHT = 1080;
 export function RemotionRoot() {
   return (
     <Composition
-      id="VaultmarkProductVideo"
+      id="CanopyProductVideo"
       component={WebsiteProductVideo}
       durationInFrames={VIDEO_DURATION_IN_FRAMES}
       fps={VIDEO_FPS}
       width={VIDEO_WIDTH}
       height={VIDEO_HEIGHT}
       defaultProps={{
-        product: 'Vaultmark',
+        product: 'Canopy',
         tagline: 'Markdown in S3. Searchable, cited, and ready for AI-assisted knowledge work.',
       }}
     />

@@ -369,7 +369,7 @@ export async function POST(req: Request) {
  * Reads ordinary user documents from a caller-chosen **source** folder and
  * dispatches the Lambda to write curated pages into a caller-chosen
  * **destination** folder, each stamped `origin: generated` in frontmatter — no
- * `structure.json` space, no `generated/`/`raw/` roots, no `_vaultmark/`. The
+ * `structure.json` space, no `generated/`/`raw/` roots, no `_canopy/`. The
  * vault is single-tenant in folders mode, so the shared scope's `_system/`
  * owns the job files, start-lock, and processed manifest.
  */

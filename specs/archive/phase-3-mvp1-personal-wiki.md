@@ -2,7 +2,7 @@
 
 ## Goal
 
-Make Vaultmark a complete personal wiki: users can create, edit, and delete pages with full data integrity and a polished Markdown experience.
+Make Canopy a complete personal wiki: users can create, edit, and delete pages with full data integrity and a polished Markdown experience.
 
 ## Vision
 

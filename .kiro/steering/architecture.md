@@ -1,9 +1,9 @@
 ---
-title: Vaultmark Architecture
+title: Canopy Architecture
 inclusion: always
 ---
 
-# Vaultmark Architecture
+# Canopy Architecture
 
 > **Status note (June 2026):** this doc describes the original two-service
 > FastAPI/Postgres design. After Phase 2 the deployed architecture pivoted to

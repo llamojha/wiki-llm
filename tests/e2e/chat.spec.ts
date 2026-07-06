@@ -34,7 +34,7 @@ test.describe('ask-wiki chat', () => {
 
   test('opens chat, submits a prompt, streams the canned reply', async ({ page }) => {
     await gotoHome(page);
-    await page.locator('button[title="Toggle theme"]').waitFor();
+    await page.locator('button[title^="Theme"]').waitFor();
     await page.waitForTimeout(300);
 
     // Open chat via the FAB.

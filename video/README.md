@@ -1,19 +1,19 @@
-# Vaultmark Product Video
+# Canopy Product Video
 
-Remotion composition for a 60-second Vaultmark product video.
+Remotion composition for a 60-second Canopy product video.
 
 ```bash
-pnpm --filter @vaultmark/video audio
-pnpm --filter @vaultmark/video dev
-pnpm --filter @vaultmark/video capture
-pnpm --filter @vaultmark/video compositions
-pnpm --filter @vaultmark/video still
-pnpm --filter @vaultmark/video render
+pnpm --filter @canopy/video audio
+pnpm --filter @canopy/video dev
+pnpm --filter @canopy/video capture
+pnpm --filter @canopy/video compositions
+pnpm --filter @canopy/video still
+pnpm --filter @canopy/video render
 ```
 
 Composition:
 
-- `VaultmarkProductVideo`
+- `CanopyProductVideo`
 - 1920x1080
 - 30 FPS
 - 1800 frames
@@ -22,6 +22,6 @@ Composition:
 ## Interactive demo
 
 Open `video/interactive/index.html` in a browser to click through the
-captured Vaultmark screens. It uses the latest screenshots under
-`video/public/screens/`, so rerun `pnpm --filter @vaultmark/video capture`
+captured Canopy screens. It uses the latest screenshots under
+`video/public/screens/`, so rerun `pnpm --filter @canopy/video capture`
 after changing the app or vault data.

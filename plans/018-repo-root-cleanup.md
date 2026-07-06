@@ -50,7 +50,7 @@ neglect and misleads both humans and agents.
   `grep -rn "lib/mock" web --include='*.ts*' | grep -v 'web/lib/mock/'`).
 - `CODEX_CONTEXT.md` — "What just happened … this session" notes; full spec
   lives in `specs/curation-pipeline.md`.
-- `AGENTS.md` (root) vs `CLAUDE.md`: same `# Vaultmark — Codebase Guide` H1;
+- `AGENTS.md` (root) vs `CLAUDE.md`: same `# Canopy — Codebase Guide` H1;
   AGENTS.md says "Current state (May 2026)", CLAUDE.md "June 2026" + the
   `@.kiro/steering/` auto-load block. CLAUDE.md:? states the OLD root
   AGENTS.md (vault-maintainer schema) moved to `legacy/` — this newer fork
@@ -132,7 +132,7 @@ graph no longer contains the page); `pnpm test:e2e` green.
   looks for the name):
 
   ```markdown
-  # Vaultmark — Agent Guide
+  # Canopy — Agent Guide
 
   The canonical codebase guide for agents and humans is [CLAUDE.md](CLAUDE.md).
   Steering context lives in [.kiro/steering/](.kiro/steering/). This file is

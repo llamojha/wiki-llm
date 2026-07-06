@@ -4,7 +4,7 @@
  *
  * The mock store (`MOCK_S3=1`) starts empty, so a local dev server shows an
  * empty portal until it is seeded. This script loads every `openwiki/**\/*.md`
- * file into the mock bucket so the portal renders Vaultmark's own documentation
+ * file into the mock bucket so the portal renders Canopy's own documentation
  * as a real vault — handy for demos and manual QA.
  *
  * The `openwiki/` prefix is stripped, so the top-level folders (`architecture`,

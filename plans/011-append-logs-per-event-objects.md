@@ -66,7 +66,7 @@ construction.
 | Purpose   | Command                  | Expected on success |
 |-----------|--------------------------|---------------------|
 | Typecheck | `pnpm typecheck`         | exit 0              |
-| Unit      | `pnpm --filter @vaultmark/web test` | all pass |
+| Unit      | `pnpm --filter @canopy/web test` | all pass |
 | E2E       | `pnpm build && pnpm test:e2e` | all pass |
 
 ## Scope
@@ -133,7 +133,7 @@ between tests — see plan 004/007 pattern):
   the same fields as before (`ts, scope, userId, question, …`).
 - no object named `log.md`/`usage-log.jsonl` is written by the new code.
 
-**Verify**: `pnpm --filter @vaultmark/web test` → all pass.
+**Verify**: `pnpm --filter @canopy/web test` → all pass.
 
 ### Step 4: Document the layout
 
@@ -173,7 +173,7 @@ As Step 3; e2e sweep as the integration gate.
 - The portal UI surfaces `_system/log.md` to users somewhere (e.g. a hardcoded
   link) — report where.
 - PRD §12's `LOG.md` contract requires a single human-readable file in the
-  vault root — check `prd_vaultmark_markdown_llm_wiki.md` §12 before Step 1;
+  vault root — check `prd_canopy_markdown_llm_wiki.md` §12 before Step 1;
   if it mandates one file, STOP and propose the derived-view compactor
   variant instead of proceeding.
 

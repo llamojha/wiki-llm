@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: vaultmark
-  namespace: vaultmark
+  name: canopy
+  namespace: canopy
   labels:
-    app: vaultmark
+    app: canopy
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: vaultmark
+      app: canopy
   template:
     metadata:
       labels:
-        app: vaultmark
+        app: canopy
     spec:
-      serviceAccountName: vaultmark
+      serviceAccountName: canopy
       containers:
         - name: web
           # CI publishes this image to GHCR (see .github/workflows/release-image.yml);
@@ -26,10 +26,10 @@ spec:
               name: http
           envFrom:
             - configMapRef:
-                name: vaultmark-config
+                name: canopy-config
             # Uncomment when using static keys instead of IRSA:
             # - secretRef:
-            #     name: vaultmark-aws
+            #     name: canopy-aws
           resources:
             requests:
               cpu: 250m

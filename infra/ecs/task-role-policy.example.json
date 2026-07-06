@@ -27,7 +27,7 @@
       "Sid": "CurateLambdaOptional",
       "Effect": "Allow",
       "Action": ["lambda:InvokeFunction"],
-      "Resource": "arn:aws:lambda:<region>:<account-id>:function:vaultmark-curate"
+      "Resource": "arn:aws:lambda:<region>:<account-id>:function:canopy-curate"
     }
   ]
 }

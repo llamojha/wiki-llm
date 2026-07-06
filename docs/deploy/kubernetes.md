@@ -5,7 +5,7 @@ Kubernetes cluster; the IAM sections below are EKS-specific.
 
 ```
 infra/k8s/
-├── namespace.yaml          vaultmark namespace
+├── namespace.yaml          canopy namespace
 ├── configmap.yaml          env config (vault, Bedrock, feature flags)
 ├── serviceaccount.yaml     service account (IRSA annotation for EKS)
 ├── secret.example.yaml     static AWS keys — only for non-EKS clusters
@@ -25,12 +25,12 @@ with a `read:packages` token.
 To build and push yourself instead:
 
 ```bash
-docker build -f web/Dockerfile -t <registry>/vaultmark:latest .
-docker push <registry>/vaultmark:latest
+docker build -f web/Dockerfile -t <registry>/canopy:latest .
+docker push <registry>/canopy:latest
 ```
 
-For ECR: `aws ecr create-repository --repository-name vaultmark` and use
-`<account-id>.dkr.ecr.<region>.amazonaws.com/vaultmark:latest` as the registry
+For ECR: `aws ecr create-repository --repository-name canopy` and use
+`<account-id>.dkr.ecr.<region>.amazonaws.com/canopy:latest` as the registry
 path.
 
 ## 2. Grant AWS access
@@ -44,12 +44,12 @@ at [`infra/ecs/task-role-policy.example.json`](../../infra/ecs/task-role-policy.
 **EKS (recommended) — IRSA:**
 
 ```bash
-# Create an IAM role for the vaultmark service account with the policy above
+# Create an IAM role for the canopy service account with the policy above
 eksctl create iamserviceaccount \
   --cluster <cluster> \
-  --namespace vaultmark \
-  --name vaultmark \
-  --attach-policy-arn arn:aws:iam::<account-id>:policy/vaultmark-portal \
+  --namespace canopy \
+  --name canopy \
+  --attach-policy-arn arn:aws:iam::<account-id>:policy/canopy-portal \
   --approve
 ```
 
@@ -86,14 +86,14 @@ kubectl apply -f infra/k8s/deployment.yaml
 kubectl apply -f infra/k8s/service.yaml
 kubectl apply -f infra/k8s/ingress.yaml   # after editing host + class
 
-kubectl -n vaultmark rollout status deploy/vaultmark
-kubectl -n vaultmark port-forward svc/vaultmark 3000:80   # smoke test
+kubectl -n canopy rollout status deploy/canopy
+kubectl -n canopy port-forward svc/canopy 3000:80   # smoke test
 ```
 
 ## Notes
 
 - **Sub-path routing:** to share a host with other apps and route a prefix
-  (e.g. `/wiki`) to Vaultmark, pull the published `-wiki` image variant
+  (e.g. `/wiki`) to Canopy, pull the published `-wiki` image variant
   (`ghcr.io/<owner>/<repo>:latest-wiki`) — or build your own with
   `--build-arg NEXT_BASE_PATH=/wiki` — and route the matching path in
   `ingress.yaml`. `basePath` is baked into the build (and the healthcheck), so
@@ -101,7 +101,7 @@ kubectl -n vaultmark port-forward svc/vaultmark 3000:80   # smoke test
   before the app, and do **not** expect the root image to honor a runtime
   `NEXT_BASE_PATH` (it won't; assets stay at `/_next/`). See
   [Serving under a sub-path](../configuration.md#serving-under-a-sub-path-base-path).
-- **Authentication:** Vaultmark has no built-in auth. Keep the ingress
+- **Authentication:** Canopy has no built-in auth. Keep the ingress
   internal, or front it with oauth2-proxy / your IdP — there's a commented
   `auth-url` example in `ingress.yaml`. See [`SECURITY.md`](../../SECURITY.md).
 - **Scaling:** the app is stateless (S3 is the source of truth) — it scales
@@ -109,6 +109,6 @@ kubectl -n vaultmark port-forward svc/vaultmark 3000:80   # smoke test
   search on a fresh pod is slower on large vaults.
 - **Config changes:** flags and env are read at server start; restart pods
   after editing the ConfigMap
-  (`kubectl -n vaultmark rollout restart deploy/vaultmark`).
+  (`kubectl -n canopy rollout restart deploy/canopy`).
 - **`NEXT_PUBLIC_VAULT_USER_ID`** is baked in at image build time, not via
   the ConfigMap — rebuild the image to change it.

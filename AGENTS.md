@@ -1,4 +1,4 @@
-# Vaultmark — Agent Guide
+# Canopy — Agent Guide
 
 The canonical codebase guide for agents and humans is [CLAUDE.md](CLAUDE.md).
 Steering context lives in [.kiro/steering/](.kiro/steering/). This file is

@@ -92,7 +92,7 @@ operator:
 - `docs/feature-flags.md`, `docs/theming.md` — verify with a grep that they
   don't repeat the wrong default/version; only edit on a confirmed hit.
 - Any code or config change.
-- Rebrand-related renaming (Vaultmark → anything) — separate effort.
+- Rebrand-related renaming (Canopy → anything) — separate effort.
 
 ## Git workflow
 

@@ -1,9 +1,9 @@
 ---
-title: Vaultmark Tech Stack
+title: Canopy Tech Stack
 inclusion: always
 ---
 
-# Vaultmark Tech Stack
+# Canopy Tech Stack
 
 All versions pinned to 2026. Do not upgrade without updating this file and CLAUDE.md.
 

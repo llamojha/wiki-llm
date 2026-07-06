@@ -1,0 +1,29 @@
+/*
+ * Canopy theme plugin — Autumn
+ * A warm pastel autumn theme with muted oranges and soft ambers.
+ *
+ * @name Autumn
+ * @base light
+ */
+
+--accent-h: 35;
+--accent: oklch(62% 0.14 35);
+--accent-soft: oklch(62% 0.14 35 / 0.12);
+
+--bg: oklch(97% 0.008 60);
+--bg-1: oklch(95% 0.012 55);
+--bg-2: oklch(93% 0.014 50);
+--bg-3: oklch(90% 0.016 45);
+--panel: oklch(98% 0.006 60);
+--fg: oklch(25% 0.02 40);
+--fg-1: oklch(38% 0.018 40);
+--fg-2: oklch(52% 0.014 45);
+--fg-3: oklch(66% 0.01 50);
+--line: oklch(89% 0.014 50);
+--line-2: oklch(85% 0.016 45);
+--hover: oklch(94% 0.012 50);
+--code-bg: oklch(94% 0.01 55);
+--code-border: oklch(88% 0.014 50);
+--green: oklch(55% 0.12 145);
+--amber: oklch(68% 0.14 65);
+--red: oklch(55% 0.14 20);

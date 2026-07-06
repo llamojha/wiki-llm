@@ -82,7 +82,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha
           labels: |
-            org.opencontainers.image.title=Vaultmark
+            org.opencontainers.image.title=Canopy
             org.opencontainers.image.description=S3-backed Markdown knowledge portal
 
       # Build the native-arch image locally first so Trivy can scan exactly
@@ -94,7 +94,7 @@ jobs:
           context: .
           file: web/Dockerfile
           load: true
-          tags: vaultmark-scan-target:ci${{ matrix.tag_suffix }}
+          tags: canopy-scan-target:ci${{ matrix.tag_suffix }}
           build-args: |
             NEXT_BASE_PATH=${{ matrix.base_path }}
           # Scope the cache per variant — root and wiki produce different chunk
@@ -108,7 +108,7 @@ jobs:
       - name: Trivy scan (vulnerabilities)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: vaultmark-scan-target:ci${{ matrix.tag_suffix }}
+          image-ref: canopy-scan-target:ci${{ matrix.tag_suffix }}
           format: table
           severity: CRITICAL,HIGH
           ignore-unfixed: true

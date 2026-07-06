@@ -19,7 +19,7 @@ export type ThemeInfo = {
   base: ThemeBase;
 };
 
-export const THEME_STORAGE_KEY = 'vaultmark-theme';
+export const THEME_STORAGE_KEY = 'canopy-theme';
 
 export const BUILT_IN_THEMES: ThemeInfo[] = [
   { id: 'light', label: 'Light', base: 'light' },

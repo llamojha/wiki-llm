@@ -5,7 +5,7 @@
 > Follow the steps, honor STOP conditions, and update `plans/README.md` when
 > done.
 >
-> **Drift check (run first)**: `git diff --stat fead8f9..HEAD -- web/lib/vault-paths.ts web/lib/vault-tree.ts web/lib/vault-structure.ts web/lib/scope.ts prd_vaultmark_markdown_llm_wiki.md`
+> **Drift check (run first)**: `git diff --stat fead8f9..HEAD -- web/lib/vault-paths.ts web/lib/vault-tree.ts web/lib/vault-structure.ts web/lib/scope.ts prd_canopy_markdown_llm_wiki.md`
 > On material drift in the path/tree modules, re-derive the "Current state"
 > facts before writing the spec.
 
@@ -30,7 +30,7 @@ The vault layout is **provenance-first**: content must live under
 `raw/` → `generated/<space>/` → `authored/<space>/` (and per-user mirrors).
 That layout exists to serve the AI curation pipeline — but the feature-flag
 defaults tell the real story: a default deployment ships with curate/upload/
-editor OFF. A user who points Vaultmark at an existing bucket of plain
+editor OFF. A user who points Canopy at an existing bucket of plain
 Markdown folders — the "I just have a folder tree of notes" case, which is
 the most common on-ramp imaginable — sees an empty portal, because nothing
 outside the provenance roots is recognized as a document (`isDocumentKey`
@@ -55,7 +55,7 @@ breaking existing vaults.
 - `web/lib/search.ts:46-48` — index builds from `listObjects()` filtered by
   `isDocumentKey`.
 - Upload/editor write paths compose keys via `scope.authoredPrefix(space)` etc.
-- PRD (`prd_vaultmark_markdown_llm_wiki.md`) §data-model and
+- PRD (`prd_canopy_markdown_llm_wiki.md`) §data-model and
   `.kiro/steering/philosophy.md` commit to: Markdown in S3 as source of
   truth, one vault = bucket+prefix, frontmatter canonical, portability (no
   lock-in). NONE of these mandate the provenance layout — the layout is an
@@ -128,7 +128,7 @@ Required sections:
    consequence for the scope toggle UI.)
 5. **AI pipeline opt-in.** Turning `FEATURE_CURATE`/upload-to-raw ON in a
    folders-mode vault: where do `raw/` and `generated/` go? Options: (a)
-   refuse — mode switch required; (b) reserved `_vaultmark/` subtree; (c)
+   refuse — mode switch required; (b) reserved `_canopy/` subtree; (c)
    provenance roots appear alongside user folders. Argue and pick (lean (b)
    or (a); (c) recreates today's confusion).
 6. **Migration & coexistence.** Existing provenance vaults keep working
