@@ -69,7 +69,7 @@ export async function POST(req: Request) {
         // per-space index files and no `structure.json`. An optional `space`
         // filters to a single top-level folder.
         await ensureVaultMode();
-        if (vaultMode() === 'folders') {
+        if (vaultMode() === 'folders' || vaultMode() === 'managed') {
           const keys = (await listObjects())
             .filter(isDocumentKey)
             .filter((k) => !space || k.startsWith(`${space}/`))

@@ -149,7 +149,7 @@ export async function listFolderTree(
   userId?: string,
 ): Promise<FolderNode[]> {
   await ensureVaultMode();
-  if (vaultMode() === 'folders') return listFolderTreeFolders();
+  if (vaultMode() === 'folders' || vaultMode() === 'managed') return listFolderTreeFolders();
 
   const sp = resolveScope({ scope, userId });
   const roots = new Map<string, Build>();
