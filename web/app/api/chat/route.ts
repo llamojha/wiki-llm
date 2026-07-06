@@ -157,7 +157,7 @@ async function loadCatalog(scopeMode: ScopeMode, userId?: string): Promise<strin
   // straight from the live search index so the agent gets a catalog with zero
   // writes (and never drifts from what's actually in the vault).
   await ensureVaultMode();
-  if (vaultMode() === 'folders') {
+  if (vaultMode() === 'folders' || vaultMode() === 'managed') {
     const entries = await getAllEntries();
     return entries
       .map((e) => `- ${e.id} — ${e.title} — ${e.snippet.slice(0, 80)}`)

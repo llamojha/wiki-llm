@@ -124,7 +124,7 @@ export function resolveScope(selector: ScopeSelector): ScopePaths {
 export function inferScopeFromKey(key: string): ScopePaths {
   // Folders mode is single-tenant: there is no `users/` subtree, so a top-level
   // folder that happens to be named `users` must NOT be read as a user scope.
-  if (vaultMode() === 'folders') return resolveScope({ scope: 'shared' });
+  if (vaultMode() === 'folders' || vaultMode() === 'managed') return resolveScope({ scope: 'shared' });
   const userMatch = key.match(/^users\/([^/]+)\//);
   if (userMatch) {
     return resolveScope({ scope: 'user', userId: userMatch[1] });

@@ -208,7 +208,7 @@ export async function POST(req: Request) {
   // frontmatter (plan 026). Entirely separate contract from the provenance
   // flow below, which stays byte-identical.
   await ensureVaultMode();
-  if (vaultMode() === 'folders') {
+  if (vaultMode() === 'folders' || vaultMode() === 'managed') {
     return startFolders(body);
   }
 

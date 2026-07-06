@@ -153,7 +153,7 @@ export async function POST(req: Request) {
   const scope = resolveScopeOr400({ scope: scopeName, userId });
   if (scope instanceof NextResponse) return scope;
   await ensureVaultMode();
-  const folders = vaultMode() === 'folders';
+  const folders = vaultMode() === 'folders' || vaultMode() === 'managed';
   const filename = sanitizeFilename(file.name);
   const folderPrefix = folder ? `${folder}/` : '';
   // Folders mode writes directly to the chosen folder (`<space>/<folder>/file`),

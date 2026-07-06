@@ -39,7 +39,7 @@ export async function GET(req: Request) {
   // caller-chosen source folder that have not been curated yet. There is no
   // structure.json space; a destination is not needed to count pending inputs.
   await ensureVaultMode();
-  if (vaultMode() === 'folders') {
+  if (vaultMode() === 'folders' || vaultMode() === 'managed') {
     const source = normalizeFolderPath(searchParams.get('source'));
     if (source === null) {
       return NextResponse.json({ source: null, count: 0, keys: [], total: 0, detail: 'invalid source folder' });
