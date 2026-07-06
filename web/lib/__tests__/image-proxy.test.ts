@@ -59,6 +59,31 @@ describe('validateProxyUrl — SSRF protection', () => {
     expect(validateProxyUrl('http://8.8.8.8/img.png')).toBeNull();
     expect(validateProxyUrl('http://203.0.113.50/img.png')).toBeNull();
   });
+
+  it('rejects IPv4-mapped IPv6 in hex form (::ffff:7f00:1)', () => {
+    expect(validateProxyUrl('http://[::ffff:7f00:1]/img.png')).toContain('Private IP');
+    expect(validateProxyUrl('http://[::ffff:a9fe:a9fe]/img.png')).toContain('Private IP'); // 169.254.169.254
+    expect(validateProxyUrl('http://[::ffff:c0a8:101]/img.png')).toContain('Private IP'); // 192.168.1.1
+    expect(validateProxyUrl('http://[::ffff:a00:1]/img.png')).toContain('Private IP'); // 10.0.0.1
+  });
+
+  it('rejects IPv4-mapped IPv6 in dotted form (::ffff:127.0.0.1)', () => {
+    expect(validateProxyUrl('http://[::ffff:127.0.0.1]/img.png')).toContain('Private IP');
+    expect(validateProxyUrl('http://[::ffff:169.254.169.254]/img.png')).toContain('Private IP');
+  });
+
+  it('rejects IPv6 loopback ::1', () => {
+    expect(validateProxyUrl('http://[::1]/img.png')).toContain('Private IP');
+  });
+
+  it('rejects IPv6 unique-local (fc/fd)', () => {
+    expect(validateProxyUrl('http://[fd12:3456::1]/img.png')).toContain('Private IP');
+    expect(validateProxyUrl('http://[fc00::1]/img.png')).toContain('Private IP');
+  });
+
+  it('rejects IPv6 link-local (fe80::)', () => {
+    expect(validateProxyUrl('http://[fe80::1]/img.png')).toContain('Private IP');
+  });
 });
 
 describe('isImageContentType', () => {
