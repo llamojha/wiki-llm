@@ -115,10 +115,10 @@ export async function regenerateSpaceIndex(
   space: string,
   scope: ScopePaths = resolveScope({ scope: 'shared' }),
 ): Promise<void> {
-  // Per-space index files are a provenance artifact; folders mode keeps a single
-  // master catalog only.
+  // Per-space index files are a provenance artifact; folders/managed modes keep
+  // a single master catalog only.
   await ensureVaultMode();
-  if (vaultMode() === 'folders') return;
+  if (vaultMode() === 'folders' || vaultMode() === 'managed') return;
   const keys = [
     ...(await listObjects(scope.generatedPrefix(space))),
     ...(await listObjects(scope.authoredPrefix(space))),
@@ -225,9 +225,10 @@ async function applySpaceIndexPatch(
  */
 export async function regenerateIndexesForKey(key: string): Promise<void> {
   await ensureVaultMode();
-  if (vaultMode() === 'folders') {
-    // Folders mode has one flat catalog and no per-space CAS patching; a full
-    // rebuild is cheap for the single-user MVP and always correct.
+  if (vaultMode() === 'folders' || vaultMode() === 'managed') {
+    // Folders/managed modes have one flat catalog and no per-space CAS
+    // patching; a full rebuild is cheap for the single-user MVP and always
+    // correct.
     await regenerateMasterIndexFolders();
     return;
   }
@@ -242,7 +243,7 @@ export async function regenerateIndexesForKey(key: string): Promise<void> {
  */
 export async function removeKeyFromIndexes(key: string): Promise<void> {
   await ensureVaultMode();
-  if (vaultMode() === 'folders') {
+  if (vaultMode() === 'folders' || vaultMode() === 'managed') {
     await regenerateMasterIndexFolders();
     return;
   }
@@ -272,7 +273,7 @@ export async function regenerateMasterIndex(
   scope: ScopePaths = resolveScope({ scope: 'shared' }),
 ): Promise<void> {
   await ensureVaultMode();
-  if (vaultMode() === 'folders') return regenerateMasterIndexFolders();
+  if (vaultMode() === 'folders' || vaultMode() === 'managed') return regenerateMasterIndexFolders();
 
   const structure = await getStructure();
   const spaces = spacesForScope(structure, scope.scope, scope.userId)

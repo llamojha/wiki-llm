@@ -34,6 +34,42 @@ export function TreeNode({ node, depth, activeId, onOpen, openFolders, toggleFol
       </div>
     );
   }
+  const hasChildren = node.type === 'doc' && node.children && node.children.length > 0;
+  if (node.type === 'doc' && hasChildren) {
+    // Managed mode: a page that is both openable and a parent. The label opens
+    // the page; the chevron expands its children.
+    const isOpen = openFolders.has(node.id);
+    return (
+      <div className="tree-row">
+        <button
+          className={'nav-row' + (activeId === node.id ? ' active' : '')}
+          onClick={() => onOpen(node.id)}
+          style={{ paddingLeft: 6 }}
+        >
+          <span
+            className={'tree-toggle' + (isOpen ? ' open' : '')}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleFolder(node.id);
+            }}
+          >
+            {ICONS.chev}
+          </span>
+          <span className="nav-icon">{ICONS.doc}</span>
+          <span className="nav-label">{node.name}</span>
+        </button>
+        {isOpen && (
+          <div className="tree-children">
+            {node.children!.map((c) => (
+              <TreeNode key={c.id} node={c} depth={depth + 1}
+                        activeId={activeId} onOpen={onOpen}
+                        openFolders={openFolders} toggleFolder={toggleFolder}/>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
   return (
     <button className={'nav-row' + (activeId === node.id ? ' active' : '')}
             onClick={() => onOpen(node.id)}

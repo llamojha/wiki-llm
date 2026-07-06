@@ -8,10 +8,15 @@
  *   (outside `_system/`) is a document, and the top-level folders *are* the
  *   spaces. Lets a user point the portal at an existing folder of Markdown notes
  *   and have it just work.
+ * - `'managed'` — the metadata-derived evolution (plan 027): recognizes the same
+ *   keys as `folders`, but the page tree comes from a frontmatter `parent_id`
+ *   edge (falling back to the path when absent), so re-parenting a page is a
+ *   one-file metadata edit, not an object move. See `specs/managed-mode.md`.
  *
  * Resolution order (highest wins):
- *   1. Explicit `VAULT_MODE=folders|provenance`.
- *   2. Sniff — `provenance` if `_system/structure.json` exists OR any
+ *   1. Explicit `VAULT_MODE=folders|provenance|managed`.
+ *   2. Sniff — `managed` if the `_system/managed.json` marker exists;
+ *      `provenance` if `_system/structure.json` exists OR any
  *      `generated/`/`authored/` document is present; else `folders`.
  *   3. Default `folders`.
  *
@@ -19,11 +24,15 @@
  * returns the cached value for the many synchronous `isDocumentKey` filter
  * predicates. Every list-consuming entry point awaits `ensureVaultMode()` before
  * it filters, so the sync value is always resolved by the time it is read. See
- * `specs/folder-first-vault.md`.
+ * `specs/folder-first-vault.md` and `specs/managed-mode.md`.
  */
-export type VaultMode = 'folders' | 'provenance';
+export type VaultMode = 'folders' | 'provenance' | 'managed';
 
 const STRUCTURE_KEY = '_system/structure.json';
+// Marker object that promotes a vault to `managed` mode. Managed recognizes the
+// same keys as folders, so there is no content-shape signal to distinguish them;
+// the reconcile/migration step (specs/managed-mode.md §8) writes this marker.
+const MANAGED_MARKER_KEY = '_system/managed.json';
 
 // Under the in-memory mock (unit + e2e tests) the S3 store is reseeded between
 // cases, so a cached mode would leak across tests with different vault shapes.
@@ -42,7 +51,7 @@ let _logged = false;
 
 function readEnvMode(): VaultMode | null {
   const raw = (process.env.VAULT_MODE ?? '').trim().toLowerCase();
-  if (raw === 'folders' || raw === 'provenance') return raw;
+  if (raw === 'folders' || raw === 'provenance' || raw === 'managed') return raw;
   return null;
 }
 
@@ -62,6 +71,16 @@ async function sniff(): Promise<VaultMode> {
   // crash hydration. The sniff only ever runs server-side, so a dynamic import
   // keeps `s3.ts` out of the client graph entirely.
   const { headObject, listObjects } = await import('@/lib/s3');
+  // The managed marker is the unambiguous signal: managed recognizes the same
+  // keys as folders, so nothing about the content shape distinguishes them —
+  // only this explicit marker (written by reconcile/migration) does. Check it
+  // before the provenance probes so a promoted vault always resolves managed.
+  try {
+    await headObject(MANAGED_MARKER_KEY);
+    return 'managed';
+  } catch {
+    // no managed.json — fall through to the provenance/folders sniff
+  }
   // A declared-spaces manifest is the unambiguous provenance signal — present
   // even for a provenance vault whose spaces are still empty.
   try {

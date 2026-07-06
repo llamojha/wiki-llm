@@ -115,18 +115,21 @@ function stripDocExtension(key: string): string {
  *
  * - **provenance**: a `.md`/`.html` under a content root (`generated/`,
  *   `authored/`, or the per-user mirrors), excluding reserved system files.
- * - **folders**: any `.md`/`.html` outside `_system/`, minus `.keep` markers.
- *   Top-level folders *are* the spaces; root-level `index.md`/`log.md` are
- *   ordinary user docs (only `_system/` is reserved).
+ * - **folders / managed**: any `.md`/`.html` outside `_system/`, minus `.keep`
+ *   markers and `raw/` scratch inputs. Top-level folders *are* the spaces;
+ *   root-level `index.md`/`log.md` are ordinary user docs (only `_system/` is
+ *   reserved). Managed mode recognizes the *same* keys as folders — it differs
+ *   only in how the tree is assembled (frontmatter `parent_id`), so the two
+ *   share this predicate. See `specs/managed-mode.md` §5.
  */
 export function isDocumentKey(key: string): boolean {
   if (!hasDocExtension(key)) return false;
 
-  if (vaultMode() === 'folders') {
+  if (vaultMode() === 'folders' || vaultMode() === 'managed') {
     if (key.startsWith(`${SYSTEM_ROOT}/`)) return false;
     // Raw pipeline inputs are scratch, not browsable documents — exclude them
-    // even in folders mode so un-curated uploads (present only when curate/raw
-    // is opted in — see spec §5) never leak into the sidebar/search/read route.
+    // even in folders/managed mode so un-curated uploads (present only when
+    // curate/raw is opted in) never leak into the sidebar/search/read route.
     if (key.startsWith(RAW_PREFIX)) return false;
     if (key.match(/^users\/[^/]+\/raw\//)) return false;
     const filename = key.split('/').pop()!;
@@ -149,17 +152,18 @@ export function isDocumentKey(key: string): boolean {
 }
 
 export function sourceTypeFromKey(key: string): 'generated' | 'authored' | 'personal' {
-  // Folders mode has no provenance roots — everything is user-written content.
+  // Folders/managed mode have no provenance roots — everything is user content.
   // Frontmatter `source_type`/`origin` still wins at the read site.
-  if (vaultMode() === 'folders') return 'authored';
+  if (vaultMode() === 'folders' || vaultMode() === 'managed') return 'authored';
   if (key.startsWith(`${GENERATED_ROOT}/`) || key.match(/^users\/[^/]+\/generated\//)) return 'generated';
   if (key.match(/^users\/[^/]+\/authored\/personal\//)) return 'personal';
   return 'authored';
 }
 
 export function displayPathForKey(key: string): string {
-  // Folders mode: the key *is* the display path — no provenance root to strip.
-  if (vaultMode() === 'folders') {
+  // Folders/managed mode: the key *is* the display path — no provenance root
+  // to strip.
+  if (vaultMode() === 'folders' || vaultMode() === 'managed') {
     return stripDocExtension(key).split('/').join(' / ');
   }
   let displayKey = key;

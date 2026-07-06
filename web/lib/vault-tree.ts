@@ -1,4 +1,4 @@
-import { listObjects } from '@/lib/s3';
+import { listObjects, getObject } from '@/lib/s3';
 import { getStructure, spacesForScope } from '@/lib/vault-structure';
 import {
   DEFAULT_USER_ID,
@@ -8,10 +8,12 @@ import {
   personalPrefix,
 } from '@/lib/vault-paths';
 import { ensureVaultMode, vaultMode } from '@/lib/vault-mode';
+import { parseManagedPage, type ManagedPage } from '@/lib/managed-pages';
+import { assembleManagedTree } from '@/lib/managed-tree';
 import { resolveScope } from '@/lib/scope';
 
 export type TreeNode =
-  | { type: 'doc'; id: string; name: string }
+  | { type: 'doc'; id: string; name: string; children?: TreeNode[] }
   | { type: 'folder'; id: string; name: string; children: TreeNode[] };
 
 function stemToTitle(stem: string): string {
@@ -91,6 +93,29 @@ function addKeys(root: TreeNode[], space: string, storagePrefix: string, keys: s
 }
 
 /**
+ * Managed-mode tree: recognize the same keys as folders mode, but read each
+ * document's frontmatter and assemble the tree from `parent_id` (falling back
+ * to the key path when absent). One read per document — the tree edge lives
+ * inside the file, unlike folders mode where the key path alone suffices.
+ * Assembly is delegated to the pure `assembleManagedTree` (specs/managed-mode.md
+ * §6). No persistent cache in v1.
+ */
+export async function getManagedTree(): Promise<TreeNode[]> {
+  const keys = (await listObjects()).filter(isDocumentKey);
+  const parsed = await Promise.all(
+    keys.map(async (key) => {
+      try {
+        return parseManagedPage(key, await getObject(key));
+      } catch {
+        return null; // skip unreadable docs
+      }
+    }),
+  );
+  const pages = parsed.filter((p): p is ManagedPage => p !== null);
+  return assembleManagedTree(pages);
+}
+
+/**
  * Build the full vault tree with one synthetic `__user` folder containing the
  * active user's content (all spaces, including `personal`) and one folder per
  * declared shared space.
@@ -100,6 +125,7 @@ function addKeys(root: TreeNode[], space: string, storagePrefix: string, keys: s
  */
 export async function getTree(): Promise<TreeNode[]> {
   await ensureVaultMode();
+  if (vaultMode() === 'managed') return getManagedTree();
   if (vaultMode() === 'folders') return getFoldersTree();
 
   const structure = await getStructure();
