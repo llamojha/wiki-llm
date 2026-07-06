@@ -5,6 +5,8 @@
   "packageManager": "pnpm@10.5.0",
   "scripts": {
     "dev": "pnpm --filter @vaultmark/web dev",
+    "dev:mock": "MOCK_S3=1 VAULT_BUCKET=mock-bucket pnpm --filter @vaultmark/web dev",
+    "seed:openwiki": "node scripts/seed-openwiki.mjs",
     "build": "pnpm --filter @vaultmark/web build",
     "lint": "pnpm --filter @vaultmark/web lint",
     "typecheck": "pnpm --filter @vaultmark/web typecheck",
