@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { getTree } from '@/lib/vault-tree';
+import { requireSession } from '@/lib/auth-guard';
 
 // The tree is built from live S3 contents but the handler's only
 // request-derived input is the route segment param — which does NOT opt the
@@ -10,9 +11,11 @@ import { getTree } from '@/lib/vault-tree';
 export const dynamic = 'force-dynamic';
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
   const { id } = await params;
   const vaultId = process.env.VAULT_ID ?? 'default';
   if (id !== vaultId) {

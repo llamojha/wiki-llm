@@ -79,6 +79,7 @@ If you don't deploy the Lambda, disable the feature with `FEATURE_CURATE=off`.
 | `CURATE_LAMBDA_ARN` | for curation | — | ARN of the deployed curate Lambda. Curation start returns an error without it. |
 | `CURATE_LAMBDA_REGION` | no | `eu-central-1` | Region of the Lambda. |
 | `VAULT_USER_ID` | no | `default` | (Lambda + ingest CLI) user id for per-user vault paths `users/<id>/…`. |
+| `FEATURE_CURATE_AUTOSYNTH` | no | off | Opt-in server-side toggle that chains synthesis after a curate extraction batch completes. Not a portal `FEATURE_*` flag (no UI surface, no `flags.ts` entry) — set to `on`/`1`/`true`/`yes` to enable. See `specs/synthesis-pipeline.md`. |
 
 ## Users / personal space
 
@@ -126,6 +127,89 @@ disable, or to `on` to enable. The container image bakes the defaults in as
 `ENV` values and [`infra/.env.example`](../infra/.env.example) lists every
 flag, so the full tunable surface is visible per deployment. See
 [`feature-flags.md`](feature-flags.md) for the full reference.
+
+## Authentication (auth gate)
+
+Vaultmark ships an optional **built-in OIDC auth gate**, off by default. When
+off, the portal is exactly the open app it has always been (put a reverse
+proxy / ALB OIDC / VPN in front, per [`SECURITY.md`](../SECURITY.md)). When on,
+it answers a single binary question — *may this person enter the portal at
+all?* — via any OpenID Connect provider. **Keycloak and AWS Cognito are both
+first-class and verified.** It is not multi-user identity (that is a later
+phase); everyone who passes the allowlist sees the same vault.
+
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `AUTH_MODE` | no | `none` | `none` (open portal — unchanged behavior), or `oidc` (built-in gate). `proxy` is reserved for a future trusted-header mode. |
+| `OIDC_ISSUER` | in `oidc` | — | Issuer URL. Keycloak: `https://<host>/realms/<realm>`. Cognito: `https://cognito-idp.<region>.amazonaws.com/<userPoolId>`. Discovery is read from `<issuer>/.well-known/openid-configuration`. |
+| `OIDC_CLIENT_ID` | in `oidc` | — | OIDC client (app client) id. |
+| `OIDC_CLIENT_SECRET` | in `oidc` | — | Client secret (confidential client). |
+| `AUTH_SESSION_SECRET` | in `oidc` | — | High-entropy secret (≥ 32 chars) used to encrypt the session cookie. Rotating it invalidates all sessions. |
+| `AUTH_ALLOWED_SUBJECTS` | one of the two | — | Comma/space-separated allowlist of OIDC `sub` claims permitted in. |
+| `AUTH_ALLOWED_EMAILS` | one of the two | — | Comma/space-separated allowlist of `email` claims (case-insensitive). |
+
+**Deny-by-default.** In `oidc` mode an authenticated user is admitted **only**
+if their `sub` or `email` is on an allowlist. An empty/unset allowlist admits
+**no one** (fail closed) — authenticating at your IdP is not the same as being
+allowed into this portal. Removing someone from the allowlist takes effect on
+their next request.
+
+**Both layers.** Pages redirect unauthenticated browsers to sign-in; every
+`/api/*` handler independently returns `401` (auth is checked before the
+feature flag, so a disabled feature returns `401` before `404` and never leaks
+which features exist). The exemptions are `/api/health` (probes),
+`/api/auth/*` (the sign-in routes themselves), and static assets. Sessions are
+a stateless encrypted cookie (`HttpOnly`, `SameSite=Lax`, `Secure` over HTTPS,
+scoped to `NEXT_BASE_PATH`); there is no server-side store, so **revocation is
+expiry-bound** (TTL 12h). The OIDC redirect/callback URLs compose with
+`NEXT_BASE_PATH` automatically.
+
+### Keycloak recipe
+
+1. Create (or pick) a realm, then a **client**: Client type `OpenID Connect`,
+   Client authentication **On** (confidential), Standard flow enabled.
+2. Valid redirect URI: `https://<your-host><basePath>/api/auth/callback`
+   (e.g. `https://wiki.example.com/api/auth/callback`, or
+   `…/wiki/api/auth/callback` when `NEXT_BASE_PATH=/wiki`).
+3. Valid post-logout redirect URI: `https://<your-host><basePath>/`.
+4. Copy the client secret. Set:
+
+```
+AUTH_MODE=oidc
+OIDC_ISSUER=https://keycloak.example.com/realms/vaultmark
+OIDC_CLIENT_ID=vaultmark
+OIDC_CLIENT_SECRET=<from Keycloak>
+AUTH_SESSION_SECRET=<openssl rand -hex 32>
+AUTH_ALLOWED_EMAILS=you@example.com,teammate@example.com
+```
+
+Keycloak advertises a standard `end_session_endpoint`, so logout is
+RP-initiated (the portal sends `post_logout_redirect_uri` + `id_token_hint`).
+
+### AWS Cognito recipe
+
+1. In your **user pool**, add a **Hosted UI domain** (App integration → Domain)
+   — Cognito's authorize/token/logout endpoints live on that domain.
+2. Create an **app client** (confidential, with a secret). Enable the
+   Authorization code grant and the `openid email profile` scopes.
+3. Allowed callback URL: `https://<your-host><basePath>/api/auth/callback`.
+4. Allowed sign-out URL: `https://<your-host><basePath>/` (Cognito calls this
+   `logout_uri`; it must be registered here).
+
+```
+AUTH_MODE=oidc
+OIDC_ISSUER=https://cognito-idp.eu-central-1.amazonaws.com/eu-central-1_ABC123
+OIDC_CLIENT_ID=<app client id>
+OIDC_CLIENT_SECRET=<app client secret>
+AUTH_SESSION_SECRET=<openssl rand -hex 32>
+AUTH_ALLOWED_EMAILS=you@example.com
+```
+
+> **Cognito note.** Cognito's discovery document omits `end_session_endpoint`,
+> so Vaultmark derives the non-standard logout
+> (`https://<hosted-domain>/logout?client_id=…&logout_uri=…`) from the
+> discovered authorization endpoint — no host is hardcoded. This is handled
+> automatically; you only need the sign-out URL registered (step 4).
 
 ## Uploads
 

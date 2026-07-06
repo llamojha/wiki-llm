@@ -99,7 +99,7 @@ Manager.
 > whatever `HOSTNAME` is set to. In `awsvpc` network mode (Fargate) ECS injects
 > the task's private DNS name into `HOSTNAME`, so without an override the server
 > binds only to the ENI IP — and the container health check
-> (`wget http://127.0.0.1:3000/api/vaults`) gets "connection refused" on
+> (`wget http://127.0.0.1:3000/api/health`) gets "connection refused" on
 > loopback. The container then reports **UNHEALTHY** and, behind a service, ECS
 > kills and replaces it in a loop so the deployment never stabilizes. Setting
 > `HOSTNAME=0.0.0.0` (already in `task-definition.example.json`) makes it bind
@@ -115,7 +115,7 @@ aws ecs create-cluster --cluster-name vaultmark
 aws elbv2 create-target-group \
   --name vaultmark --protocol HTTP --port 3000 --target-type ip \
   --vpc-id <vpc-id> \
-  --health-check-path /api/vaults
+  --health-check-path /api/health
 
 aws ecs create-service \
   --cluster vaultmark \

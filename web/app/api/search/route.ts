@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { searchScoped, type SearchScope } from '@/lib/search';
 import { flagGuard } from '@/lib/flags';
+import { requireSession } from '@/lib/auth-guard';
 
 export async function GET(req: NextRequest) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
+
   const blocked = flagGuard('search');
   if (blocked) return blocked;
 

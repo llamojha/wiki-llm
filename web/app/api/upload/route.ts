@@ -9,6 +9,7 @@ import { ensureSpaceInStructure } from '@/lib/vault-structure';
 import { PERSONAL_SPACE } from '@/lib/vault-paths';
 import { ensureVaultMode, vaultMode } from '@/lib/vault-mode';
 import { flagGuard, isEnabled } from '@/lib/flags';
+import { requireSession } from '@/lib/auth-guard';
 
 const SPACE_RE = /^[a-z0-9][a-z0-9-]*$/;
 // A subfolder is a chain of space-shaped segments (`guides`, `guides/setup`).
@@ -59,6 +60,9 @@ function normalizeFolder(raw: string | null): string | null {
  * Both destinations work for both `shared` and `user` scopes.
  */
 export async function POST(req: Request) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
+
   const blocked = flagGuard('upload');
   if (blocked) return blocked;
 

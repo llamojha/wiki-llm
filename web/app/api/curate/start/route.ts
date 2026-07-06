@@ -19,6 +19,7 @@ import { resolvePending, type ProcessedManifest } from '@/lib/curate-pending';
 import { ensureVaultMode, vaultMode } from '@/lib/vault-mode';
 import { isDocumentKey } from '@/lib/vault-paths';
 import { flagGuard } from '@/lib/flags';
+import { requireSession } from '@/lib/auth-guard';
 
 const LAMBDA_ARN = process.env.CURATE_LAMBDA_ARN;
 const BUCKET = process.env.VAULT_BUCKET ?? '';
@@ -186,6 +187,9 @@ function isAutosynthEnabled(): boolean {
 
 
 export async function POST(req: Request) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
+
   const blocked = flagGuard('curate');
   if (blocked) return blocked;
 

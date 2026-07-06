@@ -57,4 +57,12 @@ test.describe('feature flags — all OFF', () => {
     const res = await request.get('/api/spaces');
     expect(res.status()).toBe(200);
   });
+
+  test('GET /api/health is unauthenticated + ungated (auth gate exemption)', async ({ request }) => {
+    // Plan 029: probes must reach health even with everything off and
+    // (eventually) AUTH_MODE=oidc. Minimal body — no vault/version leak.
+    const res = await request.get('/api/health');
+    expect(res.status()).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+  });
 });

@@ -11,6 +11,7 @@ import { type Scope } from '@/lib/scope';
 import { resolveScopeOr400 } from '@/lib/http-scope';
 import { invalidateSearchIndex } from '@/lib/search';
 import { flagGuard } from '@/lib/flags';
+import { requireSession } from '@/lib/auth-guard';
 
 const SPACE_RE = /^[a-z0-9][a-z0-9-]*$/;
 
@@ -34,6 +35,9 @@ async function buildLine(key: string): Promise<string> {
 }
 
 export async function POST(req: Request) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
+
   const blocked = flagGuard('reindex');
   if (blocked) return blocked;
 

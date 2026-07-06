@@ -26,6 +26,41 @@
 - **Category**: security / infrastructure
 - **Planned at**: commit `c6e31f7` (preview: folders mode + HTML docs), 2026-07-05
 
+## Spike findings (task 1 — completed 2026-07-05, verified against live docs/registry)
+
+Re-verified current majors instead of trusting training data (spec's explicit
+instruction). Three findings materially shape the build:
+
+1. **Next.js 16 renamed `middleware.ts` → `proxy.ts`** (deprecated in v16.0.0,
+   [file-conventions/proxy]). The file must export a function named `proxy`
+   (default or named); a codemod exists (`npx @next/codemod middleware-to-proxy`).
+   **Wherever this plan says `middleware.ts`/`middleware`, read `proxy.ts`/
+   `proxy`.** Matcher must exclude `_next/static`, `_next/image`, and `/api`
+   (handlers self-guard) — but note `_next/data` is matched even when excluded,
+   by design.
+2. **Proxy now defaults to the Node.js runtime** (the `runtime` config is
+   *disallowed* in proxy files and throws). This removes the historical Edge
+   constraint that made hand-rolled OIDC in middleware painful — `openid-client`
+   + `jose` run natively. Net: strengthens the minimal-library recommendation.
+3. **Vercel explicitly positions Proxy as a last resort** and the docs say to
+   *"verify authentication and authorization inside each Server Function / route
+   handler rather than relying on Proxy alone"* (a matcher change can silently
+   drop coverage). This **hard-confirms the spec's both-layers requirement**:
+   `proxy.ts` is the page-redirect UX; the real enforcement is the in-handler
+   `requireSession()`. Proxy alone is NOT the gate.
+
+**Library decision — LOCKED: `openid-client` + `jose`** (not Auth.js). Evidence:
+- `jose@6.2.3`, `openid-client@6.8.4` — both current, ESM, Node-runtime friendly.
+- `next-auth` latest published = **`4.24.14`** (the old Pages-era `withAuth`
+  line); Auth.js **v5 is still beta-tagged** (`@auth/core@0.34.3`). Shipping a
+  beta auth framework in a public, lock-in-averse repo is the wrong trade when
+  the Node.js-runtime proxy makes the minimal path clean. Matches spec §1/§5.1.
+
+**Greenfield confirmed**: no `middleware.ts`/`proxy.ts`, no session/cookie/auth
+code anywhere in `web/` (grep for `next-auth|openid-client|requireSession|
+AUTH_MODE|OIDC_ISSUER|createRemoteJWKSet|SignJWT` → 0 matches). 18 route
+handlers under `web/app/api/**/route.ts` to inventory for the exemption list.
+
 ## Why this matters
 
 The portal ships with **no authentication** — fine for the single-user MVP, but
@@ -71,10 +106,14 @@ gate, **not** multi-user identity (that is Phase 6).
    server-side session store** — revocation = cookie expiry; keep TTL modest
    (recommend 12h + silent refresh; §5.3).
 4. **Both-layers enforcement.**
-   - `web/middleware.ts`: redirect unauthenticated **page** requests to login.
+   - `web/proxy.ts` (Next 16's renamed `middleware`, Node.js runtime — see
+     Spike findings): redirect unauthenticated **page** requests to login;
+     matcher excludes `/api`, `_next/static`, `_next/image`, callback + `/p/*`.
    - Shared **`requireSession()`** helper that handlers call (mirror
-     `flagGuard`'s placement). Ordering is **auth before flag** — return **401
-     before 404** so anonymous callers can't probe which features exist.
+     `flagGuard`'s placement) — **this is the real gate**; proxy alone is not
+     (Vercel's own guidance, Spike finding 3). Ordering is **auth before flag**
+     — return **401 before 404** so anonymous callers can't probe which
+     features exist.
    - If the spike shows ~15 handlers each need boilerplate, surface a
      **`withGuards(flag?, auth?)`** wrapper as a refactor *precondition* (§5.4),
      not scattered calls.
