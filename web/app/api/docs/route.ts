@@ -7,6 +7,13 @@ import { ObjectAlreadyExistsError, putObjectIfAbsent } from '@/lib/s3';
 import { getAllEntries, upsertSearchEntry } from '@/lib/search';
 import { displayPathForKey, personalPrefix } from '@/lib/vault-paths';
 import { ensureVaultMode, vaultMode } from '@/lib/vault-mode';
+import {
+  assertSegment,
+  generatePageId,
+  managedPageKey,
+  ManagedPageError,
+  stringifyManagedPage,
+} from '@/lib/managed-pages';
 import { flagGuard } from '@/lib/flags';
 import { requireSession } from '@/lib/auth-guard';
 
@@ -80,11 +87,12 @@ export async function POST(req: Request) {
   if (blocked) return blocked;
 
   const body = await req.json();
-  const { title, body: content, slug, folder } = body as {
+  const { title, body: content, slug, folder, parentId } = body as {
     title?: string;
     body?: string;
     slug?: string;
     folder?: string;
+    parentId?: string | null;
   };
 
   if (!title || typeof content !== 'string') {
@@ -100,6 +108,52 @@ export async function POST(req: Request) {
   }
 
   await ensureVaultMode();
+
+  // Managed mode: pages are slug-named under `pages/<space>/<slug>.md` with a
+  // stable frontmatter `id` assigned here; tree position comes from `parent_id`
+  // (frontmatter), not the path. `folder`'s first segment is the space.
+  if (vaultMode() === 'managed') {
+    const space = (folder ?? '')
+      .split('/')
+      .map((s) => s.trim())
+      .filter(Boolean)[0] || 'wiki';
+    const parent = typeof parentId === 'string' && parentId ? parentId : null;
+    let managedKey: string;
+    let managedMarkdown: string;
+    try {
+      assertSegment('space', space);
+      assertSegment('slug', docSlug);
+      managedKey = managedPageKey(space, docSlug);
+      managedMarkdown = stringifyManagedPage(
+        { id: generatePageId(), title, space, slug: docSlug, parentId: parent, origin: 'authored' },
+        content,
+      );
+    } catch (err) {
+      if (err instanceof ManagedPageError) {
+        return NextResponse.json({ detail: err.message }, { status: err.status });
+      }
+      throw err;
+    }
+    try {
+      await putObjectIfAbsent(managedKey, managedMarkdown);
+    } catch (err) {
+      if (err instanceof ObjectAlreadyExistsError) {
+        return NextResponse.json(
+          { detail: `A page with slug "${docSlug}" already exists in "${space}"` },
+          { status: 409 },
+        );
+      }
+      throw err;
+    }
+    await regenerateIndexesForKey(managedKey);
+    await appendLog('created', managedKey, title);
+    await upsertSearchEntry(managedKey);
+    return NextResponse.json(
+      { id: managedKey, title, path: displayPathForKey(managedKey) },
+      { status: 201 },
+    );
+  }
+
   const folders = vaultMode() === 'folders';
 
   // Folders mode has no `users/` personal tree — new pages land in the

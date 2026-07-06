@@ -72,4 +72,30 @@ describe('ensureVaultMode', () => {
     __resetWith({});
     expect(await ensureVaultMode()).toBe('folders');
   });
+
+  it('sniffs managed when the _system/managed.json marker exists', async () => {
+    __resetWith({ '_system/managed.json': '{"version":1}', 'pages/wiki/a.md': '# A' });
+    expect(await ensureVaultMode()).toBe('managed');
+  });
+
+  it('prefers the managed marker over a provenance-shaped vault', async () => {
+    // The marker is the unambiguous managed signal; it must win even when a
+    // structure.json is also present (e.g. a half-migrated provenance vault).
+    __resetWith({
+      '_system/managed.json': '{"version":1}',
+      '_system/structure.json': '{"version":3,"spaces":[]}',
+    });
+    expect(await ensureVaultMode()).toBe('managed');
+  });
+
+  it('honors an explicit VAULT_MODE=managed over a plain folder vault', async () => {
+    __resetWith({ 'notes/a.md': '# A' });
+    process.env.VAULT_MODE = 'managed';
+    expect(await ensureVaultMode()).toBe('managed');
+  });
+
+  it('does not sniff managed for a plain folder vault without the marker', async () => {
+    __resetWith({ 'pages/wiki/a.md': '# A', 'notes/b.md': '# B' });
+    expect(await ensureVaultMode()).toBe('folders');
+  });
 });
