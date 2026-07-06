@@ -16,6 +16,7 @@
     "@aws-sdk/client-s3": "^3.1079.0",
     "fuse.js": "^7.4.2",
     "gray-matter": "^4.0.3",
+    "hast-util-sanitize": "^5.0.2",
     "jose": "6.2.3",
     "next": "^16.2.10",
     "openid-client": "6.8.4",

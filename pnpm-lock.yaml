@@ -85,6 +85,9 @@ importers:
       gray-matter:
         specifier: ^4.0.3
         version: 4.0.3
+      hast-util-sanitize:
+        specifier: ^5.0.2
+        version: 5.0.2
       jose:
         specifier: 6.2.3
         version: 6.2.3

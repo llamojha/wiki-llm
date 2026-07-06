@@ -32,14 +32,14 @@ const OPENWIKI_DIR = join(REPO_ROOT, 'openwiki');
 const BASE_URL = process.env.SEED_BASE_URL ?? 'http://localhost:3000';
 const DRY = process.argv.includes('--dry');
 
-/** Recursively collect all `.md` files under `dir`. */
-function walkMarkdown(dir) {
+/** Recursively collect all `.md` and `.html` files under `dir`. */
+function walkDocs(dir) {
   const out = [];
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) {
-      out.push(...walkMarkdown(full));
-    } else if (entry.endsWith('.md')) {
+      out.push(...walkDocs(full));
+    } else if (entry.endsWith('.md') || entry.endsWith('.html')) {
       out.push(full);
     }
   }
@@ -47,7 +47,7 @@ function walkMarkdown(dir) {
 }
 
 function buildSeed() {
-  const files = walkMarkdown(OPENWIKI_DIR);
+  const files = walkDocs(OPENWIKI_DIR);
   const seed = {};
   for (const file of files) {
     // Strip the `openwiki/` prefix and normalize to forward-slash S3 keys.
@@ -61,7 +61,7 @@ async function main() {
   const seed = buildSeed();
   const keys = Object.keys(seed).sort();
   if (!keys.length) {
-    console.error(`No .md files found under ${OPENWIKI_DIR}`);
+    console.error(`No .md/.html files found under ${OPENWIKI_DIR}`);
     process.exit(1);
   }
 

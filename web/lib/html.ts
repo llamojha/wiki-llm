@@ -3,6 +3,7 @@ import rehypeSanitize from 'rehype-sanitize';
 import rehypeStringify from 'rehype-stringify';
 import { unified } from 'unified';
 
+import { rehypeFilterDataImages, rehypeFilterStyles, vaultSanitizeSchema } from '@/lib/sanitize-schema';
 import type { SanitizedHtml } from '@/lib/types';
 import { rehypeVaultLinks } from '@/lib/vault-links';
 
@@ -66,21 +67,36 @@ function extractBody() {
   };
 }
 
-const renderer = unified()
-  .use(rehypeParse)
-  .use(extractBody)
-  .use(rehypeSanitize)
-  // After sanitize: rewrite in-vault links, strip external images. Shared with
-  // the Markdown pipeline so there is exactly one in-vault link resolver.
-  .use(rehypeVaultLinks)
-  .use(rehypeStringify);
+function buildRenderer(imageProxy: boolean) {
+  return unified()
+    .use(rehypeParse)
+    .use(extractBody)
+    .use(rehypeSanitize, vaultSanitizeSchema)
+    .use(rehypeFilterStyles)
+    .use(rehypeFilterDataImages)
+    .use(rehypeVaultLinks, { imageProxy })
+    .use(rehypeStringify);
+}
+
+// Pre-built pipelines — one per mode. Avoid constructing a new processor per call.
+const rendererDefault = buildRenderer(false);
+const rendererWithProxy = buildRenderer(true);
+
+export interface RenderHtmlOptions {
+  /** When true, external images are rewritten to /api/image-proxy. */
+  imageProxy?: boolean;
+}
 
 /**
  * Render a raw HTML document to sanitized, body-only HTML. Returns the
  * `SanitizedHtml` brand — the only value accepted by DocReader's
  * `dangerouslySetInnerHTML`.
  */
-export async function renderHtmlDocument(raw: string): Promise<SanitizedHtml> {
+export async function renderHtmlDocument(
+  raw: string,
+  options?: RenderHtmlOptions,
+): Promise<SanitizedHtml> {
+  const renderer = options?.imageProxy ? rendererWithProxy : rendererDefault;
   const result = await renderer.process(raw);
   return String(result) as SanitizedHtml;
 }

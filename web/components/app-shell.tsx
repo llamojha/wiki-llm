@@ -44,10 +44,11 @@ const ASK_EVENT = 'wikillm:ask';
 /** Render a fetched doc to sanitized HTML, dispatching by extension: `.html`
  *  docs go through the HTML pipeline, everything else through Markdown. Both
  *  return the SanitizedHtml brand — the only value DocReader will inline. */
-function renderDoc(api: ApiDoc): Promise<SanitizedHtml> {
+function renderDoc(api: ApiDoc, imageProxy?: boolean): Promise<SanitizedHtml> {
+  const opts = imageProxy ? { imageProxy: true } : undefined;
   return api.id.endsWith('.html')
-    ? renderHtmlDocument(api.raw_markdown)
-    : renderMarkdown(api.raw_markdown);
+    ? renderHtmlDocument(api.raw_markdown, opts)
+    : renderMarkdown(api.raw_markdown, opts);
 }
 
 /** Convert an API doc response into a LiveDoc for DocReader. */
@@ -122,7 +123,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
       setDocLoading(true);
       getDoc(initialDocId)
         .then(async (api) => {
-          const html = await renderDoc(api);
+          const html = await renderDoc(api, flags.imageProxy);
           setLiveDoc(apiDocToDoc(api, html));
         })
         .catch(() => showToast('Failed to load document'))
@@ -172,7 +173,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
       setLiveDoc(null);
       getDoc(docId)
         .then(async (api) => {
-          const html = await renderDoc(api);
+          const html = await renderDoc(api, flags.imageProxy);
           setLiveDoc(apiDocToDoc(api, html));
         })
         .catch(() => showToast('Failed to load document'))
@@ -205,7 +206,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
       window.history.pushState(null, '', withBasePath(`/${id}`));
       getDoc(id)
         .then(async (api) => {
-          const html = await renderDoc(api);
+          const html = await renderDoc(api, flags.imageProxy);
           setLiveDoc(apiDocToDoc(api, html));
         })
         .catch(() => showToast('Failed to load document'))
