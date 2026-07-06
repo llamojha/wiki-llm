@@ -28,6 +28,12 @@ export type JobState = {
   id: string;
   status: 'processing' | 'done' | 'error' | 'cancelled';
   space: string;
+  /** Folders-mode job (plan 026): pages land in `destination` with origin: generated. */
+  mode?: 'folders';
+  /** Folders mode: source folder read from. */
+  source?: string;
+  /** Folders mode: destination folder curated pages are written into. */
+  destination?: string;
   /** Scope this job operates against. Defaults to `'shared'` when absent. */
   scope?: 'shared' | 'user';
   /** Present iff `scope === 'user'`. */
@@ -73,8 +79,20 @@ export type CurateEvent = {
    * Versioned web→Lambda contract. Shared-scope legacy events may omit this
    * for backward compatibility; user-scope events must send version 2 so an
    * incompatible Lambda fails visibly instead of writing to shared paths.
+   * Version 3 is the folders-mode contract (plan 026): source + destination
+   * folders, provenance in frontmatter, no structure.json space.
    */
-  curateEventVersion?: 2;
+  curateEventVersion?: 2 | 3;
+  /**
+   * Folders mode (plan 026) reads a source folder and writes curated pages into
+   * `destination` tagged `origin: generated`. Absent/`'provenance'` = the
+   * original space-based pipeline.
+   */
+  mode?: 'folders' | 'provenance';
+  /** Folders mode: source folder path (informational; `files` is authoritative). */
+  source?: string;
+  /** Folders mode: destination folder curated pages are written into. */
+  destination?: string;
   jobId: string;
   space: string;
   /** Per-file list for EXTRACT. Empty/absent for SYNTHESIZE (which reads source-cards instead). */

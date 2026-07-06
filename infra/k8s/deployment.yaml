@@ -38,13 +38,13 @@ spec:
               memory: 1Gi
           readinessProbe:
             httpGet:
-              path: /api/vaults
+              path: /api/health
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /api/vaults
+              path: /api/health
               port: http
             initialDelaySeconds: 15
             periodSeconds: 20

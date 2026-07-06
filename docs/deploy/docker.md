@@ -95,6 +95,8 @@ docker compose -f infra/docker-compose.yml up
 
 ## Health check
 
-`GET /api/vaults` returns 200 with the configured vault — suitable as a
-container health/readiness probe. Vaultmark has **no built-in auth**; don't
-expose the port publicly without an authenticating proxy in front.
+`GET /api/health` returns 200 unconditionally — suitable as a container
+health/readiness probe, and unaffected by feature flags or `AUTH_MODE=oidc`.
+Vaultmark has **no built-in auth** unless `AUTH_MODE=oidc` is configured;
+don't expose the port publicly without an authenticating proxy in front (or
+the built-in gate).

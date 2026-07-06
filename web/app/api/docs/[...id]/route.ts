@@ -9,22 +9,29 @@ import {
   deleteObject,
   getObject,
   getObjectWithETag,
+  headObject,
   putObject,
 } from '@/lib/s3';
 import { removeSearchEntry, upsertSearchEntry } from '@/lib/search';
-import { displayPathForKey, isDocumentKey, sourceTypeFromKey } from '@/lib/vault-paths';
+import { displayPathForKey, isDocumentKey, isHtmlKey, sourceTypeFromKey } from '@/lib/vault-paths';
+import { ensureVaultMode } from '@/lib/vault-mode';
+import { htmlTitle } from '@/lib/html';
 import { flagGuard } from '@/lib/flags';
+import { requireSession } from '@/lib/auth-guard';
 
 type Params = { params: Promise<{ id: string[] }> };
 
 function keyToTitle(key: string): string {
-  const stem = key.split('/').pop()!.replace(/\.md$/, '');
+  const stem = key.split('/').pop()!.replace(/\.(md|html)$/, '');
   return stem.replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export async function GET(_req: Request, { params }: Params) {
+export async function GET(req: Request, { params }: Params) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
   const { id } = await params;
   const key = decodeURIComponent(id.join('/'));
+  await ensureVaultMode();
 
   // Read paths are never feature-gated, so this is the only guard preventing
   // an arbitrary key from fetching `_system/` state, raw uploads, or another
@@ -51,34 +58,67 @@ export async function GET(_req: Request, { params }: Params) {
     );
   }
 
-  const { data: fm } = matter(raw);
   const prefix = process.env.VAULT_PREFIX ?? '';
   const s3Key = prefix ? `${prefix}/${key}`.replace(/^\//, '') : key;
 
-  const doc = {
-    id: key,
-    title: fmStringOr(fm.title, keyToTitle(key)),
-    path: displayPathForKey(key),
-    s3_key: s3Key,
-    source_type: fmStringOr(fm.source_type, sourceTypeFromKey(key)),
-    updated: fmString(fm.updated),
-    author: fmStringOr(fm.author, 'unknown'),
-    tags: Array.isArray(fm.tags) ? fm.tags : fm.tags ? [String(fm.tags)] : [],
-    starred: fm.starred === true,
-    checksum: etag.replace(/"/g, '').slice(0, 8),
-    etag,
-    raw_markdown: raw,
-  };
+  // HTML documents carry no gray-matter frontmatter — derive metadata from the
+  // document itself (title) and S3 (LastModified). `source_type` is `uploaded`:
+  // HTML is imported content, never the portal's authored output (plan 022).
+  const isHtml = key.endsWith('.html');
+  let doc;
+  if (isHtml) {
+    let updated = '';
+    try {
+      const head = await headObject(key);
+      updated = head.lastModified?.toISOString() ?? '';
+    } catch {
+      // metadata read is best-effort
+    }
+    doc = {
+      id: key,
+      title: htmlTitle(raw) ?? keyToTitle(key),
+      path: displayPathForKey(key),
+      s3_key: s3Key,
+      source_type: 'uploaded',
+      updated,
+      author: 'unknown',
+      tags: [] as string[],
+      starred: false,
+      checksum: etag.replace(/"/g, '').slice(0, 8),
+      etag,
+      raw_markdown: raw,
+    };
+  } else {
+    const { data: fm } = matter(raw);
+    doc = {
+      id: key,
+      title: fmStringOr(fm.title, keyToTitle(key)),
+      path: displayPathForKey(key),
+      s3_key: s3Key,
+      source_type: fmStringOr(fm.source_type, sourceTypeFromKey(key)),
+      updated: fmString(fm.updated),
+      author: fmStringOr(fm.author, 'unknown'),
+      tags: Array.isArray(fm.tags) ? fm.tags : fm.tags ? [String(fm.tags)] : [],
+      starred: fm.starred === true,
+      checksum: etag.replace(/"/g, '').slice(0, 8),
+      etag,
+      raw_markdown: raw,
+    };
+  }
 
   return NextResponse.json(doc);
 }
 
 export async function PUT(req: Request, { params }: Params) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
+
   const blocked = flagGuard('editor');
   if (blocked) return blocked;
 
   const { id } = await params;
   const key = decodeURIComponent(id.join('/'));
+  await ensureVaultMode();
 
   // The editor may only write real documents. Without this, an arbitrary key
   // (e.g. `_themes/evil.css`) could be PUT with arbitrary content — which the
@@ -87,6 +127,16 @@ export async function PUT(req: Request, { params }: Params) {
   if (!isDocumentKey(key)) {
     return NextResponse.json(
       { detail: `Not an editable document key: ${key}` },
+      { status: 400 },
+    );
+  }
+
+  // HTML documents are browse/upload-only (plan 022 §1). The editor persists
+  // gray-matter frontmatter via `matter.stringify(...)`, which would corrupt an
+  // `.html` object — so reject edits here rather than write YAML into HTML.
+  if (isHtmlKey(key)) {
+    return NextResponse.json(
+      { detail: 'HTML documents are read-only and cannot be edited' },
       { status: 400 },
     );
   }
@@ -130,12 +180,16 @@ export async function PUT(req: Request, { params }: Params) {
   return NextResponse.json({ id: key, title: logTitle });
 }
 
-export async function DELETE(_req: Request, { params }: Params) {
+export async function DELETE(req: Request, { params }: Params) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
+
   const blocked = flagGuard('editor');
   if (blocked) return blocked;
 
   const { id } = await params;
   const key = decodeURIComponent(id.join('/'));
+  await ensureVaultMode();
 
   // Same restriction as PUT: the editor only touches real documents, never
   // system objects or operator-controlled theme files.

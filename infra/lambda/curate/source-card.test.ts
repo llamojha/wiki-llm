@@ -132,4 +132,38 @@ describe('source cards', () => {
     const rendered = renderSourcePage(card, 'raw/legacy.md', 'sha256:abc123');
     expect(rendered).not.toContain('placement:');
   });
+
+  it('stamps origin: generated when requested (folders mode, plan 026)', () => {
+    const card = parseSourceCard(JSON.stringify({
+      title: 'Folders Note',
+      summary: 'A curated page for a folders-mode vault.',
+      claims: [],
+      entities: [],
+      concepts: [],
+      suggestedSpaces: [],
+      suggestedPages: [],
+      tags: [],
+    }), 'notes/raw-idea.md');
+
+    const rendered = renderSourcePage(card, 'notes/raw-idea.md', 'sha256:abc123', { origin: 'generated' });
+    expect(rendered).toContain('origin: "generated"');
+    // The legacy source_type stays for back-compat readers.
+    expect(rendered).toContain('source_type: generated');
+  });
+
+  it('omits the origin line by default (provenance output stays byte-identical)', () => {
+    const card = parseSourceCard(JSON.stringify({
+      title: 'Provenance Note',
+      summary: 'A curated page for a provenance vault.',
+      claims: [],
+      entities: [],
+      concepts: [],
+      suggestedSpaces: [],
+      suggestedPages: [],
+      tags: [],
+    }), 'raw/idea.md');
+
+    const rendered = renderSourcePage(card, 'raw/idea.md', 'sha256:abc123');
+    expect(rendered).not.toContain('origin:');
+  });
 });

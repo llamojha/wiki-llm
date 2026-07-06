@@ -5,6 +5,7 @@ import { appendLog } from '@/lib/log-append';
 import { invalidateSearchIndex } from '@/lib/search';
 import { resolveScope, type Scope, type ScopePaths } from '@/lib/scope';
 import { PERSONAL_SPACE, PROVENANCE_ROOTS, isDocumentKey } from '@/lib/vault-paths';
+import { ensureVaultMode, vaultMode } from '@/lib/vault-mode';
 import { ensureSpaceInStructure } from '@/lib/vault-structure';
 import {
   RESERVED_NAMES,
@@ -52,6 +53,46 @@ function normalizeSegment(raw: string): string {
   return raw.trim().toLowerCase();
 }
 
+/** Mutable tree node used while assembling a FolderNode tree from S3 keys. */
+type Build = {
+  name: string;
+  path: string;
+  direct: number;
+  children: Map<string, Build>;
+};
+
+/** Find-or-create the node at `segs`, creating any missing ancestors. */
+function ensureBuildNode(roots: Map<string, Build>, segs: string[]): Build {
+  let level = roots;
+  let node: Build | undefined;
+  for (let i = 0; i < segs.length; i++) {
+    const name = segs[i];
+    node = level.get(name);
+    if (!node) {
+      node = { name, path: segs.slice(0, i + 1).join('/'), direct: 0, children: new Map() };
+      level.set(name, node);
+    }
+    level = node.children;
+  }
+  return node!;
+}
+
+/** Convert a Build node to a FolderNode, summing indexed counts recursively. */
+function buildToNode(b: Build): FolderNode {
+  const children = [...b.children.values()]
+    .sort((a, c) => a.name.localeCompare(c.name))
+    .map(buildToNode);
+  const indexed = b.direct + children.reduce((sum, c) => sum + c.indexed, 0);
+  return { name: b.name, path: b.path, indexed, children };
+}
+
+/** Sort + convert the top-level Build map into the FolderNode tree. */
+function buildRootsToTree(roots: Map<string, Build>): FolderNode[] {
+  return [...roots.values()]
+    .sort((a, c) => a.name.localeCompare(c.name))
+    .map(buildToNode);
+}
+
 /** Validate a single nested path segment (same shape as a space name). */
 function validateSegment(seg: string): void {
   if (!seg) throw new SpaceError('Folder name is required', 400);
@@ -95,35 +136,23 @@ function contentRoots(sp: ScopePaths): string[] {
  * counts. Declared-but-empty top-level spaces are merged in from the structure
  * manifest; nested folders are discovered from S3 (including `.keep`-only empty
  * ones). The reserved `personal` space is excluded — it is surfaced elsewhere.
+ *
+ * Folders mode has no provenance roots or `structure.json`: the folder tree is
+ * the actual S3 key tree (top-level folders *are* the spaces), so it delegates
+ * to `listFolderTreeFolders`. Making the tree mode-aware here is the single
+ * choke point — the Library modal's `/api/folders` fetch would otherwise
+ * replace the sidebar's real folders with an empty provenance list, breaking
+ * folder-direct uploads (spec §3/§4).
  */
 export async function listFolderTree(
   scope: Scope = 'shared',
   userId?: string,
 ): Promise<FolderNode[]> {
+  await ensureVaultMode();
+  if (vaultMode() === 'folders' || vaultMode() === 'managed') return listFolderTreeFolders();
+
   const sp = resolveScope({ scope, userId });
-
-  type Build = {
-    name: string;
-    path: string;
-    direct: number;
-    children: Map<string, Build>;
-  };
   const roots = new Map<string, Build>();
-
-  const ensureNode = (segs: string[]): Build => {
-    let level = roots;
-    let node: Build | undefined;
-    for (let i = 0; i < segs.length; i++) {
-      const name = segs[i];
-      node = level.get(name);
-      if (!node) {
-        node = { name, path: segs.slice(0, i + 1).join('/'), direct: 0, children: new Map() };
-        level.set(name, node);
-      }
-      level = node.children;
-    }
-    return node!;
-  };
 
   for (const root of contentRoots(sp)) {
     const keys = await listAllKeys(root);
@@ -134,7 +163,7 @@ export async function listFolderTree(
       if (parts[0] === PERSONAL_SPACE) continue; // reserved, surfaced separately
       const folderSegs = parts.slice(0, -1); // drop filename
       if (!folderSegs.length) continue; // object sitting directly at the root
-      const node = ensureNode(folderSegs);
+      const node = ensureBuildNode(roots, folderSegs);
       if (isDocumentKey(key)) node.direct += 1;
     }
   }
@@ -142,21 +171,28 @@ export async function listFolderTree(
   // Merge declared top-level spaces so freshly-created empty ones still show.
   for (const space of await listSpaces(scope, userId)) {
     if (space.name === PERSONAL_SPACE) continue;
-    ensureNode([space.name]);
+    ensureBuildNode(roots, [space.name]);
   }
 
-  // Convert to FolderNode, computing recursive indexed counts.
-  const toNode = (b: Build): FolderNode => {
-    const children = [...b.children.values()]
-      .sort((a, c) => a.name.localeCompare(c.name))
-      .map(toNode);
-    const indexed = b.direct + children.reduce((sum, c) => sum + c.indexed, 0);
-    return { name: b.name, path: b.path, indexed, children };
-  };
+  return buildRootsToTree(roots);
+}
 
-  return [...roots.values()]
-    .sort((a, c) => a.name.localeCompare(c.name))
-    .map(toNode);
+/**
+ * Folders-mode folder tree: bucket every recognized document by its path
+ * segments. Top-level folders are the spaces; there is no `structure.json` to
+ * merge and no `users/`/`personal` scope. Root-level documents (no folder
+ * segment) belong to no folder and are simply omitted from the folder tree.
+ */
+async function listFolderTreeFolders(): Promise<FolderNode[]> {
+  const keys = (await listAllKeys('')).filter(isDocumentKey);
+  const roots = new Map<string, Build>();
+  for (const key of keys) {
+    const parts = key.split('/').filter(Boolean);
+    const folderSegs = parts.slice(0, -1); // drop filename
+    if (!folderSegs.length) continue; // root-level doc — not in any folder
+    ensureBuildNode(roots, folderSegs).direct += 1;
+  }
+  return buildRootsToTree(roots);
 }
 
 /**

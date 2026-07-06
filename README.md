@@ -80,6 +80,19 @@ cp infra/.env.example web/.env.local
 pnpm dev   # http://localhost:3000
 ```
 
+### Try it with no AWS — the built-in docs
+
+To explore the portal with zero configuration, run it against the in-memory S3
+mock and seed it with this repo's own [`openwiki/`](openwiki/) documentation:
+
+```bash
+pnpm dev:mock        # starts the app with MOCK_S3=1 (empty vault)
+pnpm seed:openwiki   # loads openwiki/*.md into the mock vault (folders mode)
+```
+
+The top-level `openwiki/` folders (`architecture`, `testing`, `operations`,
+`workflows`) become the vault's spaces. No AWS credentials or bucket required.
+
 Minimum configuration:
 
 ```

@@ -193,6 +193,8 @@ export async function renameSpace(
     throw new SpaceError(`Space "${to}" already has content`, 409);
   }
 
+
+
   // Claim `to` by flipping the declaration *before* moving any object. This
   // must happen first: if the declaration flip happened after the move (the
   // old order), a concurrent createSpace/renameSpace targeting the same `to`

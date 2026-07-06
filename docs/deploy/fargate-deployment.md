@@ -53,7 +53,7 @@ docker run -d --name vm-smoke -p 3001:3000 \
   vaultmark:latest
 
 # Expect HTTP 200 from both:
-curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3001/api/vaults
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3001/api/health
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3001/
 
 docker rm -f vm-smoke
@@ -63,7 +63,7 @@ docker rm -f vm-smoke
 > even if the **in-container** health check is broken. See [Gotcha 1](#gotcha-1-health-check-must-use-1270014-not-localhost).
 > To catch that, run the health check command *inside* the container:
 > ```bash
-> docker exec vm-smoke sh -c 'wget -q -O /dev/null http://127.0.0.1:3000/api/vaults; echo $?'
+> docker exec vm-smoke sh -c 'wget -q -O /dev/null http://127.0.0.1:3000/api/health; echo $?'
 > ```
 
 ## 2. Create the ECR repository and push the image
@@ -187,7 +187,7 @@ aws ecs register-task-definition --region <region> --cli-input-json '{
       { "name": "FEATURE_CURATE", "value": "off" }
     ],
     "healthCheck": {
-      "command": ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/vaults || exit 1"],
+      "command": ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/health || exit 1"],
       "interval": 30,
       "timeout": 5,
       "retries": 3,
@@ -315,12 +315,12 @@ returns `Connection refused` → non-zero exit → failed health check.
 Docker's IPv4 port mapping and succeeds. The bug only appears when the health
 check runs *inside* the container.
 
-**Fix:** use `http://127.0.0.1:3000/api/vaults` in the health check command
+**Fix:** use `http://127.0.0.1:3000/api/health` in the health check command
 (forces IPv4). Verify in-container:
 
 ```bash
-docker exec <container> sh -c 'wget -q -O /dev/null http://127.0.0.1:3000/api/vaults; echo $?'   # 0 = healthy
-docker exec <container> sh -c 'wget -q -O /dev/null http://localhost:3000/api/vaults;  echo $?'   # 1 = the bug
+docker exec <container> sh -c 'wget -q -O /dev/null http://127.0.0.1:3000/api/health; echo $?'   # 0 = healthy
+docker exec <container> sh -c 'wget -q -O /dev/null http://localhost:3000/api/health;  echo $?'   # 1 = the bug
 ```
 
 ### Gotcha 2: `VAULT_PREFIX` must match your S3 layout

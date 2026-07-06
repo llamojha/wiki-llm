@@ -63,10 +63,15 @@ class NoSuchKeyError extends Error {
   }
 }
 
+// Keep in lockstep with `s3.ts` DOC_LIST_EXTENSIONS (plan 003's mock-contract
+// lesson: the mock and the real client must agree on what listing surfaces).
+const DOC_LIST_EXTENSIONS = ['.md', '.html'];
+
 export async function listObjects(subPrefix = ''): Promise<string[]> {
   const out: string[] = [];
   for (const key of store().objects.keys()) {
-    if ((!subPrefix || key.startsWith(subPrefix)) && key.endsWith('.md')) {
+    const listed = DOC_LIST_EXTENSIONS.some((ext) => key.endsWith(ext));
+    if ((!subPrefix || key.startsWith(subPrefix)) && listed) {
       out.push(key);
     }
   }

@@ -80,10 +80,11 @@ USER node
 
 EXPOSE 3000
 
-# /api/vaults answers 200 once the server is up and configured (it is a
-# read path, so it works with every feature flag off). NEXT_BASE_PATH prefixes
-# the route when the image is built for a sub-path (e.g. /wiki/api/vaults).
+# /api/health is deliberately unauthenticated (exempt from the AUTH_MODE=oidc
+# gate) and minimal, so the probe works regardless of auth mode or feature
+# flags. NEXT_BASE_PATH prefixes the route when the image is built for a
+# sub-path (e.g. /wiki/api/health).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD wget -qO /dev/null "http://127.0.0.1:${PORT}${NEXT_BASE_PATH}/api/vaults" || exit 1
+  CMD wget -qO /dev/null "http://127.0.0.1:${PORT}${NEXT_BASE_PATH}/api/health" || exit 1
 
 CMD ["node", "web/server.js"]

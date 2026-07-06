@@ -18,6 +18,12 @@ export type DocLeaf = {
   type: 'doc';
   name: string;
   meta?: string;
+  /**
+   * Child pages, populated only in managed mode where a page can be both
+   * openable and a parent of other pages (plan 027). Absent in folders/
+   * provenance modes, so their rendering is unchanged.
+   */
+  children?: TreeNode[];
 };
 
 export type FolderNode = {

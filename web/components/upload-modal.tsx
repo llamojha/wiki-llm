@@ -24,6 +24,8 @@ type UploadModalProps = {
   flags: FeatureFlags;
   /** Resolved S3 destination base (`s3://bucket/prefix/`) from the server. */
   s3Location: string;
+  /** Folders mode has a single implicit scope — hides the Shared/My toggle. */
+  foldersMode?: boolean;
 };
 
 /**
@@ -33,7 +35,7 @@ type UploadModalProps = {
  * shell owns only the shared chrome: header, scope toggle, tab bar, and the
  * folder selector shared by Upload/Pending/Re-index.
  */
-export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, showToast, flags, s3Location }: UploadModalProps) {
+export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, showToast, flags, s3Location, foldersMode }: UploadModalProps) {
   const lib = useLibraryState({ open, initialTab, spaces, flags, onUploaded, onClose, showToast });
 
   if (!open) return null;
@@ -69,7 +71,9 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
 
         {/* Scope toggle — every operation in this modal (including folder
             management) is bound to the selected scope. Each scope owns its
-            folders independently. */}
+            folders independently. Hidden in folders mode, which has a single
+            implicit scope (no `users/` tree — spec §4). */}
+        {!foldersMode && (
         <div className="upload-scope">
           <label>Scope</label>
           <div className="seg">
@@ -92,6 +96,7 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
           </div>
           <span className="upload-scope-hint">{scope === 'shared' ? 'Visible to everyone' : 'Private to you'}</span>
         </div>
+        )}
 
         {/* Tabs */}
         <div className="upload-tabs">

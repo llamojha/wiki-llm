@@ -6,8 +6,10 @@
 #   cp infra/.env.example infra/.env   # then fill in vault + AWS values
 #   docker compose -f infra/docker-compose.yml up --build
 #
-# NOTE: the app has no authentication. Only expose port 3000 on trusted
-# networks; put a reverse proxy with auth in front before public exposure.
+# NOTE: the app has no authentication by default. Either enable the built-in
+# OIDC gate (AUTH_MODE=oidc — see docs/configuration.md; an optional local
+# Keycloak is commented out at the bottom of this file), or only expose port
+# 3000 on trusted networks / put an authenticating reverse proxy in front.
 
 services:
   web:
@@ -27,3 +29,25 @@ services:
     # environment:
     #   AWS_PROFILE: default
     restart: unless-stopped
+
+  # Optional local Keycloak for trying the built-in OIDC gate without standing
+  # up an IdP by hand. Uncomment, then:
+  #   1. start it, open http://localhost:8080 (admin/admin), create a realm
+  #      `vaultmark` and a confidential client `vaultmark` with redirect URI
+  #      http://localhost:3000/api/auth/callback and post-logout http://localhost:3000/
+  #   2. add these to infra/.env (see docs/configuration.md → Authentication):
+  #        AUTH_MODE=oidc
+  #        OIDC_ISSUER=http://localhost:8080/realms/vaultmark
+  #        OIDC_CLIENT_ID=vaultmark
+  #        OIDC_CLIENT_SECRET=<from Keycloak>
+  #        AUTH_SESSION_SECRET=<openssl rand -hex 32>
+  #        AUTH_ALLOWED_EMAILS=you@example.com
+  # keycloak:
+  #   image: quay.io/keycloak/keycloak:26.0
+  #   command: start-dev
+  #   environment:
+  #     KC_BOOTSTRAP_ADMIN_USERNAME: admin
+  #     KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+  #   ports:
+  #     - "8080:8080"
+  #   restart: unless-stopped

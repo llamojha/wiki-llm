@@ -6,7 +6,7 @@ import { BASE_PATH } from './base-path';
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? BASE_PATH;
 
 export type ApiTreeNode =
-  | { type: 'doc'; id: string; name: string }
+  | { type: 'doc'; id: string; name: string; children?: ApiTreeNode[] }
   | { type: 'folder'; id: string; name: string; children: ApiTreeNode[] };
 
 export type ApiDoc = {

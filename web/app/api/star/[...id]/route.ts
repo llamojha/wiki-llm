@@ -3,12 +3,15 @@ import { NextResponse } from 'next/server';
 
 import { ConcurrencyError, getObjectWithETag, putObject } from '@/lib/s3';
 import { upsertSearchEntry } from '@/lib/search';
-import { isDocumentKey } from '@/lib/vault-paths';
+import { isDocumentKey, isHtmlKey } from '@/lib/vault-paths';
 import { flagGuard } from '@/lib/flags';
+import { requireSession } from '@/lib/auth-guard';
 
 type Params = { params: Promise<{ id: string[] }> };
 
-export async function PATCH(_req: Request, { params }: Params) {
+export async function PATCH(req: Request, { params }: Params) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
   const blocked = flagGuard('star');
   if (blocked) return blocked;
 
@@ -23,6 +26,16 @@ export async function PATCH(_req: Request, { params }: Params) {
     return NextResponse.json(
       { detail: `Document not found: ${key}` },
       { status: 404 },
+    );
+  }
+
+  // Starring persists a `starred` flag via gray-matter frontmatter, which an
+  // HTML document cannot carry — writing it would inject YAML into the `.html`
+  // object. HTML is browse/upload-only (plan 022 §1), so it is not starrable.
+  if (isHtmlKey(key)) {
+    return NextResponse.json(
+      { detail: 'HTML documents cannot be starred' },
+      { status: 400 },
     );
   }
 

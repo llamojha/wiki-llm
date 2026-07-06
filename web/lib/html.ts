@@ -4,6 +4,7 @@ import rehypeStringify from 'rehype-stringify';
 import { unified } from 'unified';
 
 import type { SanitizedHtml } from '@/lib/types';
+import { rehypeVaultLinks } from '@/lib/vault-links';
 
 /**
  * First-class HTML document support — the sanitizer spike for plan 022.
@@ -69,6 +70,9 @@ const renderer = unified()
   .use(rehypeParse)
   .use(extractBody)
   .use(rehypeSanitize)
+  // After sanitize: rewrite in-vault links, strip external images. Shared with
+  // the Markdown pipeline so there is exactly one in-vault link resolver.
+  .use(rehypeVaultLinks)
   .use(rehypeStringify);
 
 /**

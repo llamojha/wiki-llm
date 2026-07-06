@@ -9,7 +9,7 @@ infra/k8s/
 ├── configmap.yaml          env config (vault, Bedrock, feature flags)
 ├── serviceaccount.yaml     service account (IRSA annotation for EKS)
 ├── secret.example.yaml     static AWS keys — only for non-EKS clusters
-├── deployment.yaml         the portal (2 replicas, probes on /api/vaults)
+├── deployment.yaml         the portal (2 replicas, probes on /api/health)
 ├── service.yaml            ClusterIP service
 └── ingress.yaml            ingress (bring your own controller + auth)
 ```

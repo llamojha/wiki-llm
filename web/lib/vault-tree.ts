@@ -1,4 +1,4 @@
-import { listObjects } from '@/lib/s3';
+import { listObjects, getObject } from '@/lib/s3';
 import { getStructure, spacesForScope } from '@/lib/vault-structure';
 import {
   DEFAULT_USER_ID,
@@ -7,10 +7,13 @@ import {
   isDocumentKey,
   personalPrefix,
 } from '@/lib/vault-paths';
+import { ensureVaultMode, vaultMode } from '@/lib/vault-mode';
+import { parseManagedPage, type ManagedPage } from '@/lib/managed-pages';
+import { assembleManagedTree } from '@/lib/managed-tree';
 import { resolveScope } from '@/lib/scope';
 
 export type TreeNode =
-  | { type: 'doc'; id: string; name: string }
+  | { type: 'doc'; id: string; name: string; children?: TreeNode[] }
   | { type: 'folder'; id: string; name: string; children: TreeNode[] };
 
 function stemToTitle(stem: string): string {
@@ -20,8 +23,47 @@ function stemToTitle(stem: string): string {
 }
 
 function keyToName(key: string): string {
-  const stem = key.split('/').pop()!.replace(/\.md$/, '');
+  const stem = key.split('/').pop()!.replace(/\.(md|html)$/, '');
   return stemToTitle(stem);
+}
+
+/**
+ * Insert a document into the folders-mode tree, creating folder nodes for each
+ * path segment. Folder ids are the cumulative path (`folder:notes/sub`) so they
+ * are stable and human-readable — unlike the provenance builder, there is no
+ * space/prefix indirection here: the key path *is* the tree path.
+ */
+function insertFolders(root: TreeNode[], segments: string[], key: string, ancestry: string): void {
+  if (segments.length === 1) {
+    root.push({ type: 'doc', id: key, name: keyToName(key) });
+    return;
+  }
+  const name = segments[0];
+  const path = ancestry ? `${ancestry}/${name}` : name;
+  const folderId = `folder:${path}`;
+  let folder = root.find(
+    (n): n is TreeNode & { type: 'folder' } => n.type === 'folder' && n.id === folderId,
+  );
+  if (!folder) {
+    folder = { type: 'folder', id: folderId, name: stemToTitle(name), children: [] };
+    root.push(folder);
+  }
+  insertFolders(folder.children, segments.slice(1), key, path);
+}
+
+/**
+ * Folders-mode tree: one prefix-wide listing of every recognized document,
+ * bucketed by path segments. Top-level folders are the spaces; there is no
+ * `structure.json` and no `users/` subtree (single-tenant). Keys are sorted so
+ * the output is deterministic.
+ */
+export async function getFoldersTree(): Promise<TreeNode[]> {
+  const keys = (await listObjects()).filter(isDocumentKey).sort();
+  const tree: TreeNode[] = [];
+  for (const key of keys) {
+    insertFolders(tree, key.split('/').filter(Boolean), key, '');
+  }
+  return tree;
 }
 
 function insert(root: TreeNode[], folderPrefix: string, parts: string[], key: string): void {
@@ -51,6 +93,29 @@ function addKeys(root: TreeNode[], space: string, storagePrefix: string, keys: s
 }
 
 /**
+ * Managed-mode tree: recognize the same keys as folders mode, but read each
+ * document's frontmatter and assemble the tree from `parent_id` (falling back
+ * to the key path when absent). One read per document — the tree edge lives
+ * inside the file, unlike folders mode where the key path alone suffices.
+ * Assembly is delegated to the pure `assembleManagedTree` (specs/managed-mode.md
+ * §6). No persistent cache in v1.
+ */
+export async function getManagedTree(): Promise<TreeNode[]> {
+  const keys = (await listObjects()).filter(isDocumentKey);
+  const parsed = await Promise.all(
+    keys.map(async (key) => {
+      try {
+        return parseManagedPage(key, await getObject(key));
+      } catch {
+        return null; // skip unreadable docs
+      }
+    }),
+  );
+  const pages = parsed.filter((p): p is ManagedPage => p !== null);
+  return assembleManagedTree(pages);
+}
+
+/**
  * Build the full vault tree with one synthetic `__user` folder containing the
  * active user's content (all spaces, including `personal`) and one folder per
  * declared shared space.
@@ -59,6 +124,10 @@ function addKeys(root: TreeNode[], space: string, storagePrefix: string, keys: s
  * `user` returns only `__user`'s children.
  */
 export async function getTree(): Promise<TreeNode[]> {
+  await ensureVaultMode();
+  if (vaultMode() === 'managed') return getManagedTree();
+  if (vaultMode() === 'folders') return getFoldersTree();
+
   const structure = await getStructure();
   const tree: TreeNode[] = [];
   const defaultUser = structure.defaultUser || DEFAULT_USER_ID;

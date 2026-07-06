@@ -6,7 +6,18 @@ import { appendLog } from '@/lib/log-append';
 import { ObjectAlreadyExistsError, putObjectIfAbsent } from '@/lib/s3';
 import { getAllEntries, upsertSearchEntry } from '@/lib/search';
 import { displayPathForKey, personalPrefix } from '@/lib/vault-paths';
+import { ensureVaultMode, vaultMode } from '@/lib/vault-mode';
+import {
+  assertSegment,
+  generatePageId,
+  managedPageKey,
+  ManagedPageError,
+  stringifyManagedPage,
+} from '@/lib/managed-pages';
 import { flagGuard } from '@/lib/flags';
+import { requireSession } from '@/lib/auth-guard';
+
+const FOLDER_SEGMENT_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 type DocSummary = {
   id: string;
@@ -29,6 +40,8 @@ function slugify(title: string): string {
 }
 
 export async function GET(req: Request) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
   const { searchParams } = new URL(req.url);
   const view = searchParams.get('view') ?? 'recent';
   const requestedLimit = Number(searchParams.get('limit') ?? 20);
@@ -67,14 +80,19 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
+
   const blocked = flagGuard('editor');
   if (blocked) return blocked;
 
   const body = await req.json();
-  const { title, body: content, slug } = body as {
+  const { title, body: content, slug, folder, parentId } = body as {
     title?: string;
     body?: string;
     slug?: string;
+    folder?: string;
+    parentId?: string | null;
   };
 
   if (!title || typeof content !== 'string') {
@@ -88,11 +106,77 @@ export async function POST(req: Request) {
   if (!docSlug) {
     return NextResponse.json({ detail: 'slug could not be derived from title' }, { status: 400 });
   }
-  const key = `${personalPrefix()}${docSlug}.md`;
+
+  await ensureVaultMode();
+
+  // Managed mode: pages are slug-named under `pages/<space>/<slug>.md` with a
+  // stable frontmatter `id` assigned here; tree position comes from `parent_id`
+  // (frontmatter), not the path. `folder`'s first segment is the space.
+  if (vaultMode() === 'managed') {
+    const space = (folder ?? '')
+      .split('/')
+      .map((s) => s.trim())
+      .filter(Boolean)[0] || 'wiki';
+    const parent = typeof parentId === 'string' && parentId ? parentId : null;
+    let managedKey: string;
+    let managedMarkdown: string;
+    try {
+      assertSegment('space', space);
+      assertSegment('slug', docSlug);
+      managedKey = managedPageKey(space, docSlug);
+      managedMarkdown = stringifyManagedPage(
+        { id: generatePageId(), title, space, slug: docSlug, parentId: parent, origin: 'authored' },
+        content,
+      );
+    } catch (err) {
+      if (err instanceof ManagedPageError) {
+        return NextResponse.json({ detail: err.message }, { status: err.status });
+      }
+      throw err;
+    }
+    try {
+      await putObjectIfAbsent(managedKey, managedMarkdown);
+    } catch (err) {
+      if (err instanceof ObjectAlreadyExistsError) {
+        return NextResponse.json(
+          { detail: `A page with slug "${docSlug}" already exists in "${space}"` },
+          { status: 409 },
+        );
+      }
+      throw err;
+    }
+    await regenerateIndexesForKey(managedKey);
+    await appendLog('created', managedKey, title);
+    await upsertSearchEntry(managedKey);
+    return NextResponse.json(
+      { id: managedKey, title, path: displayPathForKey(managedKey) },
+      { status: 201 },
+    );
+  }
+
+  const folders = vaultMode() === 'folders';
+
+  // Folders mode has no `users/` personal tree — new pages land in the
+  // user-chosen folder (or the vault root), and provenance is a frontmatter
+  // value rather than a path prefix.
+  let key: string;
+  if (folders) {
+    const segments = (folder ?? '').split('/').map((s) => s.trim()).filter(Boolean);
+    if (segments.some((s) => !FOLDER_SEGMENT_RE.test(s))) {
+      return NextResponse.json(
+        { detail: 'folder segments must be lowercase alphanumeric with hyphens only' },
+        { status: 400 },
+      );
+    }
+    const folderPrefix = segments.length ? `${segments.join('/')}/` : '';
+    key = `${folderPrefix}${docSlug}.md`;
+  } else {
+    key = `${personalPrefix()}${docSlug}.md`;
+  }
 
   const fm = {
     title,
-    source_type: 'personal',
+    source_type: folders ? 'authored' : 'personal',
     author: 'you',
     updated: new Date().toISOString(),
     starred: false,

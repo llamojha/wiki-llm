@@ -5,6 +5,7 @@ import { getIngestPolicy } from '@/lib/ingest-policy';
 import { type Scope } from '@/lib/scope';
 import { resolveScopeOr400 } from '@/lib/http-scope';
 import { flagGuard } from '@/lib/flags';
+import { requireSession } from '@/lib/auth-guard';
 
 /**
  * POST /api/synthesize — launches a SYNTHESIZE job on the curate Lambda.
@@ -34,6 +35,9 @@ function lambdaClient(): LambdaClient {
 }
 
 export async function POST(req: Request) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
+
   const blocked = flagGuard('curate');
   if (blocked) return blocked;
 
