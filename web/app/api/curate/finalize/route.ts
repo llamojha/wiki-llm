@@ -9,6 +9,7 @@ import { invalidateSearchIndex } from '@/lib/search';
 import { type Scope } from '@/lib/scope';
 import { resolveScopeOr400 } from '@/lib/http-scope';
 import { flagGuard } from '@/lib/flags';
+import { requireSession } from '@/lib/auth-guard';
 
 /**
  * Post-ingest finalization step.
@@ -22,6 +23,9 @@ import { flagGuard } from '@/lib/flags';
  * the current job without re-running the regeneration.
  */
 export async function POST(req: Request) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
+
   const blocked = flagGuard('curate');
   if (blocked) return blocked;
 

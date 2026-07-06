@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 
-export async function GET() {
+import { requireSession } from '@/lib/auth-guard';
+
+export async function GET(req: Request) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
+
   const vault = {
     id: process.env.VAULT_ID ?? 'default',
     name: process.env.VAULT_ID ?? 'default',

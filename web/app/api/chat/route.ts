@@ -10,6 +10,7 @@ import { getAllEntries } from '@/lib/search';
 import { ensureVaultMode, vaultMode } from '@/lib/vault-mode';
 import { logChatInteraction } from '@/lib/usage-log';
 import { flagGuard } from '@/lib/flags';
+import { requireSession } from '@/lib/auth-guard';
 
 /**
  * Phase 5 — Ask-Wiki agent endpoint. Streams NDJSON events.
@@ -44,6 +45,9 @@ type ChatRequestBody = {
 };
 
 export async function POST(req: Request) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
+
   const blocked = flagGuard('agent');
   if (blocked) return blocked;
 

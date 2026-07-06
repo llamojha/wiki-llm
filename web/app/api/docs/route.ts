@@ -8,6 +8,7 @@ import { getAllEntries, upsertSearchEntry } from '@/lib/search';
 import { displayPathForKey, personalPrefix } from '@/lib/vault-paths';
 import { ensureVaultMode, vaultMode } from '@/lib/vault-mode';
 import { flagGuard } from '@/lib/flags';
+import { requireSession } from '@/lib/auth-guard';
 
 const FOLDER_SEGMENT_RE = /^[a-z0-9][a-z0-9-]*$/;
 
@@ -32,6 +33,8 @@ function slugify(title: string): string {
 }
 
 export async function GET(req: Request) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
   const { searchParams } = new URL(req.url);
   const view = searchParams.get('view') ?? 'recent';
   const requestedLimit = Number(searchParams.get('limit') ?? 20);
@@ -70,6 +73,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
+
   const blocked = flagGuard('editor');
   if (blocked) return blocked;
 
