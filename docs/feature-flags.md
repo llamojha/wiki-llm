@@ -1,6 +1,6 @@
 # Feature Flags
 
-Every Vaultmark feature is gated by an environment variable. Flags let you run
+Every Canopy feature is gated by an environment variable. Flags let you run
 a locked-down deployment — for example a **read-only published wiki** (all
 write features off) or a portal **without any LLM features** (agent + curate
 off, no Bedrock permissions needed).

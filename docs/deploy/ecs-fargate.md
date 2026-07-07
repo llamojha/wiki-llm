@@ -1,6 +1,6 @@
 # Deploying to AWS ECS (Fargate)
 
-Vaultmark runs well on Fargate: it's a single stateless container, S3 is the
+Canopy runs well on Fargate: it's a single stateless container, S3 is the
 source of truth, and the **task role** gives it AWS access with no static
 keys anywhere.
 
@@ -32,13 +32,13 @@ Skip to step 2. (If the GHCR package is private, attach pull credentials with
 **Option B — build and push to your own ECR repo:**
 
 ```bash
-aws ecr create-repository --repository-name vaultmark
+aws ecr create-repository --repository-name canopy
 
 aws ecr get-login-password --region <region> |
   docker login --username AWS --password-stdin <account-id>.dkr.ecr.<region>.amazonaws.com
 
-docker build -f web/Dockerfile -t <account-id>.dkr.ecr.<region>.amazonaws.com/vaultmark:latest .
-docker push <account-id>.dkr.ecr.<region>.amazonaws.com/vaultmark:latest
+docker build -f web/Dockerfile -t <account-id>.dkr.ecr.<region>.amazonaws.com/canopy:latest .
+docker push <account-id>.dkr.ecr.<region>.amazonaws.com/canopy:latest
 ```
 
 (Build context is the repo root — the workspace lockfile lives there.)
@@ -47,15 +47,15 @@ docker push <account-id>.dkr.ecr.<region>.amazonaws.com/vaultmark:latest
 
 Two roles, with different jobs:
 
-**Execution role** (`vaultmark-execution`) — used by ECS itself to pull the
+**Execution role** (`canopy-execution`) — used by ECS itself to pull the
 image and write logs. Attach the AWS-managed
 `AmazonECSTaskExecutionRolePolicy`.
 
-**Task role** (`vaultmark-task`) — used by the app at runtime. Create it from
+**Task role** (`canopy-task`) — used by the app at runtime. Create it from
 `task-role-policy.example.json`:
 
 ```bash
-aws iam create-role --role-name vaultmark-task \
+aws iam create-role --role-name canopy-task \
   --assume-role-policy-document '{
     "Version": "2012-10-17",
     "Statement": [{
@@ -65,8 +65,8 @@ aws iam create-role --role-name vaultmark-task \
     }]
   }'
 
-aws iam put-role-policy --role-name vaultmark-task \
-  --policy-name vaultmark-portal \
+aws iam put-role-policy --role-name canopy-task \
+  --policy-name canopy-portal \
   --policy-document file://infra/ecs/task-role-policy.example.json
 ```
 
@@ -81,7 +81,7 @@ Edit `task-definition.example.json` (image URI, env vars, role ARNs, log
 region), create the log group, and register:
 
 ```bash
-aws logs create-log-group --log-group-name /ecs/vaultmark
+aws logs create-log-group --log-group-name /ecs/canopy
 
 aws ecs register-task-definition \
   --cli-input-json file://infra/ecs/task-definition.example.json
@@ -109,18 +109,18 @@ Manager.
 ## 4. Create the service behind an ALB
 
 ```bash
-aws ecs create-cluster --cluster-name vaultmark
+aws ecs create-cluster --cluster-name canopy
 
 # Target group (note: target-type ip for Fargate awsvpc networking)
 aws elbv2 create-target-group \
-  --name vaultmark --protocol HTTP --port 3000 --target-type ip \
+  --name canopy --protocol HTTP --port 3000 --target-type ip \
   --vpc-id <vpc-id> \
   --health-check-path /api/health
 
 aws ecs create-service \
-  --cluster vaultmark \
-  --service-name vaultmark \
-  --task-definition vaultmark \
+  --cluster canopy \
+  --service-name canopy \
+  --task-definition canopy \
   --desired-count 2 \
   --launch-type FARGATE \
   --network-configuration 'awsvpcConfiguration={
@@ -142,7 +142,7 @@ Networking notes:
 
 ## 5. Authentication
 
-Vaultmark has **no built-in auth**. On ECS the standard pattern is
+Canopy has **no built-in auth**. On ECS the standard pattern is
 [ALB authentication](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/listener-authenticate-users.html):
 add an `authenticate-oidc` (or Cognito) action to the HTTPS listener rule in
 front of the forward action. Alternatively keep the ALB internal and reach it
@@ -152,7 +152,7 @@ over VPN. See [`SECURITY.md`](../../SECURITY.md).
 
 ```bash
 docker build -f web/Dockerfile -t <ecr-uri>:latest . && docker push <ecr-uri>:latest
-aws ecs update-service --cluster vaultmark --service vaultmark --force-new-deployment
+aws ecs update-service --cluster canopy --service canopy --force-new-deployment
 ```
 
 Flags and env vars are read at server start, so config changes are a new task

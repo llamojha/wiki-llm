@@ -4,7 +4,7 @@
 
 ## Goal
 
-Transform Vaultmark from a single-user personal tool into a multi-tenant hosted product with authentication, isolation, and operational infrastructure.
+Transform Canopy from a single-user personal tool into a multi-tenant hosted product with authentication, isolation, and operational infrastructure.
 
 ## Vision
 

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Vaultmark Interactive Demo</title>
+    <title>Canopy Interactive Demo</title>
     <style>
       :root {
         color-scheme: dark;
@@ -315,7 +315,7 @@
         <div class="brand">
           <div class="logo">V</div>
           <div>
-            <h1>Vaultmark Demo</h1>
+            <h1>Canopy Demo</h1>
             <p class="sub">Click through the real captured app screens.</p>
           </div>
         </div>
@@ -339,7 +339,7 @@
         </div>
 
         <div class="viewport" id="viewport">
-          <img class="screen" id="screen" src="../public/screens/home.png" alt="Vaultmark screen" />
+          <img class="screen" id="screen" src="../public/screens/home.png" alt="Canopy screen" />
         </div>
       </section>
     </main>
@@ -350,7 +350,7 @@
           id: 'home',
           title: 'Start in the vault home',
           eyebrow: 'Populated workspace',
-          caption: 'Vaultmark loads the real S3-backed vault: indexed counts, authored pages, shared spaces, and recent generated docs.',
+          caption: 'Canopy loads the real S3-backed vault: indexed counts, authored pages, shared spaces, and recent generated docs.',
           image: '../public/screens/home.png',
           hotspots: [
             { x: '91%', y: '3%', label: 'Open Ask-Wiki', next: 'ask' },
@@ -461,7 +461,7 @@
         index = (nextIndex + screens.length) % screens.length;
         const screen = screens[index];
         screenEl.src = screen.image;
-        screenEl.alt = `Vaultmark ${screen.title}`;
+        screenEl.alt = `Canopy ${screen.title}`;
         eyebrowEl.textContent = screen.eyebrow;
         headlineEl.textContent = screen.title;
         captionEl.textContent = screen.caption;

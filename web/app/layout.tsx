@@ -27,21 +27,21 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Vaultmark',
-  description: 'S3-backed Markdown knowledge portal for individuals and engineering teams',
+  title: 'Canopy',
+  description: 'Your own wiki, powered by LLM, backed by S3.',
   // Static assets live in public/, served under the base path. Next does not
   // auto-prefix metadata asset URLs, so prefix them explicitly.
   icons: { icon: withBasePath('/favicon.svg') },
   openGraph: {
-    title: 'Vaultmark',
-    description: 'S3-backed Markdown knowledge portal for individuals and engineering teams',
+    title: 'Canopy',
+    description: 'Your own wiki, powered by LLM, backed by S3.',
     images: [{ url: withBasePath('/og.svg'), width: 1200, height: 630 }],
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Vaultmark',
-    description: 'S3-backed Markdown knowledge portal for individuals and engineering teams',
+    title: 'Canopy',
+    description: 'Your own wiki, powered by LLM, backed by S3.',
     images: [withBasePath('/og.svg')],
   },
 };

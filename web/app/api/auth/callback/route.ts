@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { authConfig, isPrincipalAllowed } from '@/lib/auth';
+import { authConfig } from '@/lib/auth';
 import { completeLogin } from '@/lib/auth-oidc';
 import { readCookie } from '@/lib/auth-guard';
 import {
@@ -15,10 +15,9 @@ import { callbackUrl, safeReturnTo } from '@/lib/auth-url';
 
 /**
  * OIDC callback (plan 029). Exempt from the gate. Validates the transaction
- * (state + nonce + PKCE via openid-client), then enforces the **deny-by-default
- * allowlist** — authenticating at the IdP is NOT sufficient; the principal must
- * be on `AUTH_ALLOWED_SUBJECTS`/`_EMAILS` or it gets a **403**. On success it
- * mints the encrypted session cookie and redirects to the stashed `returnTo`.
+ * (state + nonce + PKCE via openid-client), then mints the encrypted session
+ * cookie and redirects to the stashed `returnTo`. Access control is delegated
+ * to the identity provider — if a user can authenticate, they are admitted.
  * Node.js runtime.
  */
 export async function GET(req: Request) {
@@ -60,16 +59,7 @@ export async function GET(req: Request) {
     );
   }
 
-  // Deny-by-default: an authenticated-but-unlisted principal is refused.
-  if (!isPrincipalAllowed({ sub: result.sub, email: result.email }, cfg)) {
-    const denied = NextResponse.json(
-      { detail: 'your account is not authorized for this portal' },
-      { status: 403 },
-    );
-    denied.cookies.set(TX_COOKIE, '', cookieAttrs(req, 0));
-    return denied;
-  }
-
+  // Authentication successful — mint session.
   const session = await encryptSession(
     { sub: result.sub, email: result.email, name: result.name },
     cfg.sessionSecret,

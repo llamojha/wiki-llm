@@ -34,7 +34,8 @@ export type FeatureName =
   | 'editor'
   | 'search'
   | 'star'
-  | 'publishing';
+  | 'publishing'
+  | 'imageProxy';
 
 export type FeatureFlags = Record<FeatureName, boolean>;
 
@@ -48,6 +49,7 @@ const ENV_BY_FEATURE: Record<FeatureName, string> = {
   search: 'FEATURE_SEARCH',
   star: 'FEATURE_STAR',
   publishing: 'FEATURE_PUBLISHING',
+  imageProxy: 'FEATURE_IMAGE_PROXY',
 };
 
 /** Tokens that turn a feature off. Anything else (or absent) leaves it on. */
@@ -68,6 +70,7 @@ const DEFAULT_BY_FEATURE: Record<FeatureName, boolean> = {
   search: false,
   star: false,
   publishing: false,
+  imageProxy: false,
 };
 
 function parseFlag(envVar: string, defaultValue: boolean): boolean {

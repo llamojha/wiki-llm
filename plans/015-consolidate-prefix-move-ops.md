@@ -74,7 +74,7 @@ All in `web/lib/`; each loop is `list → for each key: getObject → putObject(
 | Purpose   | Command                  | Expected on success |
 |-----------|--------------------------|---------------------|
 | Typecheck | `pnpm typecheck`         | exit 0              |
-| Unit      | `pnpm --filter @vaultmark/web test` | all pass |
+| Unit      | `pnpm --filter @canopy/web test` | all pass |
 | E2E       | `pnpm build && pnpm test:e2e -- --grep "folders|spaces|upload"` | all pass |
 
 ## Scope
@@ -172,7 +172,7 @@ arrive, sources gone, count right); move onto existing target keys overwrites
 state correct, no key lost (the split-move regression); `prefixHasObjects`
 true/false.
 
-**Verify**: `pnpm --filter @vaultmark/web test` → all pass.
+**Verify**: `pnpm --filter @canopy/web test` → all pass.
 
 ## Test plan
 

@@ -1,6 +1,6 @@
 # Theming
 
-Vaultmark's entire UI is driven by CSS custom properties, and the portal
+Canopy's entire UI is driven by CSS custom properties, and the portal
 supports **drop-in theme plugins**: a single `.css` file added to a directory
 becomes a selectable theme in the top-bar picker. No code changes, no rebuild
 (in dev), no fork.
@@ -100,7 +100,7 @@ release image: ship the image as-is, drop theme files in S3, restart.
 # operator uploads a theme to the vault bucket (direct S3 — not the portal)
 aws s3 cp forest.css s3://$VAULT_BUCKET/$VAULT_PREFIX/_themes/forest.css
 
-docker run -e THEME_VAULT_PREFIX=_themes/ -e THEME_DEFAULT=forest vaultmark
+docker run -e THEME_VAULT_PREFIX=_themes/ -e THEME_DEFAULT=forest canopy
 ```
 
 The file format, metadata block, and id rules are identical to directory
@@ -130,16 +130,16 @@ document tree.
 `web/themes/` before `docker build`) or mount them at runtime:
 
 ```bash
-docker run -v ./my-themes:/app/web/themes:ro -e THEME_DEFAULT=forest vaultmark
+docker run -v ./my-themes:/app/web/themes:ro -e THEME_DEFAULT=forest canopy
 ```
 
 **Kubernetes** — ship themes in a ConfigMap and mount it:
 
 ```yaml
-kubectl create configmap vaultmark-themes --from-file=my-themes/
+kubectl create configmap canopy-themes --from-file=my-themes/
 # in the pod spec:
 volumeMounts: [{ name: themes, mountPath: /app/web/themes, readOnly: true }]
-volumes: [{ name: themes, configMap: { name: vaultmark-themes } }]
+volumes: [{ name: themes, configMap: { name: canopy-themes } }]
 ```
 
 **ECS** — point `THEME_DIR` at an EFS mount, or bake themes into the image.

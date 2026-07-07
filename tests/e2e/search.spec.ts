@@ -13,7 +13,7 @@ test.describe('search palette', () => {
   test('cmd-k opens palette and returns fixture matches', async ({ page }) => {
     await gotoHome(page);
     // Wait for hydration so the keydown listener is bound.
-    await page.locator('button[title="Toggle theme"]').waitFor();
+    await page.locator('button[title^="Theme"]').waitFor();
     await page.waitForTimeout(300);
 
     await page.keyboard.press('ControlOrMeta+KeyK');
@@ -31,7 +31,7 @@ test.describe('search palette', () => {
 
   test('empty query shows nothing', async ({ page }) => {
     await gotoHome(page);
-    await page.locator('button[title="Toggle theme"]').waitFor();
+    await page.locator('button[title^="Theme"]').waitFor();
     await page.waitForTimeout(300);
 
     await page.keyboard.press('ControlOrMeta+KeyK');

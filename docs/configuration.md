@@ -1,6 +1,6 @@
 # Configuration
 
-Vaultmark is configured entirely through environment variables. There are no
+Canopy is configured entirely through environment variables. There are no
 config files with deployment-specific values checked into the repo.
 
 A starter file lives at [`infra/.env.example`](../infra/.env.example) — copy it
@@ -90,7 +90,7 @@ If you don't deploy the Lambda, disable the feature with `FEATURE_CURATE=off`.
 ## Serving under a sub-path (base path)
 
 By default the portal is served at the root (`/`). To host it under a sub-path
-in a shared cluster — e.g. behind an ingress that routes `/wiki` to Vaultmark —
+in a shared cluster — e.g. behind an ingress that routes `/wiki` to Canopy —
 set `NEXT_BASE_PATH`.
 
 | Variable | Required | Default | Purpose |
@@ -105,7 +105,7 @@ prefix (the home page is `/wiki`, the API is `/wiki/api/...`).
 Build a prefixed image with the Docker build-arg:
 
 ```bash
-docker build -f web/Dockerfile -t vaultmark:wiki --build-arg NEXT_BASE_PATH=/wiki .
+docker build -f web/Dockerfile -t canopy:wiki --build-arg NEXT_BASE_PATH=/wiki .
 ```
 
 The release pipeline also publishes a prebuilt `/wiki` variant under a `-wiki`
@@ -130,7 +130,7 @@ flag, so the full tunable surface is visible per deployment. See
 
 ## Authentication (auth gate)
 
-Vaultmark ships an optional **built-in OIDC auth gate**, off by default. When
+Canopy ships an optional **built-in OIDC auth gate**, off by default. When
 off, the portal is exactly the open app it has always been (put a reverse
 proxy / ALB OIDC / VPN in front, per [`SECURITY.md`](../SECURITY.md)). When on,
 it answers a single binary question — *may this person enter the portal at
@@ -145,14 +145,11 @@ phase); everyone who passes the allowlist sees the same vault.
 | `OIDC_CLIENT_ID` | in `oidc` | — | OIDC client (app client) id. |
 | `OIDC_CLIENT_SECRET` | in `oidc` | — | Client secret (confidential client). |
 | `AUTH_SESSION_SECRET` | in `oidc` | — | High-entropy secret (≥ 32 chars) used to encrypt the session cookie. Rotating it invalidates all sessions. |
-| `AUTH_ALLOWED_SUBJECTS` | one of the two | — | Comma/space-separated allowlist of OIDC `sub` claims permitted in. |
-| `AUTH_ALLOWED_EMAILS` | one of the two | — | Comma/space-separated allowlist of `email` claims (case-insensitive). |
 
-**Deny-by-default.** In `oidc` mode an authenticated user is admitted **only**
-if their `sub` or `email` is on an allowlist. An empty/unset allowlist admits
-**no one** (fail closed) — authenticating at your IdP is not the same as being
-allowed into this portal. Removing someone from the allowlist takes effect on
-their next request.
+**Access control is delegated to the identity provider.** If a user can
+authenticate with the OIDC provider (e.g. they exist in the Cognito User Pool),
+they are admitted to the portal. There is no application-level allowlist —
+control who can access the wiki by controlling who is in your User Pool.
 
 **Both layers.** Pages redirect unauthenticated browsers to sign-in; every
 `/api/*` handler independently returns `401` (auth is checked before the
@@ -176,11 +173,10 @@ expiry-bound** (TTL 12h). The OIDC redirect/callback URLs compose with
 
 ```
 AUTH_MODE=oidc
-OIDC_ISSUER=https://keycloak.example.com/realms/vaultmark
-OIDC_CLIENT_ID=vaultmark
+OIDC_ISSUER=https://keycloak.example.com/realms/canopy
+OIDC_CLIENT_ID=canopy
 OIDC_CLIENT_SECRET=<from Keycloak>
 AUTH_SESSION_SECRET=<openssl rand -hex 32>
-AUTH_ALLOWED_EMAILS=you@example.com,teammate@example.com
 ```
 
 Keycloak advertises a standard `end_session_endpoint`, so logout is
@@ -202,11 +198,10 @@ OIDC_ISSUER=https://cognito-idp.eu-central-1.amazonaws.com/eu-central-1_ABC123
 OIDC_CLIENT_ID=<app client id>
 OIDC_CLIENT_SECRET=<app client secret>
 AUTH_SESSION_SECRET=<openssl rand -hex 32>
-AUTH_ALLOWED_EMAILS=you@example.com
 ```
 
 > **Cognito note.** Cognito's discovery document omits `end_session_endpoint`,
-> so Vaultmark derives the non-standard logout
+> so Canopy derives the non-standard logout
 > (`https://<hosted-domain>/logout?client_id=…&logout_uri=…`) from the
 > discovered authorization endpoint — no host is hardcoded. This is handled
 > automatically; you only need the sign-out URL registered (step 4).

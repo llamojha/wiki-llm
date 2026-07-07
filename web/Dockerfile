@@ -1,5 +1,5 @@
 # Build from the repo root so the pnpm workspace lockfile is in context:
-#   docker build -f web/Dockerfile -t vaultmark .
+#   docker build -f web/Dockerfile -t canopy .
 FROM node:26-alpine AS base
 # Node 26 no longer bundles corepack, so install the pinned pnpm directly.
 # Keep this version in sync with `packageManager` in the root package.json.
@@ -12,7 +12,8 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY web/package.json web/
 COPY ingest/package.json ingest/
 COPY video/package.json video/
-RUN pnpm install --frozen-lockfile --filter @vaultmark/web
+COPY site/package.json site/
+RUN pnpm install --frozen-lockfile --filter @canopy/web
 
 # ─── builder: compile the Next.js standalone output ───────────────────────
 FROM base AS builder
@@ -32,7 +33,7 @@ ENV NEXT_BASE_PATH=$NEXT_BASE_PATH
 # Placeholder only — `next build` evaluates route modules, which require a
 # bucket at import time. The real value comes from the runtime environment.
 ENV VAULT_BUCKET=build-placeholder
-RUN pnpm --filter @vaultmark/web build
+RUN pnpm --filter @canopy/web build
 
 # Runtime — Next.js standalone output (mirrors the workspace layout)
 FROM node:26-alpine AS runner

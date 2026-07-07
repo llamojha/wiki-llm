@@ -17,9 +17,9 @@ import { BASE_PATH } from '@/lib/base-path';
  * `requireSession()`, and `proxy.ts` — all on the Node.js runtime.
  */
 
-export const SESSION_COOKIE = 'vaultmark_session';
+export const SESSION_COOKIE = 'canopy_session';
 /** Short-lived cookie holding the in-flight OIDC transaction (state/nonce/PKCE). */
-export const TX_COOKIE = 'vaultmark_auth_tx';
+export const TX_COOKIE = 'canopy_auth_tx';
 
 /** Session lifetime. Revocation is expiry-bound (no store), so keep it modest. */
 export const SESSION_TTL_SECONDS = 12 * 60 * 60; // 12h

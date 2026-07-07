@@ -70,7 +70,7 @@ test.describe('curate (process pending)', () => {
 
   test('runs a mocked batch to completion', async ({ page }) => {
     await gotoHome(page);
-    await page.locator('button[title="Toggle theme"]').waitFor();
+    await page.locator('button[title^="Theme"]').waitFor();
     await page.waitForTimeout(300);
 
     await page.locator('button[title="Curate raw files in S3"]').click();

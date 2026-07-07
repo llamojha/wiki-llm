@@ -1,7 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" fill="none">
-  <rect width="1200" height="630" fill="#1a1a2e"/>
-  <path d="M520 215h160a8 8 0 0 1 8 8v184a8 8 0 0 1-8 8H520a8 8 0 0 1-8-8V223a8 8 0 0 1 8-8z" fill="#2d2d44" stroke="#7c6f9b" stroke-width="3"/>
-  <path d="M548 215v200l52-33 52 33V215" fill="#7c6f9b" fill-opacity="0.3" stroke="#b8a9d4" stroke-width="3" stroke-linejoin="round"/>
-  <text x="600" y="500" text-anchor="middle" font-family="system-ui, sans-serif" font-size="48" font-weight="600" fill="#e8e4f0">Vaultmark</text>
-  <text x="600" y="550" text-anchor="middle" font-family="system-ui, sans-serif" font-size="22" fill="#8a7faa">S3-backed Markdown knowledge portal</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <!-- Dark forest green background -->
+  <rect width="1200" height="630" fill="#0f2419"/>
+  <!-- Canopy tree mark (scaled up) -->
+  <g transform="translate(600, 220)">
+    <!-- Crown layers -->
+    <ellipse cx="0" cy="0" rx="80" ry="64" fill="#166534"/>
+    <ellipse cx="-24" cy="-8" rx="56" ry="48" fill="#2d8a4e"/>
+    <ellipse cx="24" cy="-8" rx="56" ry="48" fill="#2d8a4e"/>
+    <ellipse cx="0" cy="-16" rx="48" ry="40" fill="#4ade80"/>
+    <!-- Trunk -->
+    <rect x="-12" y="48" width="24" height="64" rx="8" fill="#2d5a3a"/>
+  </g>
+  <!-- Text: Canopy -->
+  <text x="600" y="400" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="600" font-size="56" fill="#ffffff">Canopy</text>
+  <!-- Tagline -->
+  <text x="600" y="450" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="400" font-size="24" fill="#8aaa8a">Your own wiki, powered by LLM, backed by S3.</text>
 </svg>

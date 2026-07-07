@@ -1,8 +1,8 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: vaultmark-config
-  namespace: vaultmark
+  name: canopy-config
+  namespace: canopy
 data:
   # Vault — see docs/configuration.md
   VAULT_BUCKET: "my-vault-bucket"
@@ -15,7 +15,7 @@ data:
   BEDROCK_REGION: "us-east-1"
 
   # Curate Lambda — leave FEATURE_CURATE off if not deployed
-  # CURATE_LAMBDA_ARN: "arn:aws:lambda:<region>:<account-id>:function:vaultmark-curate"
+  # CURATE_LAMBDA_ARN: "arn:aws:lambda:<region>:<account-id>:function:canopy-curate"
   # CURATE_LAMBDA_REGION: "us-east-1"
 
   # Feature flags — in code, only FEATURE_AGENT defaults ON; every other

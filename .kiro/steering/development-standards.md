@@ -1,9 +1,9 @@
 ---
-title: Vaultmark Development Standards
+title: Canopy Development Standards
 inclusion: always
 ---
 
-# Vaultmark Development Standards
+# Canopy Development Standards
 
 ## Frontend Standards (web/)
 

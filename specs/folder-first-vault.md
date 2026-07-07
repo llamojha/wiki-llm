@@ -16,7 +16,7 @@ The vault layout is **provenance-first**: documents must live under
 default deployment ships curate/upload/editor **off** (browse + agent only —
 `web/lib/flags.ts`), and `isDocumentKey` (`web/lib/vault-paths.ts`) returns
 `false` for anything outside the provenance roots. So the most common on-ramp
-imaginable — *"point Vaultmark at my existing folder of Markdown notes"* —
+imaginable — *"point Canopy at my existing folder of Markdown notes"* —
 renders an **empty portal**: `notes/foo.md` is not recognized as a document.
 
 The maintainer wants **folder-first to be the default**: plain folders of
@@ -108,11 +108,11 @@ home for `raw/` and `generated/`. Options:
 | Option | Verdict |
 |---|---|
 | (a) Refuse — require switching to provenance mode | viable, simplest to reason about |
-| (b) Reserved `_vaultmark/` subtree for pipeline artifacts | **recommended** |
+| (b) Reserved `_canopy/` subtree for pipeline artifacts | **recommended** |
 | (c) `raw/`/`generated/` appear alongside user folders | rejected — recreates today's confusion (user sees pipeline plumbing as "folders") |
 
 **Recommendation: (b), with (a) as the honest fallback.** Pipeline inputs land
-in `_vaultmark/raw/`, generated pages in `_vaultmark/generated/<space>/`, and
+in `_canopy/raw/`, generated pages in `_canopy/generated/<space>/`, and
 curation *promotes* an approved page into the user's chosen folder as a normal
 `.md`. This keeps the user's folder tree clean (only their content) while the
 pipeline has a private scratch area, symmetric with `_system/`. If (b) proves
@@ -202,7 +202,7 @@ events-as-truth). Verdict on each contested point:
 
 ## 9. Open questions for the maintainer
 
-1. **`_vaultmark/` vs refuse for pipeline opt-in (§5).** Recommend `_vaultmark/`
+1. **`_canopy/` vs refuse for pipeline opt-in (§5).** Recommend `_canopy/`
    subtree; accept "refuse + require provenance mode" as the v1 shortcut if the
    subtree is too much for the first cut. *Which for v1?*
 2. **Does folders mode need `_system/index.md` at all, or can the agent read the

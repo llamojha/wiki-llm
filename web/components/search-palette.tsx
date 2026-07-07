@@ -47,8 +47,6 @@ export function SearchPalette({ open, onClose, onOpenDoc, scope }: SearchPalette
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [q]);
 
-  useEffect(() => { setSel(0); }, [q]);
-
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); setSel((s) => Math.min(s + 1, results.length - 1)); }
     if (e.key === 'ArrowUp') { e.preventDefault(); setSel((s) => Math.max(s - 1, 0)); }
@@ -75,7 +73,7 @@ export function SearchPalette({ open, onClose, onOpenDoc, scope }: SearchPalette
       <div className="palette" onClick={(e) => e.stopPropagation()}>
         <div className="palette-input">
           {ICONS.search}
-          <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)}
+          <input ref={inputRef} value={q} onChange={(e) => { setQ(e.target.value); setSel(0); }}
                  onKeyDown={onKey}
                  placeholder="Search across your vault…"/>
           <span className="kbd">esc</span>

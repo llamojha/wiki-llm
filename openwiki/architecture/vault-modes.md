@@ -78,7 +78,7 @@ manifests, and logs, never user-visible documents.
   `generated/`/`authored/` layout — folders-mode vaults have neither.
   `web/lib/folders.ts` (tree building) and `web/lib/search.ts` (index
   building) are the reference implementations of this branch.
-- Do not introduce a third hidden-subtree convention (e.g. a `_vaultmark/`
+- Do not introduce a third hidden-subtree convention (e.g. a `_canopy/`
   folder) for folders-mode metadata — the explicit maintainer decision
   (`plans/026`) is that provenance lives in frontmatter, not in magic paths,
   to keep folders mode's promise of "any folder of Markdown just works"

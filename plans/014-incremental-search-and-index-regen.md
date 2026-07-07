@@ -66,7 +66,7 @@ have landed and the unit baseline exists.**
 | Purpose   | Command                  | Expected on success |
 |-----------|--------------------------|---------------------|
 | Typecheck | `pnpm typecheck`         | exit 0              |
-| Unit      | `pnpm --filter @vaultmark/web test` | all pass |
+| Unit      | `pnpm --filter @canopy/web test` | all pass |
 | E2E       | `pnpm build && pnpm test:e2e` | all pass |
 
 ## Scope
@@ -168,7 +168,7 @@ available, use ETag ifMatch + one retry, falling back to full regenerate.
 - Byte-format check: full rebuild vs patched file identical modulo the
   `updated:` timestamp line for a seeded fixture.
 
-**Verify**: `pnpm --filter @vaultmark/web test` → all pass;
+**Verify**: `pnpm --filter @canopy/web test` → all pass;
 `pnpm build && pnpm test:e2e` → all pass.
 
 ## Test plan

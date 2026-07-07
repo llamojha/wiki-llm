@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Playwright config for the Vaultmark e2e suite.
+ * Playwright config for the Canopy e2e suite.
  *
  * Drives the real Next.js app with `MOCK_S3=1` so every feature flows
  * through actual route handlers backed by the in-memory mock store.
@@ -56,7 +56,7 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: `pnpm --filter @vaultmark/web exec next start --port ${PORT}`,
+      command: `pnpm --filter @canopy/web exec next start --port ${PORT}`,
       url: BASE_URL,
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,
@@ -83,7 +83,7 @@ export default defineConfig({
       },
     },
     {
-      command: `pnpm --filter @vaultmark/web exec next start --port ${PORT + 1}`,
+      command: `pnpm --filter @canopy/web exec next start --port ${PORT + 1}`,
       url: `http://127.0.0.1:${PORT + 1}`,
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,
@@ -104,7 +104,7 @@ export default defineConfig({
       },
     },
     {
-      command: `pnpm --filter @vaultmark/web exec next start --port ${PORT + 2}`,
+      command: `pnpm --filter @canopy/web exec next start --port ${PORT + 2}`,
       url: `http://127.0.0.1:${PORT + 2}/api/health`,
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,
@@ -119,7 +119,7 @@ export default defineConfig({
         // cookie, which needs no discovery), so the gating assertions hold.
         AUTH_MODE: 'oidc',
         OIDC_ISSUER: 'https://issuer.invalid/realms/test',
-        OIDC_CLIENT_ID: 'vaultmark-e2e',
+        OIDC_CLIENT_ID: 'canopy-e2e',
         AUTH_SESSION_SECRET: 'e2e-auth-session-secret-abcdefghijklmnopqrst-0123',
         AUTH_ALLOWED_EMAILS: 'allowed@example.com',
         // SEARCH stays OFF so the auth-before-flag (401-before-404) ordering is

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Quickstart</title>
+</head>
+<body>
+  <h1 style="color: #1a1a2e; border-bottom: 2px solid #533483; padding-bottom: 8px">Quickstart</h1>
+
+  <div style="background-color: #e8f5e9; border-left: 4px solid #4caf50; padding: 12px 16px; margin: 16px 0; border-radius: 4px">
+    <strong style="color: #2e7d32">Welcome!</strong> This is the HTML demo version of the OpenWiki quickstart guide.
+    It exercises inline styles, data:image URIs, and relative link rewriting.
+  </div>
+
+  <h2 id="what-this-repository-does" style="color: #533483; margin-top: 24px">What This Repository Does</h2>
+  <p style="font-size: 16px; line-height: 1.6; color: #333">
+    Canopy is an S3-backed Markdown knowledge portal for individuals and engineering teams.
+    It provides:
+  </p>
+  <ul style="font-size: 16px; line-height: 1.8; color: #333">
+    <li><strong style="color: #533483">Portal</strong> — browse, search, edit Markdown from a Next.js UI</li>
+    <li><strong style="color: #533483">AI Curation</strong> — Lambda-powered Bedrock pipeline for content generation</li>
+    <li><strong style="color: #533483">Ask-Wiki Agent</strong> — conversational Bedrock agent with citations</li>
+    <li><strong style="color: #533483">Feature Flags</strong> — every feature individually toggleable</li>
+  </ul>
+
+  <h2 style="color: #533483; margin-top: 24px">Quick Setup</h2>
+  <pre style="background-color: #2d2d2d; color: #f8f8f2; padding: 16px; border-radius: 6px; font-family: monospace; overflow-x: auto"><code># Install dependencies
+pnpm install
+
+# Set env vars
+cp infra/.env.example web/.env.local
+
+# Start the app
+pnpm dev   # http://localhost:3000</code></pre>
+
+  <h2 style="color: #533483; margin-top: 24px">Try It With No AWS</h2>
+  <p style="font-size: 16px; line-height: 1.6; color: #333">
+    Run against the in-memory S3 mock — no credentials needed:
+  </p>
+  <pre style="background-color: #2d2d2d; color: #f8f8f2; padding: 16px; border-radius: 6px; font-family: monospace"><code>pnpm dev:mock        # starts with MOCK_S3=1
+pnpm seed:openwiki   # loads openwiki/ into the mock vault</code></pre>
+
+  <h2 style="color: #533483; margin-top: 24px">Stack Overview</h2>
+  <table style="width: 100%; border-collapse: collapse; margin: 16px 0">
+    <thead>
+      <tr style="background-color: #533483; color: white">
+        <th style="padding: 10px; text-align: left; border: 1px solid #ddd">Layer</th>
+        <th style="padding: 10px; text-align: left; border: 1px solid #ddd">Technology</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="padding: 10px; border: 1px solid #ddd">App</td>
+        <td style="padding: 10px; border: 1px solid #ddd">Next.js 16.2, React 19, TypeScript 6.x</td>
+      </tr>
+      <tr style="background-color: #f9f9f9">
+        <td style="padding: 10px; border: 1px solid #ddd">Storage</td>
+        <td style="padding: 10px; border: 1px solid #ddd">AWS S3 (Markdown blobs)</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px; border: 1px solid #ddd">Search</td>
+        <td style="padding: 10px; border: 1px solid #ddd">In-memory Fuse.js</td>
+      </tr>
+      <tr style="background-color: #f9f9f9">
+        <td style="padding: 10px; border: 1px solid #ddd">LLM</td>
+        <td style="padding: 10px; border: 1px solid #ddd">Amazon Bedrock — Nova 2 Lite</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 style="color: #533483; margin-top: 24px">Learn More</h2>
+  <p style="font-size: 16px; line-height: 1.6">
+    Dive deeper into the <a href="architecture-overview.html">Architecture Overview</a>
+    or see how the <a href="curate-pipeline.html">Curate Pipeline</a> transforms raw content
+    into structured wiki pages.
+  </p>
+
+  <!-- Embedded logo placeholder — exercises data:image URI support -->
+  <div style="text-align: center; margin-top: 32px; padding: 16px; background-color: #f4f4f8; border-radius: 8px">
+    <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAhElEQVR42mNk+M9Qz0AHwMgwagGDYMFfBgYGNQYGhv0MDAxZDAyM+xkY/jMwDIYQXDAaBYxDIQoYBksqGI2C0SgY5FHAwMDAIMPAwGAPxPoMDAz+DAwMgQwMDPcZGP4zMIxGwSCPglELhkIU/GdgYGBhYGC4D8T5QBw4GqmDJgoA/osqDx4buhgAAAAASUVORK5CYII=" alt="Canopy logo placeholder" style="max-width: 64px; border-radius: 8px">
+    <p style="font-size: 12px; color: #666; margin-top: 8px">Canopy — Markdown in S3, rendered and searchable</p>
+  </div>
+</body>
+</html>

@@ -10,7 +10,7 @@ test.describe('reindex', () => {
 
   test('reindexing the wiki space rewrites _system/indexes/wiki.md', async ({ page, request }) => {
     await gotoHome(page);
-    await page.locator('button[title="Toggle theme"]').waitFor();
+    await page.locator('button[title^="Theme"]').waitFor();
     await page.waitForTimeout(300);
 
     // Open upload modal then switch to the Re-index tab.

@@ -24,7 +24,7 @@ type StoreState = {
   modified: Map<string, Date>;
 };
 
-const GLOBAL_KEY = '__vaultmark_mock_s3__';
+const GLOBAL_KEY = '__canopy_mock_s3__';
 
 function store(): StoreState {
   const g = globalThis as unknown as Record<string, StoreState | undefined>;

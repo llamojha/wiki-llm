@@ -1,9 +1,9 @@
 ---
-title: Vaultmark Conventions
+title: Canopy Conventions
 inclusion: always
 ---
 
-# Vaultmark Conventions
+# Canopy Conventions
 
 ## Naming
 

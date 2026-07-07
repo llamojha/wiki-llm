@@ -158,7 +158,7 @@ exported generator's name — read the top of `agent.ts`) receives its Bedrock
 client; if the client is not injectable, SKIP the unit test and instead
 verify behavior manually per Step 4, noting the gap in the plan index.
 
-**Verify**: `pnpm --filter @vaultmark/web test` → pass (or documented skip).
+**Verify**: `pnpm --filter @canopy/web test` → pass (or documented skip).
 
 ### Step 4: Confirm no chat regression
 

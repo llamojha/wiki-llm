@@ -10,7 +10,7 @@ test.describe('upload modal', () => {
 
   test('uploads a markdown file via the upload modal', async ({ page, request }) => {
     await gotoHome(page);
-    await page.locator('button[title="Toggle theme"]').waitFor();
+    await page.locator('button[title^="Theme"]').waitFor();
     await page.waitForTimeout(300);
 
     await page.locator('button[title="Upload Markdown files"]').click();

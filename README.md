@@ -1,16 +1,16 @@
-# Vaultmark
+# Canopy
 
 An S3-backed Markdown knowledge portal for individuals and engineering teams.
 
 Markdown in object storage is the durable knowledge layer. The portal renders, searches, and lets a Bedrock-powered agent answer questions grounded in your own documents.
 
-> Vaultmark — an S3-backed Markdown vault for people, pipelines, and agents.
+> Canopy. Your own wiki, powered by LLM, backed by S3.
 
 ## Status
 
 Early MVP. Phases 0-5 are implemented in the single Next.js app shape tracked by `ROADMAP.md`: S3 read/search, personal wiki CRUD, Lambda-backed curation, and the Bedrock ask-wiki agent.
 
-- **Product spec:** [`prd_vaultmark_markdown_llm_wiki.md`](prd_vaultmark_markdown_llm_wiki.md)
+- **Product spec:** [`prd_canopy_markdown_llm_wiki.md`](prd_canopy_markdown_llm_wiki.md)
 - **Engineering plan:** [`ROADMAP.md`](ROADMAP.md)
 - **Documentation:** [`docs/`](docs/) — configuration, feature flags, deployment
 - **Contributing:** [`CONTRIBUTING.md`](CONTRIBUTING.md)
@@ -55,7 +55,7 @@ wiki-llm/
 ├── api/          FastAPI backend (archived — replaced by Route Handlers)
 ├── legacy/       Archived wiki-llm CLI (frozen reference)
 ├── ROADMAP.md    Engineering plan — phases are the contract
-└── prd_vaultmark_markdown_llm_wiki.md   Product spec
+└── prd_canopy_markdown_llm_wiki.md   Product spec
 ```
 
 ## Getting started
@@ -154,7 +154,48 @@ The app is a standard Next.js server — one stateless container, S3 as the only
 | ECS Fargate | [`docs/deploy/ecs-fargate.md`](docs/deploy/ecs-fargate.md) |
 | Vercel | Connect the repo, set env vars in the dashboard, deploy. |
 
-> **Security note:** Vaultmark has no built-in authentication. Put an auth layer (reverse proxy, ALB OIDC, VPN) in front of any deployment that isn't on a trusted network. See [`SECURITY.md`](SECURITY.md).
+> **Authentication:** Canopy ships a built-in OIDC auth gate (off by default). Enable it to require sign-in via any OpenID Connect provider — Keycloak and AWS Cognito are both first-class. See the [Authentication section](#authentication) below and [`docs/configuration.md`](docs/configuration.md).
+
+## Authentication
+
+Canopy ships a **built-in OIDC auth gate** — off by default (`AUTH_MODE=none`).
+When enabled, it requires sign-in through any standard OpenID Connect provider
+before accessing the portal. **Keycloak** and **AWS Cognito** are both
+first-class and tested.
+
+### Quick start (Cognito)
+
+1. Create a Cognito User Pool and add a Hosted UI domain.
+2. Create a confidential app client with the `openid email profile` scopes
+   and the **Authorization code** grant.
+3. Add callback URL: `https://<your-host>/api/auth/callback`
+4. Add sign-out URL: `https://<your-host>/`
+5. Set the env vars:
+
+```bash
+AUTH_MODE=oidc
+OIDC_ISSUER=https://cognito-idp.<region>.amazonaws.com/<userPoolId>
+OIDC_CLIENT_ID=<app-client-id>
+OIDC_CLIENT_SECRET=<app-client-secret>
+AUTH_SESSION_SECRET=$(openssl rand -hex 32)
+```
+
+### Key design decisions
+
+- **IdP is the access boundary.** If a user can authenticate with the OIDC
+  provider (e.g. they exist in the Cognito User Pool), they are admitted.
+  Control access by controlling who is in your User Pool.
+- **Both layers enforced.** Pages redirect to sign-in; API routes return
+  `401` independently. A disabled feature returns `401` before `404`.
+- **Stateless sessions.** Encrypted `HttpOnly` cookie, no server-side store.
+  Revocation is expiry-bound (12h TTL). Rotate `AUTH_SESSION_SECRET` to
+  invalidate all sessions.
+- **Provider-agnostic.** Any OIDC provider with a standard
+  `.well-known/openid-configuration` works. Cognito's non-standard logout
+  endpoint is handled automatically.
+
+Full reference with Keycloak and Cognito recipes:
+[`docs/configuration.md`](docs/configuration.md).
 
 ## Contributing
 

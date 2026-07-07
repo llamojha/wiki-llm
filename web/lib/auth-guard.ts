@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { authConfig, isPrincipalAllowed } from '@/lib/auth';
+import { authConfig } from '@/lib/auth';
 import { SESSION_COOKIE, decryptSession, type SessionClaims } from '@/lib/auth-session';
 
 /**
@@ -37,11 +37,8 @@ export async function getSession(req: Request): Promise<SessionClaims | null> {
 
 /**
  * API-handler gate. Returns:
- *   - `null` when the request may proceed (mode `none`, or a valid+allowlisted
- *     session);
+ *   - `null` when the request may proceed (mode `none`, or a valid session);
  *   - a `401` when a session is required but missing/invalid;
- *   - a `403` when authenticated but not on the allowlist (re-checked every
- *     request, so removing a principal takes effect immediately);
  *   - a `500` when the gate is misconfigured (mode `oidc` without a secret) —
  *     fail closed rather than silently open.
  */
@@ -58,9 +55,6 @@ export async function requireSession(req: Request): Promise<NextResponse | null>
   if (!claims) {
     return NextResponse.json({ detail: 'authentication required' }, { status: 401 });
   }
-  if (!isPrincipalAllowed(claims, cfg)) {
-    return NextResponse.json({ detail: 'not authorized for this portal' }, { status: 403 });
-  }
   return null;
 }
 
@@ -73,5 +67,5 @@ export async function isRequestAuthorized(req: Request): Promise<boolean> {
   if (cfg.mode === 'none') return true;
   if (!cfg.sessionSecret) return false;
   const claims = await getSession(req);
-  return !!claims && isPrincipalAllowed(claims, cfg);
+  return !!claims;
 }

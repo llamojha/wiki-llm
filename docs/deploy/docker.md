@@ -1,6 +1,6 @@
 # Deploying with Docker
 
-Vaultmark ships as a single Next.js server. The image is built from
+Canopy ships as a single Next.js server. The image is built from
 [`web/Dockerfile`](../../web/Dockerfile) using Next.js standalone output —
 the final image contains only the compiled server, not the toolchain.
 
@@ -33,7 +33,7 @@ The build context must be the **repo root** (the pnpm workspace lockfile
 lives there):
 
 ```bash
-docker build -f web/Dockerfile -t vaultmark .
+docker build -f web/Dockerfile -t canopy .
 ```
 
 `NEXT_PUBLIC_*` variables are inlined at build time. If you use per-user
@@ -42,7 +42,7 @@ vault paths, pass the user id as a build arg:
 ```bash
 docker build -f web/Dockerfile \
   --build-arg NEXT_PUBLIC_VAULT_USER_ID=alice \
-  -t vaultmark .
+  -t canopy .
 ```
 
 To serve the portal under a sub-path in a shared cluster (e.g. `/wiki`), pass
@@ -51,7 +51,7 @@ To serve the portal under a sub-path in a shared cluster (e.g. `/wiki`), pass
 ```bash
 docker build -f web/Dockerfile \
   --build-arg NEXT_BASE_PATH=/wiki \
-  -t vaultmark:wiki .
+  -t canopy:wiki .
 ```
 
 Or skip the build: the release pipeline publishes a ready-made `/wiki` variant
@@ -71,13 +71,13 @@ docker run -p 3000:3000 \
   -e VAULT_REGION=us-east-1 \
   -e AWS_ACCESS_KEY_ID=... \
   -e AWS_SECRET_ACCESS_KEY=... \
-  vaultmark
+  canopy
 ```
 
 Or with an env file (see [`infra/.env.example`](../../infra/.env.example)):
 
 ```bash
-docker run -p 3000:3000 --env-file .env vaultmark
+docker run -p 3000:3000 --env-file .env canopy
 ```
 
 On AWS compute (EC2/ECS/EKS) omit the static keys and let the instance/task
@@ -97,6 +97,6 @@ docker compose -f infra/docker-compose.yml up
 
 `GET /api/health` returns 200 unconditionally — suitable as a container
 health/readiness probe, and unaffected by feature flags or `AUTH_MODE=oidc`.
-Vaultmark has **no built-in auth** unless `AUTH_MODE=oidc` is configured;
+Canopy has **no built-in auth** unless `AUTH_MODE=oidc` is configured;
 don't expose the port publicly without an authenticating proxy in front (or
 the built-in gate).

@@ -629,7 +629,7 @@ function introMessage(): Message {
     id: 'intro',
     role: 'assistant',
     text:
-      "Hi — I'm the Vaultmark assistant. Ask me anything about your vault. I'll search, cite my sources, and refuse if I can't find what you're asking about.\n\nUse the scope toggle above to control whether I read from shared content, your personal wiki, or both.",
+      "Hi — I'm the Canopy assistant. Ask me anything about your vault. I'll search, cite my sources, and refuse if I can't find what you're asking about.\n\nUse the scope toggle above to control whether I read from shared content, your personal wiki, or both.",
     cites: [],
     html: undefined,
   };

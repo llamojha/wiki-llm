@@ -76,7 +76,7 @@ manifest up to the same standard with a compare-and-swap + retry.
 | Purpose   | Command                  | Expected on success |
 |-----------|--------------------------|---------------------|
 | Typecheck | `pnpm typecheck`         | exit 0              |
-| Unit      | `pnpm --filter @vaultmark/web test` | all pass |
+| Unit      | `pnpm --filter @canopy/web test` | all pass |
 | E2E       | `pnpm build && pnpm test:e2e -- --grep "spaces|folders|upload"` | all pass |
 
 ## Scope
@@ -174,7 +174,7 @@ its seed/reset mechanism):
   callback's change (the lost-update this plan fixes).
 - exhaustion: `ConcurrencyError` thrown 3× → `updateStructure` rethrows.
 
-**Verify**: `pnpm --filter @vaultmark/web test` → all pass.
+**Verify**: `pnpm --filter @canopy/web test` → all pass.
 
 ## Test plan
 
