@@ -82,7 +82,7 @@ Plus a large amount of regex-heavy path classification in
 |-----------|--------------------------|---------------------|
 | Install   | `pnpm install`           | exit 0              |
 | Typecheck | `pnpm typecheck`         | exit 0              |
-| New: unit | `pnpm --filter @vaultmark/web test` | all tests pass |
+| New: unit | `pnpm --filter @canopy/web test` | all tests pass |
 
 ## Scope
 
@@ -96,7 +96,7 @@ Plus a large amount of regex-heavy path classification in
 - `web/lib/__tests__/markdown.test.ts` (create)
 - `web/lib/search.ts` and `web/lib/flags.ts` — ONLY if exporting a private
   function per Step 3's rule
-- Root `package.json` (add `"test:unit": "pnpm --filter @vaultmark/web test"`)
+- Root `package.json` (add `"test:unit": "pnpm --filter @canopy/web test"`)
 - `.github/workflows/ci.yml` (add the unit-test step to the existing `web` job)
 
 **Out of scope** (do NOT touch):
@@ -129,7 +129,7 @@ export default defineConfig({
 });
 ```
 
-**Verify**: `pnpm install` → exit 0; `pnpm --filter @vaultmark/web test` →
+**Verify**: `pnpm install` → exit 0; `pnpm --filter @canopy/web test` →
 "no test files found" (exit code may be non-zero — acceptable at this step).
 
 ### Step 2: Scope-isolation characterization tests
@@ -156,7 +156,7 @@ Name the postmortem rows explicitly, e.g.
 Also test `inferScopeFromKey`: `users/alice/x.md` → `{scope:'user', userId:'alice'}`;
 `generated/x.md` → shared; edge: `users/` prefix without id segment.
 
-**Verify**: `pnpm --filter @vaultmark/web test` → all pass.
+**Verify**: `pnpm --filter @canopy/web test` → all pass.
 
 ### Step 3: Search scope filter and flags
 
@@ -179,7 +179,7 @@ Also test `inferScopeFromKey`: `users/alice/x.md` → `{scope:'user', userId:'al
   case, padded whitespace) → false; any other value (`on`, `1`, `yes`,
   `banana`) → true.
 
-**Verify**: `pnpm --filter @vaultmark/web test` → all pass; `pnpm typecheck` → exit 0.
+**Verify**: `pnpm --filter @canopy/web test` → all pass; `pnpm typecheck` → exit 0.
 
 ### Step 4: vault-paths classification tests
 
@@ -191,7 +191,7 @@ non-`.md`, `raw/…`, `_system/…`, `users/<id>/raw/…`, `users/<id>/_system/�
 `displayPathForKey`: strips roots, joins with ` / `, personal-prefix special
 case.
 
-**Verify**: `pnpm --filter @vaultmark/web test` → all pass.
+**Verify**: `pnpm --filter @canopy/web test` → all pass.
 
 ### Step 5: Sanitization table for `renderMarkdown`
 
@@ -207,13 +207,13 @@ case.
 Keep assertions on the sanitized-output level (`expect(html).not.toContain(...)`),
 not on internal AST shapes.
 
-**Verify**: `pnpm --filter @vaultmark/web test` → all pass.
+**Verify**: `pnpm --filter @canopy/web test` → all pass.
 
 ### Step 6: Wire into CI
 
 In `.github/workflows/ci.yml`, `web` job, add `- run: pnpm test` between the
 `pnpm typecheck` and `pnpm build` steps (working-directory is already `web`).
-Add root script `"test:unit": "pnpm --filter @vaultmark/web test"`.
+Add root script `"test:unit": "pnpm --filter @canopy/web test"`.
 If plan 003 already merged a `web-e2e` job, leave it untouched.
 
 **Verify**: `python3 -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))"` → exit 0.
@@ -226,7 +226,7 @@ the pattern (table-driven `describe`/`it.each`).
 
 ## Done criteria
 
-- [ ] `pnpm --filter @vaultmark/web test` exits 0 with ≥5 test files
+- [ ] `pnpm --filter @canopy/web test` exits 0 with ≥5 test files
 - [ ] A test named to reference the postmortem/shared-vs-user leak exists and passes
 - [ ] `pnpm typecheck` exits 0
 - [ ] CI `web` job runs unit tests before build

@@ -50,7 +50,7 @@ unchecked. Several audit findings (unawaited promises risk, hook-heavy
 | Purpose   | Command                  | Expected on success |
 |-----------|--------------------------|---------------------|
 | Install   | `pnpm install`           | exit 0              |
-| Lint      | `pnpm --filter @vaultmark/web lint` | exit 0 |
+| Lint      | `pnpm --filter @canopy/web lint` | exit 0 |
 | Typecheck | `pnpm typecheck`         | exit 0              |
 | E2E       | `pnpm build && pnpm test:e2e` | all pass (only if Step 3 changed code) |
 
@@ -101,13 +101,13 @@ Ignore: `.next/`, `node_modules/`, `next-env.d.ts`.
 Point `"lint"` at `eslint .` (from `web/`). Root `lint` script already
 forwards.
 
-**Verify**: `pnpm --filter @vaultmark/web exec eslint . --max-warnings=9999` →
+**Verify**: `pnpm --filter @canopy/web exec eslint . --max-warnings=9999` →
 runs and reports (nonzero exit acceptable at this step); note the error/warn
 counts in your report.
 
 ### Step 2: Auto-fix pass
 
-`pnpm --filter @vaultmark/web exec eslint . --fix`. Commit ONLY if
+`pnpm --filter @canopy/web exec eslint . --fix`. Commit ONLY if
 `pnpm typecheck` and `pnpm build` stay green and the diff is mechanical
 (import ordering, prefer-const, etc.). Inspect the diff before committing.
 
@@ -129,7 +129,7 @@ Rules of engagement, per error:
 Target: `eslint .` exits 0 with warnings allowed (`--max-warnings` NOT set),
 errors at zero.
 
-**Verify**: `pnpm --filter @vaultmark/web lint` → exit 0; full
+**Verify**: `pnpm --filter @canopy/web lint` → exit 0; full
 `pnpm build && pnpm test:e2e` if ANY non-mechanical fix was made.
 
 ### Step 4: CI
@@ -146,7 +146,7 @@ list in the executor's report.
 
 ## Done criteria
 
-- [ ] `pnpm --filter @vaultmark/web lint` runs ESLint (not tsc) and exits 0
+- [ ] `pnpm --filter @canopy/web lint` runs ESLint (not tsc) and exits 0
 - [ ] `no-floating-promises` is `error` and passing
 - [ ] CI `web` job has a lint step
 - [ ] `pnpm typecheck` + build + (if code changed) e2e green

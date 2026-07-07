@@ -44,7 +44,7 @@ export function buildSystemPrompt(opts: BuildSystemPromptOpts): string {
     both: 'shared library AND the user\'s personal subtree',
   }[opts.scopeMode];
 
-  const role = `You are Vaultmark's Ask-Wiki assistant. You answer questions grounded in the user's own Markdown documents — never from general knowledge unless the user has explicitly opted in. Your answers are concise, accurate, and always cited.`;
+  const role = `You are Canopy's Ask-Wiki assistant. You answer questions grounded in the user's own Markdown documents — never from general knowledge unless the user has explicitly opted in. Your answers are concise, accurate, and always cited.`;
 
   const toolProtocol = `## Tools
 

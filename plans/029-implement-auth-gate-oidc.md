@@ -165,7 +165,7 @@ gate, **not** multi-user identity (that is Phase 6).
 
 ## Verification
 
-- `pnpm typecheck && pnpm test:unit && VAULT_BUCKET=build-placeholder pnpm build && pnpm test:e2e && pnpm --filter @vaultmark/web lint`.
+- `pnpm typecheck && pnpm test:unit && VAULT_BUCKET=build-placeholder pnpm build && pnpm test:e2e && pnpm --filter @canopy/web lint`.
 - Existing e2e suites stay green with `AUTH_MODE` unset (proves the default is
   invisible). The new auth-on smoke asserts redirect (page) / 401 (API) /
   `/api/health` 200 / allowlist-miss 403 / 401-before-404 ordering against a

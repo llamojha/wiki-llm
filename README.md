@@ -1,16 +1,16 @@
-# Vaultmark
+# Canopy
 
 An S3-backed Markdown knowledge portal for individuals and engineering teams.
 
 Markdown in object storage is the durable knowledge layer. The portal renders, searches, and lets a Bedrock-powered agent answer questions grounded in your own documents.
 
-> Vaultmark — an S3-backed Markdown vault for people, pipelines, and agents.
+> Canopy. Your own wiki, powered by LLM, backed by S3.
 
 ## Status
 
 Early MVP. Phases 0-5 are implemented in the single Next.js app shape tracked by `ROADMAP.md`: S3 read/search, personal wiki CRUD, Lambda-backed curation, and the Bedrock ask-wiki agent.
 
-- **Product spec:** [`prd_vaultmark_markdown_llm_wiki.md`](prd_vaultmark_markdown_llm_wiki.md)
+- **Product spec:** [`prd_canopy_markdown_llm_wiki.md`](prd_canopy_markdown_llm_wiki.md)
 - **Engineering plan:** [`ROADMAP.md`](ROADMAP.md)
 - **Documentation:** [`docs/`](docs/) — configuration, feature flags, deployment
 - **Contributing:** [`CONTRIBUTING.md`](CONTRIBUTING.md)
@@ -55,7 +55,7 @@ wiki-llm/
 ├── api/          FastAPI backend (archived — replaced by Route Handlers)
 ├── legacy/       Archived wiki-llm CLI (frozen reference)
 ├── ROADMAP.md    Engineering plan — phases are the contract
-└── prd_vaultmark_markdown_llm_wiki.md   Product spec
+└── prd_canopy_markdown_llm_wiki.md   Product spec
 ```
 
 ## Getting started
@@ -154,7 +154,7 @@ The app is a standard Next.js server — one stateless container, S3 as the only
 | ECS Fargate | [`docs/deploy/ecs-fargate.md`](docs/deploy/ecs-fargate.md) |
 | Vercel | Connect the repo, set env vars in the dashboard, deploy. |
 
-> **Security note:** Vaultmark has no built-in authentication. Put an auth layer (reverse proxy, ALB OIDC, VPN) in front of any deployment that isn't on a trusted network. See [`SECURITY.md`](SECURITY.md).
+> **Security note:** Canopy has no built-in authentication. Put an auth layer (reverse proxy, ALB OIDC, VPN) in front of any deployment that isn't on a trusted network. See [`SECURITY.md`](SECURITY.md).
 
 ## Contributing
 

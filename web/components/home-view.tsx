@@ -77,7 +77,7 @@ export function HomeView({ view, onOpen, onAsk, onAskPrompt, onUpload, prompts, 
       <div className="crumbs">
         <span className="crumb current">Home</span>
       </div>
-      <span className="tag-chip">vaultmark</span>
+      <span className="tag-chip">canopy</span>
       <span style={{ flex: 1 }}></span>
       <span style={{ color: 'var(--fg-3)', fontSize: 11.5, fontFamily: 'var(--font-mono)' }}>{today}</span>
     </div>

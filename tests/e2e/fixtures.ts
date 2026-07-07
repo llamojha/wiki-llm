@@ -5,7 +5,7 @@
  * the in-memory mock S3 store before each test. Keys are relative (no
  * VAULT_PREFIX) — the same format the API routes use throughout.
  *
- * The vault layout mirrors a real Vaultmark deployment:
+ * The vault layout mirrors a real Canopy deployment:
  *   - `_system/structure.json` — declares the `wiki` shared space + the
  *     default user. Required by `getStructure()` for tree/reindex.
  *   - `_system/index.md` / `_system/indexes/wiki.md` — catalogs read by the
@@ -66,7 +66,7 @@ tags: [onboarding, intro]
 
 # Onboarding Guide
 
-Welcome to **Vaultmark**. This guide covers the first-week checklist for new
+Welcome to **Canopy**. This guide covers the first-week checklist for new
 engineers.
 
 ## Day 1

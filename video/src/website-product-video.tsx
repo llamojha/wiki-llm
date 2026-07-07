@@ -37,12 +37,12 @@ const scenes = [
 
 const captions = [
   { from: 0, to: 150, text: 'Your team already writes Markdown.' },
-  { from: 150, to: 390, text: 'Vaultmark turns it into a searchable knowledge portal, while docs stay in S3.' },
+  { from: 150, to: 390, text: 'Canopy turns it into a searchable knowledge portal, while docs stay in S3.' },
   { from: 390, to: 690, text: 'Ask-Wiki answers from your vault with scope control and citations.' },
   { from: 690, to: 990, text: 'Upload Markdown, curate raw files, or publish authored pages directly.' },
   { from: 990, to: 1260, text: 'Search across runbooks, specs, generated summaries, and notes.' },
   { from: 1260, to: 1560, text: 'Save durable answers back as reviewed Markdown pages.' },
-  { from: 1560, to: 1800, text: 'Vaultmark: portable docs, searchable knowledge, AI-assisted work.' },
+  { from: 1560, to: 1800, text: 'Canopy: portable docs, searchable knowledge, AI-assisted work.' },
 ];
 
 type ScreenName = 'home' | 'ask-wiki' | 'upload' | 'search' | 'editor';
@@ -295,7 +295,7 @@ function Hero({ frame, duration, product, tagline }: { frame: number; duration: 
               marginBottom: 34,
             }}
           >
-            Real Vaultmark UI
+            Real Canopy UI
           </div>
           <h1 style={{ margin: 0, fontSize: 102, lineHeight: 0.98, letterSpacing: 0, fontWeight: 780 }}>{product}</h1>
           <p style={{ margin: '28px 0 0', color: colors.muted, fontSize: 35, lineHeight: 1.32 }}>{tagline}</p>
@@ -320,12 +320,12 @@ function Closing({ frame, duration }: { frame: number; duration: number }) {
     <Shell dark>
       <AbsoluteFill style={{ opacity, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 90 }}>
         <div style={{ transform: `translateY(${y}px)`, textAlign: 'center', maxWidth: 1180 }}>
-          <div style={{ color: '#93e0bb', fontSize: 24, fontWeight: 760, marginBottom: 24 }}>Vaultmark</div>
+          <div style={{ color: '#93e0bb', fontSize: 24, fontWeight: 760, marginBottom: 24 }}>Canopy</div>
           <h1 style={{ margin: 0, fontSize: 82, lineHeight: 1.04, letterSpacing: 0 }}>
             Portable docs. Searchable knowledge. AI-assisted work.
           </h1>
           <p style={{ margin: '28px auto 0', color: 'rgba(255,255,255,0.72)', fontSize: 30, lineHeight: 1.38, maxWidth: 920 }}>
-            Vaultmark keeps Markdown in S3 and turns it into a cited, usable knowledge portal.
+            Canopy keeps Markdown in S3 and turns it into a cited, usable knowledge portal.
           </p>
         </div>
       </AbsoluteFill>
@@ -384,7 +384,7 @@ export function WebsiteProductVideo({ product, tagline }: VideoProps) {
           duration={scenes[1].duration}
           eyebrow="Real workspace"
           title="Your Markdown vault becomes a portal."
-          body="Vaultmark opens with real S3 content: spaces, counts, recent docs, and a path into AI-assisted knowledge work."
+          body="Canopy opens with real S3 content: spaces, counts, recent docs, and a path into AI-assisted knowledge work."
           zoom={{ toScale: 1.18, origin: '46% 68%', x: -28, y: -42 }}
         />
       </Sequence>

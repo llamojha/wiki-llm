@@ -24,7 +24,7 @@ just work — but the AI **curation pipeline** (raw sources → LLM → curated 
 was deliberately deferred. Today, enabling `FEATURE_CURATE`/raw-upload in a
 folders-mode vault has no coherent home for `raw/`/`generated/` artifacts. The
 maintainer's decision (recorded on PR #71): **no errors on upload, no hidden
-`_vaultmark/` subtree** — instead, **provenance lives in frontmatter, not
+`_canopy/` subtree** — instead, **provenance lives in frontmatter, not
 folders**. This plan converts the curate write path to that model so curation
 works in folders mode without magic roots.
 
@@ -65,11 +65,11 @@ works in folders mode without magic roots.
 5. **Tests**: unit for the `origin` frontmatter round-trip and folders-mode
    ingest routing; e2e for curate start→finalize in a folders vault producing a
    page in the chosen folder with `origin: generated` (no `generated/` root, no
-   `_vaultmark/`).
+   `_canopy/`).
 
 ## STOP conditions
 
-- **STOP if you find yourself creating a hidden `_vaultmark/` subtree or a magic
+- **STOP if you find yourself creating a hidden `_canopy/` subtree or a magic
   top-level `generated/`/`raw/` folder** — the maintainer explicitly rejected
   both. Provenance is a frontmatter value in folders mode.
 - **STOP before touching provenance-mode curate behavior** — it must stay

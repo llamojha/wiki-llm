@@ -173,7 +173,7 @@ This means: **an agent that never calls `read_document` can never produce citati
 One prompt assembled per request:
 
 ```
-1. Role        — "You are Vaultmark's wiki assistant. Answer questions grounded
+1. Role        — "You are Canopy's wiki assistant. Answer questions grounded
                   in the user's own documents."
 
 2. Tool protocol

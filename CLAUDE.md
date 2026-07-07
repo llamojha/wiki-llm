@@ -1,10 +1,9 @@
-# Vaultmark — Codebase Guide
+# Canopy — Codebase Guide
 
-This repo builds **Vaultmark**, an S3-backed Markdown knowledge portal for individuals and engineering teams.
+This repo builds **Canopy**, an S3-backed Markdown knowledge portal for individuals and engineering teams.
 
-> **Pending rename: Vaultmark → Canopy.** Decided but not yet executed — see [`specs/rename-to-canopy.md`](specs/rename-to-canopy.md).
 
-- Product spec: [`prd_vaultmark_markdown_llm_wiki.md`](prd_vaultmark_markdown_llm_wiki.md) — goals, scope, data model
+- Product spec: [`prd_canopy_markdown_llm_wiki.md`](prd_canopy_markdown_llm_wiki.md) — goals, scope, data model
 - Engineering plan: [`ROADMAP.md`](ROADMAP.md) — phases, decisions log, sequencing
 - This file: codebase operating guide
 
@@ -25,7 +24,7 @@ in-memory Fuse.js search replaced Postgres FTS for the MVP.
 
 | Path | Status |
 |---|---|
-| `prd_vaultmark_markdown_llm_wiki.md` | Authoritative product spec |
+| `prd_canopy_markdown_llm_wiki.md` | Authoritative product spec |
 | `web/` | **Active app** — Next.js 16.2 portal + API route handlers |
 | `ingest/` | TypeScript CLI for vault init + batch ingest |
 | `infra/lambda/curate/` | AI curation Lambda (deployed out-of-band) |
@@ -38,7 +37,7 @@ in-memory Fuse.js search replaced Postgres FTS for the MVP.
 ## Repo layout
 
 ```
-wiki-llm/                  (repo root; product name is Vaultmark)
+wiki-llm/                  (repo root; product name is Canopy)
 ├── web/                   Next.js portal (frontend + API route handlers)
 ├── ingest/                TypeScript ingest CLI
 ├── video/                 Demo-video workspace
@@ -53,7 +52,7 @@ wiki-llm/                  (repo root; product name is Vaultmark)
 ├── specs/                 Phase acceptance specs
 ├── api/                   Archived FastAPI backend (reference)
 ├── legacy/                Archived wiki.py + Bedrock pipeline (frozen reference)
-└── prd_vaultmark_markdown_llm_wiki.md
+└── prd_canopy_markdown_llm_wiki.md
 ```
 
 ## Stack (pinned to 2026)

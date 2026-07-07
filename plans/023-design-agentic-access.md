@@ -5,7 +5,7 @@
 > implementation. Follow the steps, honor STOP conditions, and update
 > `plans/README.md` when done.
 >
-> **Drift check (run first)**: `git diff --stat fead8f9..HEAD -- web/lib/agent-tools.ts web/lib/flags.ts web/app/api/ prd_vaultmark_markdown_llm_wiki.md`
+> **Drift check (run first)**: `git diff --stat fead8f9..HEAD -- web/lib/agent-tools.ts web/lib/flags.ts web/app/api/ prd_canopy_markdown_llm_wiki.md`
 > On material drift in the tool/route layer, re-derive "Current state".
 
 ## Status
@@ -21,7 +21,7 @@
 ## Why this matters
 
 The maintainer wants external agents (Claude Code, IDE agents, other LLM
-tools) to work against a Vaultmark vault — the obvious shape is an MCP
+tools) to work against a Canopy vault — the obvious shape is an MCP
 server, but plain MCP-over-stdio/HTTP with ambient credentials worries them,
 reasonably: the portal currently has NO auth layer at all (single-user MVP by
 design), so any network-exposed agentic endpoint would be an unauthenticated
@@ -108,7 +108,7 @@ Compare, honestly, in a table + prose:
    compatibility (Claude Code/Desktop, IDEs speak it natively); security
    depends entirely on OUR server-side enforcement (annotations are hints).
 2. **MCP (stdio, local-only) against a local portal** — no network surface at
-   all; zero-config for the single-user case ("run `vaultmark mcp` next to
+   all; zero-config for the single-user case ("run `canopy mcp` next to
    your vault creds"); doesn't serve hosted deployments.
 3. **Plain REST facade + API keys** — simplest to reason about; every agent
    needs custom glue (loses the ecosystem).

@@ -82,12 +82,18 @@ test.describe('read paths', () => {
     const html = page.locator('html');
     const initial = (await html.getAttribute('data-theme')) ?? 'dark';
 
-    const toggle = page.locator('button[title="Toggle theme"]');
+    const toggle = page.locator('button[title^="Theme"]');
     await toggle.waitFor({ state: 'visible' });
     // Hydration races the click here. Wait a beat for React to attach the
     // onClick handler — once attached, `.click()` triggers the toggle.
     await page.waitForTimeout(300);
     await toggle.click();
+
+    // With theme plugins active, clicking opens a picker menu — select a
+    // different theme from the dropdown.
+    const target = initial === 'dark' ? 'Light' : 'Dark';
+    await page.locator('[role="menu"] [role="menuitemradio"]', { hasText: target }).click();
+
     await expect
       .poll(async () => html.getAttribute('data-theme'), { timeout: 5000 })
       .not.toBe(initial);

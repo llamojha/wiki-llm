@@ -73,7 +73,7 @@ public anyway.
 
 ## Tagline candidates (forcing the `rename-to-canopy.md` open question)
 
-The current Vaultmark tagline leans on "vault" imagery, which doesn't carry to
+The current Canopy tagline leans on "vault" imagery, which doesn't carry to
 "Canopy." Candidates (Canopy = shelter/overview/growth imagery), for the
 maintainer to choose in the rename spec:
 

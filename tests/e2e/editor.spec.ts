@@ -14,7 +14,7 @@ test.describe('editor', () => {
 
   test('creates a new personal page and reflects it in S3', async ({ page, request }) => {
     await gotoHome(page);
-    await page.locator('button[title="Toggle theme"]').waitFor();
+    await page.locator('button[title^="Theme"]').waitFor();
     await page.waitForTimeout(300);
 
     await page.locator('button[title="New page"]').click();
@@ -67,7 +67,7 @@ test.describe('editor', () => {
       '---\ntitle: Dup Target\n---\n# Dup Target\n';
     await seedVault(request, seed);
     await gotoHome(page);
-    await page.locator('button[title="Toggle theme"]').waitFor();
+    await page.locator('button[title^="Theme"]').waitFor();
     await page.waitForTimeout(300);
 
     await page.locator('button[title="New page"]').click();

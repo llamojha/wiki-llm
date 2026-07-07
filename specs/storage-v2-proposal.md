@@ -1,10 +1,10 @@
 > **Status: adjudicated (2026-07-05).** External architecture suggestion (2026-07-03) for a v2 storage model, now adjudicated in [`folder-first-vault.md` §8](folder-first-vault.md). Verdict: **adopt** its principles (metadata-driven provenance, two-layer metadata, derived views over two structure sources) while **contesting** ID-keyed filenames (slug-named files with a stable frontmatter `id` — portability wins) and resolving the four gaps (user-scope layout, migration, record/view ETag-CAS, scope creep). The provenance-rooted layout in ROADMAP.md stands until the `managed`-mode implementation spec lands; `folders` mode ships first.
 
-# Vaultmark Architecture
+# Canopy Architecture
 
 **WikiLLM pipeline + Confluence-style UX**
 
-S3 stays operationally stable. The Vaultmark site shows spaces and page trees. AI proposes pages; the system validates, writes, indexes, and records provenance.
+S3 stays operationally stable. The Canopy site shows spaces and page trees. AI proposes pages; the system validates, writes, indexes, and records provenance.
 
 ---
 
@@ -14,7 +14,7 @@ S3 stays operationally stable. The Vaultmark site shows spaces and page trees. A
 storage layout ≠ product structure ≠ provenance
 ```
 
-Vaultmark should not expose backend implementation concepts as the user-facing information architecture.
+Canopy should not expose backend implementation concepts as the user-facing information architecture.
 
 The site should feel like Confluence:
 
@@ -153,7 +153,7 @@ raw/src_01JABC/meta.json
 
 Canonical page store.
 
-Only valid Vaultmark pages live here.
+Only valid Canopy pages live here.
 
 Example:
 
@@ -196,13 +196,13 @@ Contains:
 - generated Markdown indexes
 - append-only events
 
-Users should not navigate this directly in the Vaultmark site.
+Users should not navigate this directly in the Canopy site.
 
 ---
 
 ## 4. Metadata model
 
-Vaultmark needs two metadata layers.
+Canopy needs two metadata layers.
 
 ```text
 frontmatter = user-facing page metadata
@@ -226,7 +226,7 @@ status: published
 labels:
   - aws
   - lambda
-  - vaultmark
+  - canopy
 ---
 
 # Lambda Curate Pipeline
@@ -423,7 +423,7 @@ Example:
   "space": "wiki",
   "parent_hint": "Platform",
   "slug": "lambda-curate-pipeline",
-  "labels": ["aws", "lambda", "vaultmark"],
+  "labels": ["aws", "lambda", "canopy"],
   "body": "..."
 }
 ```
@@ -517,7 +517,7 @@ User imports Confluence export
 
 ## 9. Derived views
 
-The Vaultmark site should not rebuild navigation by scanning paths on every request.
+The Canopy site should not rebuild navigation by scanning paths on every request.
 
 It should use derived views.
 
@@ -633,14 +633,14 @@ log.md = view
 
 ---
 
-## 11. Vaultmark site UX
+## 11. Canopy site UX
 
 The site should show product concepts, not storage concepts.
 
 Recommended navigation:
 
 ```text
-Vaultmark
+Canopy
   Sources
     Pending
     Processed
@@ -654,7 +654,7 @@ Vaultmark
       Kiro Notes
 
   Articles
-    How Vaultmark Works
+    How Canopy Works
 
   Personal
     Notes
@@ -714,7 +714,7 @@ Parent: Platform
 Status: Published
 Origin: AI-generated
 Sources: aws-notes.pdf
-Labels: aws, lambda, vaultmark
+Labels: aws, lambda, canopy
 ```
 
 Origin is useful as context, not as structure.

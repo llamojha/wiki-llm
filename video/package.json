@@ -1,5 +1,5 @@
 {
-  "name": "@vaultmark/video",
+  "name": "@canopy/video",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -9,8 +9,8 @@
     "studio": "remotion studio src/index.ts",
     "dev": "remotion studio src/index.ts",
     "compositions": "remotion compositions src/index.ts",
-    "still": "remotion still src/index.ts VaultmarkProductVideo out/poster.png --frame=120",
-    "render": "remotion render src/index.ts VaultmarkProductVideo out/vaultmark-product-video.mp4",
+    "still": "remotion still src/index.ts CanopyProductVideo out/poster.png --frame=120",
+    "render": "remotion render src/index.ts CanopyProductVideo out/canopy-product-video.mp4",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -1,6 +1,6 @@
 # Rename: Vaultmark → Canopy
 
-**Status:** Decided, not yet executed. This spec tracks the rename so it lands as one deliberate, reviewable change instead of drifting inconsistently across docs and code.
+**Status:** DONE (July 2026). This spec tracks the rename so it lands as one deliberate, reviewable change instead of drifting inconsistently across docs and code.
 
 ## Decision
 
@@ -27,16 +27,16 @@ The product is being renamed from **Vaultmark** to **Canopy**. This document rec
 
 ## Checklist (for the execution PR)
 
-- [ ] `README.md` — title, tagline, "Status" section, any inline "Vaultmark" references
-- [ ] `CLAUDE.md` — title and "Vaultmark — Codebase Guide" header, all inline references
-- [ ] `ROADMAP.md` — title (`# Vaultmark — Roadmap`)
-- [ ] `docs/**/*.md` — grep for `Vaultmark` and replace
-- [ ] `prd_vaultmark_markdown_llm_wiki.md` — decide: rename the file too, or leave as a historical artifact with a note pointing to the new name? (Recommend: leave the filename as a dated historical record, add a one-line note at the top pointing to the current name.)
-- [ ] `web/` UI strings — page `<title>`, any hardcoded "Vaultmark" in components
-- [ ] `package.json` `name` fields (workspace root + each package)
-- [ ] `.github/workflows/*.yml` — display names / comments referencing the product name
-- [ ] `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md` — inline references
-- [ ] Final repo-wide grep for `[Vv]aultmark` to catch stragglers before merging
+- [x] `README.md` — title, tagline, "Status" section, any inline "Vaultmark" references
+- [x] `CLAUDE.md` — title and "Vaultmark — Codebase Guide" header, all inline references
+- [x] `ROADMAP.md` — title (`# Vaultmark — Roadmap`)
+- [x] `docs/**/*.md` — grep for `Vaultmark` and replace
+- [x] `prd_canopy_markdown_llm_wiki.md` — decide: rename the file too, or leave as a historical artifact with a note pointing to the new name? (Recommend: leave the filename as a dated historical record, add a one-line note at the top pointing to the current name.)
+- [x] `web/` UI strings — page `<title>`, any hardcoded "Vaultmark" in components
+- [x] `package.json` `name` fields (workspace root + each package)
+- [x] `.github/workflows/*.yml` — display names / comments referencing the product name
+- [x] `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md` — inline references
+- [x] Final repo-wide grep for `[Vv]aultmark` to catch stragglers before merging
 
 ## Acceptance Criteria
 

@@ -2,3 +2,4 @@ packages:
   - 'web'
   - 'ingest'
   - 'video'
+  - 'site'

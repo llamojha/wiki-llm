@@ -68,7 +68,7 @@ boundary.
 | Purpose   | Command                  | Expected on success |
 |-----------|--------------------------|---------------------|
 | Typecheck | `pnpm typecheck`         | exit 0              |
-| Unit      | `pnpm --filter @vaultmark/web test` | all pass |
+| Unit      | `pnpm --filter @canopy/web test` | all pass |
 | E2E       | `pnpm build && pnpm test:e2e` | all pass |
 
 ## Scope
@@ -139,7 +139,7 @@ object → `''`; `fmStringOr` fallback on empty. Plus one integration-style case
 `matter('---\nupdated: 2026-07-03T10:00:00Z\ntitle: 42\n---\nbody')` (unquoted)
 → `fmString(data.updated)` is the ISO string, `fmStringOr(data.title,'x')` is `'42'`.
 
-**Verify**: `pnpm --filter @vaultmark/web test` → all pass.
+**Verify**: `pnpm --filter @canopy/web test` → all pass.
 
 ### Step 4: Full regression
 

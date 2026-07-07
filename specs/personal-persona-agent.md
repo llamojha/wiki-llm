@@ -75,7 +75,7 @@ web/lib/persona-scope.ts                   # new: allowlist-based isInAllowedSco
 
 ## Non-Functional Requirements
 
-- **Rate limiting is a hard prerequisite, not a nice-to-have.** Every other Bedrock-calling route in Vaultmark is behind the app's own (implicitly trusted, single-user) session. This is the first unauthenticated surface that spends the vault owner's Bedrock budget. Ship with a basic token-bucket (per IP + per persona) before enabling in any real deployment.
+- **Rate limiting is a hard prerequisite, not a nice-to-have.** Every other Bedrock-calling route in Canopy is behind the app's own (implicitly trusted, single-user) session. This is the first unauthenticated surface that spends the vault owner's Bedrock budget. Ship with a basic token-bucket (per IP + per persona) before enabling in any real deployment.
 - **Fail closed on scope.** `readDocument`/`searchVault` equivalents for personas must reject anything not explicitly in `selectedDocs`/`selectedSpaces`, mirroring the fail-closed pattern already in `agent-tools.ts::isInAllowedScope`.
 - **Unpublish must be instant and complete.** Setting `published: false` (or deleting the persona) must immediately 404 both the site route and the chat route — no caching window where a revoked persona is still answerable.
 

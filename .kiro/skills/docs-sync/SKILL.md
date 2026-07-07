@@ -1,12 +1,12 @@
 ---
 name: docs-sync
-description: Audit and fix documentation drift in Vaultmark (README.md, CLAUDE.md, docs/*.md, .kiro/steering/*.md) against the actual code. Use when the user asks to generate, update, sync, or check docs for accuracy, or asks "are the docs still correct".
+description: Audit and fix documentation drift in Canopy (README.md, CLAUDE.md, docs/*.md, .kiro/steering/*.md) against the actual code. Use when the user asks to generate, update, sync, or check docs for accuracy, or asks "are the docs still correct".
 ---
 
 # Docs Sync Skill
 
 ## Overview
-Vaultmark's documentation (`README.md`, `CLAUDE.md`, `docs/*.md`,
+Canopy's documentation (`README.md`, `CLAUDE.md`, `docs/*.md`,
 `.kiro/steering/*.md`) is hand-maintained prose, not generated from a
 template. It drifts from the code every time a flag default changes, a
 dependency is bumped, a route is added, or the repo layout shifts (see
@@ -136,5 +136,5 @@ nothing was wrong, say so plainly — don't manufacture busywork.
   wrong.
 - Prefer minimal diffs: fix the wrong sentence/row, don't restyle
   surrounding prose.
-- This skill is Vaultmark-specific (paths above are hardcoded to this repo's
+- This skill is Canopy-specific (paths above are hardcoded to this repo's
   structure) — it is not a portable doc generator.

@@ -155,8 +155,43 @@ export function validateProxyUrl(raw: string): string | null {
 
 /**
  * Validate that a Content-Type header looks like an image type.
+ * Rejects `image/svg+xml` because SVG can contain scripts that execute
+ * with same-origin access when served from the proxy.
  */
 export function isImageContentType(contentType: string | null): boolean {
   if (!contentType) return false;
-  return contentType.trim().toLowerCase().startsWith('image/');
+  const normalized = contentType.trim().toLowerCase();
+  if (normalized.startsWith('image/svg')) return false;
+  return normalized.startsWith('image/');
+}
+
+/**
+ * Resolve a hostname to IP addresses and validate that none are private.
+ * Returns an error string if the hostname resolves to a blocked address,
+ * or `null` if safe. Uses Node.js `dns.promises.lookup` with `all: true`
+ * to check every A/AAAA record.
+ */
+export async function validateResolvedHost(hostname: string): Promise<string | null> {
+  // Skip validation for IP literals — already checked by validateProxyUrl.
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(hostname)) return null;
+  if (hostname.includes(':') || /^\[?[0-9a-f:]+\]?$/i.test(hostname)) return null;
+
+  const { lookup } = await import('node:dns/promises');
+  let addresses: Array<{ address: string; family: number }>;
+  try {
+    addresses = await lookup(hostname, { all: true });
+  } catch {
+    return `DNS resolution failed for ${hostname}`;
+  }
+
+  for (const { address, family } of addresses) {
+    if (family === 4 && isPrivateIPv4(address)) {
+      return `Hostname ${hostname} resolves to private IP: ${address}`;
+    }
+    if (family === 6 && isPrivateIPv6(address)) {
+      return `Hostname ${hostname} resolves to private IP: ${address}`;
+    }
+  }
+
+  return null;
 }

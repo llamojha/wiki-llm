@@ -1,13 +1,13 @@
-# Contributing to Vaultmark
+# Contributing to Canopy
 
-Thanks for your interest in Vaultmark — an S3-backed Markdown knowledge portal.
+Thanks for your interest in Canopy — an S3-backed Markdown knowledge portal.
 
 ## Before you start
 
 Read these in order; they explain what the project is and where it's going:
 
-1. [`README.md`](README.md) — what Vaultmark does and how to run it
-2. [`prd_vaultmark_markdown_llm_wiki.md`](prd_vaultmark_markdown_llm_wiki.md) — product spec
+1. [`README.md`](README.md) — what Canopy does and how to run it
+2. [`prd_canopy_markdown_llm_wiki.md`](prd_canopy_markdown_llm_wiki.md) — product spec
 3. [`ROADMAP.md`](ROADMAP.md) — engineering plan. **The roadmap phases are the contract** — features outside the active phase need a conversation (open an issue) before a PR.
 
 ## Development setup

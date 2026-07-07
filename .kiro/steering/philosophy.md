@@ -1,13 +1,13 @@
 ---
-title: Vaultmark Development Philosophy
+title: Canopy Development Philosophy
 inclusion: always
 ---
 
-# Vaultmark Development Philosophy
+# Canopy Development Philosophy
 
 ## Core Mission
 
-Vaultmark makes Markdown in object storage the durable knowledge layer. The portal renders, searches, and lets a Bedrock-powered agent answer questions grounded in your own documents. Every design decision serves this: Markdown is the source of truth, S3 is the durable store, and the portal is the access layer.
+Canopy makes Markdown in object storage the durable knowledge layer. The portal renders, searches, and lets a Bedrock-powered agent answer questions grounded in your own documents. Every design decision serves this: Markdown is the source of truth, S3 is the durable store, and the portal is the access layer.
 
 ## Design Principles
 

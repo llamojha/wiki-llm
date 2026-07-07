@@ -1,4 +1,4 @@
-# Vaultmark — local container run.
+# Canopy — local container run.
 #
 # Next.js-only architecture: no Postgres (search is in-memory). The web image
 # is built from the repo root (pnpm workspace), so the build context is `..`.
@@ -33,12 +33,12 @@ services:
   # Optional local Keycloak for trying the built-in OIDC gate without standing
   # up an IdP by hand. Uncomment, then:
   #   1. start it, open http://localhost:8080 (admin/admin), create a realm
-  #      `vaultmark` and a confidential client `vaultmark` with redirect URI
+  #      `canopy` and a confidential client `canopy` with redirect URI
   #      http://localhost:3000/api/auth/callback and post-logout http://localhost:3000/
   #   2. add these to infra/.env (see docs/configuration.md → Authentication):
   #        AUTH_MODE=oidc
-  #        OIDC_ISSUER=http://localhost:8080/realms/vaultmark
-  #        OIDC_CLIENT_ID=vaultmark
+  #        OIDC_ISSUER=http://localhost:8080/realms/canopy
+  #        OIDC_CLIENT_ID=canopy
   #        OIDC_CLIENT_SECRET=<from Keycloak>
   #        AUTH_SESSION_SECRET=<openssl rand -hex 32>
   #        AUTH_ALLOWED_EMAILS=you@example.com

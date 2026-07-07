@@ -25,7 +25,7 @@ Generated curation output is controlled by `_system/structure.json` for shared i
   "spaces": [
     { "name": "wiki", "label": "Wiki", "indexed": true, "generated": true, "authored": true },
     { "name": "articles", "label": "Articles", "indexed": true, "generated": false, "authored": true },
-    { "name": "vaultmark", "label": "Vaultmark", "indexed": true, "generated": true, "authored": true }
+    { "name": "canopy", "label": "Canopy", "indexed": true, "generated": true, "authored": true }
   ],
   "defaultUser": "demo-user",
   "users": [
@@ -348,12 +348,12 @@ infra/lambda/curate/
 ## IAM
 
 Lambda execution role:
-- `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject`, `s3:ListBucket` on `arn:aws:s3:::vaultmark` and `arn:aws:s3:::vaultmark/*`
+- `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject`, `s3:ListBucket` on `arn:aws:s3:::canopy` and `arn:aws:s3:::canopy/*`
 - `bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream` on:
   - `arn:aws:bedrock:eu-central-1:<account-id>:inference-profile/eu.amazon.nova-2-lite-v1:0`
   - `arn:aws:bedrock:*::foundation-model/amazon.nova-2-lite-v1:0`
 
-Vercel IAM user (`vaultmark-vercel`):
+Vercel IAM user (`canopy-vercel`):
 - Existing S3 + Bedrock permissions
 - Add: `lambda:InvokeFunction` on the curate Lambda ARN
 

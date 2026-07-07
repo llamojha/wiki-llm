@@ -66,7 +66,7 @@ creating a non-`.md` key** — so this needs a design, not a patch.
 | Purpose   | Command                  | Expected on success |
 |-----------|--------------------------|---------------------|
 | Typecheck (spike) | `pnpm typecheck` | exit 0 |
-| Unit (spike) | `pnpm --filter @vaultmark/web test` | sanitizer table passes |
+| Unit (spike) | `pnpm --filter @canopy/web test` | sanitizer table passes |
 | E2E | `pnpm build && pnpm test:e2e` | all pass (defaults unchanged) |
 
 ## Scope

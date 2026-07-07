@@ -63,7 +63,7 @@ playwright-report/
 .env.*.local
 
 # Per-machine Claude Code settings
-.claude/settings.local.json
+.claude/
 
 # Deployment infra (kept out of repo for open source)
 infra-cdk/
@@ -73,4 +73,6 @@ infra-cdk/
 
 # Theme plugins are local config, not codebase (keep README + .example tracked)
 web/themes/*.css
-.vercel
+!web/themes/verdant.css
+!web/themes/autumn.css
+.vercel/

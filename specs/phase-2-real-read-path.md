@@ -8,7 +8,7 @@ Replace mock data with a live backend that reads Markdown from S3 and serves it 
 
 ## Vision
 
-A developer points Vaultmark at their S3 bucket (via env config), runs `docker compose up`, and browses their Markdown vault in the portal — rendered, searchable, and fast.
+A developer points Canopy at their S3 bucket (via env config), runs `docker compose up`, and browses their Markdown vault in the portal — rendered, searchable, and fast.
 
 ## Objective
 

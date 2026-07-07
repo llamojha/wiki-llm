@@ -2,7 +2,7 @@
 
 ## Layer shape
 
-Vaultmark is one Next.js app, not the two-service split the product spec
+Canopy is one Next.js app, not the two-service split the product spec
 originally planned:
 
 ```

@@ -64,7 +64,7 @@ about. Pure deletion, verified mechanically.
 |-----------|--------------------------|---------------------|
 | Callers   | `grep -rn "<name>" web ingest --include='*.ts' --include='*.tsx' \| grep -v node_modules` | only the definition |
 | Typecheck | `pnpm typecheck`         | exit 0              |
-| Ingest    | `pnpm --filter @vaultmark/ingest exec tsc --noEmit` (check ingest has a tsconfig; if it has its own typecheck script, use it) | exit 0 |
+| Ingest    | `pnpm --filter @canopy/ingest exec tsc --noEmit` (check ingest has a tsconfig; if it has its own typecheck script, use it) | exit 0 |
 | E2E       | `pnpm build && pnpm test:e2e` | all pass |
 
 ## Scope

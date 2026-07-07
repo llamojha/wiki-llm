@@ -1,4 +1,4 @@
-# Vaultmark Documentation
+# Canopy Documentation
 
 | Doc | What it covers |
 |---|---|
@@ -12,7 +12,7 @@
 Project-level docs at the repo root:
 
 - [`README.md`](../README.md) — overview and quickstart
-- [`prd_vaultmark_markdown_llm_wiki.md`](../prd_vaultmark_markdown_llm_wiki.md) — product spec
+- [`prd_canopy_markdown_llm_wiki.md`](../prd_canopy_markdown_llm_wiki.md) — product spec
 - [`ROADMAP.md`](../ROADMAP.md) — engineering plan; phases are the contract
 - [`CONTRIBUTING.md`](../CONTRIBUTING.md) — dev setup and conventions
 - [`SECURITY.md`](../SECURITY.md) — vulnerability reporting and hardening notes

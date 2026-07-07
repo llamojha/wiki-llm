@@ -1,5 +1,5 @@
 {
-  "name": "@vaultmark/ingest",
+  "name": "@canopy/ingest",
   "version": "0.0.0",
   "private": true,
   "type": "module",

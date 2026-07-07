@@ -8,7 +8,7 @@ Instead, use GitHub's [private vulnerability reporting](https://docs.github.com/
 
 ## Scope
 
-Vaultmark renders user-supplied Markdown and talks to AWS (S3, Bedrock, Lambda) with the credentials you give it. Reports we particularly care about:
+Canopy renders user-supplied Markdown and talks to AWS (S3, Bedrock, Lambda) with the credentials you give it. Reports we particularly care about:
 
 - Markdown sanitization bypasses (XSS through rendered documents)
 - Path traversal in document IDs / S3 key construction
@@ -18,7 +18,7 @@ Vaultmark renders user-supplied Markdown and talks to AWS (S3, Bedrock, Lambda) 
 
 ## Deployment hardening notes
 
-- Vaultmark has **no built-in authentication or multi-tenancy** — it assumes a trusted network boundary. Do not expose a deployment to the public internet without an auth layer in front (reverse-proxy auth, VPN, IAP, etc.).
+- Canopy has **no built-in authentication or multi-tenancy** — it assumes a trusted network boundary. Do not expose a deployment to the public internet without an auth layer in front (reverse-proxy auth, VPN, IAP, etc.).
 - Run with least-privilege IAM: scope S3 permissions to the vault bucket/prefix and Bedrock permissions to the model you use. Example policies live in `infra/ecs/` and `docs/deploy/`.
 - Disabled features return 404 via route guards, but the read path (`GET /api/docs`, tree, search index build) is always available to anyone who can reach the app.
 

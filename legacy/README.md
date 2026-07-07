@@ -1,6 +1,6 @@
 # legacy/ — archived `wiki-llm` implementation
 
-This directory holds the original `wiki-llm` codebase from before the pivot to **Vaultmark** (see [`../prd_vaultmark_markdown_llm_wiki.md`](../prd_vaultmark_markdown_llm_wiki.md) and [`../CLAUDE.md`](../CLAUDE.md)).
+This directory holds the original `wiki-llm` codebase from before the pivot to **Vaultmark** (see [`../prd_canopy_markdown_llm_wiki.md`](../prd_canopy_markdown_llm_wiki.md) and [`../CLAUDE.md`](../CLAUDE.md)).
 
 It is **frozen reference**, not part of the active build. Nothing in `web/`, `api/`, or `infra/` should import from here.
 

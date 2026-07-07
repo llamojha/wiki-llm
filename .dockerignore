@@ -20,6 +20,10 @@ portal/
 legacy/
 infra-cdk/
 
+# Landing page — static marketing site, not part of the Docker deliverable
+site/*
+!site/package.json
+
 # Local env and secrets
 **/.env
 **/.env.local
