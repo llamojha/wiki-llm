@@ -173,7 +173,7 @@ function walkDataImages(node: HastNode): void {
     node.children = node.children.filter((child) => {
       if (child.tagName === 'img') {
         const src = String(child.properties?.src ?? '');
-        if (src.startsWith('data:')) {
+        if (src.slice(0, 5).toLowerCase() === 'data:') {
           if (!DATA_IMAGE_ALLOWED_RE.test(src)) return false;
           if (src.length > DATA_IMAGE_MAX_SIZE) return false;
         }

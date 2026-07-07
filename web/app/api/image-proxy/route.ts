@@ -95,9 +95,8 @@ export async function GET(req: NextRequest) {
       break; // Non-redirect response — proceed.
     }
 
-    clearTimeout(timeout);
-
     if (!response || (response.status >= 300 && response.status < 400)) {
+      clearTimeout(timeout);
       return NextResponse.json(
         { detail: `Too many redirects (max ${IMAGE_PROXY_MAX_REDIRECTS})` },
         { status: 502 },
@@ -105,6 +104,7 @@ export async function GET(req: NextRequest) {
     }
 
     if (!response.ok) {
+      clearTimeout(timeout);
       return NextResponse.json(
         { detail: `Upstream returned ${response.status}` },
         { status: 502 },
@@ -113,15 +113,18 @@ export async function GET(req: NextRequest) {
 
     const contentType = response.headers.get('content-type');
     if (!isImageContentType(contentType)) {
+      clearTimeout(timeout);
       return NextResponse.json(
         { detail: `Upstream Content-Type is not an image: ${contentType}` },
         { status: 502 },
       );
     }
 
-    // Read the body with a size cap
+    // Read the body with a size cap — timeout stays active through body reads
+    // so a slow/stalling upstream cannot hold the route open indefinitely.
     const reader = response.body?.getReader();
     if (!reader) {
+      clearTimeout(timeout);
       return NextResponse.json({ detail: 'No response body' }, { status: 502 });
     }
 
@@ -134,6 +137,7 @@ export async function GET(req: NextRequest) {
       totalBytes += value.byteLength;
       if (totalBytes > IMAGE_PROXY_MAX_BYTES) {
         void reader.cancel();
+        clearTimeout(timeout);
         return NextResponse.json(
           { detail: `Image exceeds size limit (${IMAGE_PROXY_MAX_BYTES} bytes)` },
           { status: 502 },
@@ -148,6 +152,8 @@ export async function GET(req: NextRequest) {
       body.set(chunk, offset);
       offset += chunk.byteLength;
     }
+
+    clearTimeout(timeout);
 
     return new NextResponse(body, {
       status: 200,
