@@ -8,6 +8,7 @@ import {
   IMAGE_PROXY_TIMEOUT_MS,
   isImageContentType,
   validateProxyUrl,
+  validateResolvedHost,
 } from '@/lib/image-proxy';
 
 /**
@@ -50,6 +51,14 @@ export async function GET(req: NextRequest) {
     let response: Response | null = null;
 
     for (let i = 0; i <= IMAGE_PROXY_MAX_REDIRECTS; i++) {
+      // DNS rebinding protection: resolve hostname and validate IPs before fetching.
+      const resolvedHostname = new URL(currentUrl).hostname.replace(/^\[|\]$/g, '');
+      const dnsError = await validateResolvedHost(resolvedHostname);
+      if (dnsError) {
+        clearTimeout(timeout);
+        return NextResponse.json({ detail: dnsError }, { status: 400 });
+      }
+
       response = await fetch(currentUrl, {
         signal: controller.signal,
         headers: { Accept: 'image/*' },

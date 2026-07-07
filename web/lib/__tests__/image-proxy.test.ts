@@ -92,9 +92,14 @@ describe('isImageContentType', () => {
     expect(isImageContentType('image/jpeg')).toBe(true);
     expect(isImageContentType('image/gif')).toBe(true);
     expect(isImageContentType('image/webp')).toBe(true);
-    expect(isImageContentType('image/svg+xml')).toBe(true);
     expect(isImageContentType('Image/PNG')).toBe(true);
     expect(isImageContentType(' image/png')).toBe(true);
+  });
+
+  it('rejects SVG to prevent XSS', () => {
+    expect(isImageContentType('image/svg+xml')).toBe(false);
+    expect(isImageContentType('image/svg')).toBe(false);
+    expect(isImageContentType('Image/SVG+xml')).toBe(false);
   });
 
   it('rejects non-image types', () => {

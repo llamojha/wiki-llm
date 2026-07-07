@@ -88,9 +88,13 @@ function createTransform(options: VaultLinksOptions) {
         const src = String(child.properties?.src ?? '');
         if (isExternal(src)) {
           if (options.imageProxy) {
+            // Normalize protocol-relative URLs (//...) to https before proxying.
+            const proxySrc = src.startsWith('//')
+              ? `https:${src}`
+              : src;
             // Rewrite to server-side proxy instead of stripping.
             child.properties!.src = withBasePath(
-              `/api/image-proxy?url=${encodeURIComponent(src)}`,
+              `/api/image-proxy?url=${encodeURIComponent(proxySrc)}`,
             );
             return true;
           }
