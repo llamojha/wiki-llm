@@ -24,6 +24,7 @@ const PRIVATE_IPV4_RANGES: Array<{ base: number; mask: number }> = [
   { base: ipv4ToNum('172.16.0.0'), mask: 0xfff00000 },    // 172.16.0.0/12
   { base: ipv4ToNum('192.168.0.0'), mask: 0xffff0000 },   // 192.168.0.0/16
   { base: ipv4ToNum('169.254.0.0'), mask: 0xffff0000 },   // 169.254.0.0/16 (link-local / IMDS)
+  { base: ipv4ToNum('100.64.0.0'), mask: 0xffc00000 },    // 100.64.0.0/10 (CGNAT / cloud-internal)
   { base: ipv4ToNum('0.0.0.0'), mask: 0xff000000 },       // 0.0.0.0/8
 ];
 

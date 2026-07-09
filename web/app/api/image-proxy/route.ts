@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 import { flagGuard } from '@/lib/flags';
+import { requireSession } from '@/lib/auth-guard';
 import {
   IMAGE_PROXY_MAX_BYTES,
   IMAGE_PROXY_MAX_REDIRECTS,
@@ -22,13 +23,26 @@ import {
  * vault-links transform strips external images entirely (existing behavior).
  *
  * Security:
- *   - SSRF protection: rejects private/loopback IPs, localhost, .local, .internal
+ *   - Session gate: unlike document read paths (vault content the operator
+ *     already owns), this endpoint makes *outbound* fetches — behind the auth
+ *     gate it must not be an anonymous open proxy, so it requires a session
+ *     like every mutating route.
+ *   - SSRF protection: rejects private/loopback/CGNAT IPs, localhost, .local,
+ *     .internal
  *   - Manual redirect following: each Location target is validated before fetching
+ *   - DNS pre-validation: hostnames are resolved and every A/AAAA record
+ *     checked before fetching. Known residual: `fetch` re-resolves on connect,
+ *     so a short-TTL rebinding attacker can still race the check (TOCTOU).
+ *     Closing it needs connection-time IP pinning (custom undici dispatcher);
+ *     with the session gate the remaining exposure is authenticated users only.
  *   - Content-Type validation: response must start with `image/`
  *   - Size cap: 5MB max (IMAGE_PROXY_MAX_BYTES)
  *   - Timeout: 5s (IMAGE_PROXY_TIMEOUT_MS)
  */
 export async function GET(req: NextRequest) {
+  const gate = await requireSession(req);
+  if (gate) return gate;
+
   const blocked = flagGuard('imageProxy');
   if (blocked) return blocked;
 
