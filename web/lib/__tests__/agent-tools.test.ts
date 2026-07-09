@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
-import { isInAllowedScope, type ScopeMode } from '@/lib/agent-tools';
+import { isInAllowedScope, readDocument, type ScopeMode } from '@/lib/agent-tools';
+import { __resetWith } from '@/lib/s3-mock';
+import { __resetVaultMode } from '@/lib/vault-mode';
 
 /**
  * Characterization tests for the agent read-scope gate. `isInAllowedScope`
@@ -83,4 +85,41 @@ describe('isInAllowedScope', () => {
       expect(isInAllowedScope('users/bob/generated/wiki/x.md', mode, ALICE)).toBe(false);
     }
   });
+});
+
+/**
+ * `readDocument` must apply the same document-key allowlist as
+ * `GET /api/docs/{id}` (plan 002). Scope inference alone classifies
+ * `_system/…` and `raw/…` as shared, so without `isDocumentKey` a
+ * prompt-injected model could read vault system state through the tool.
+ */
+describe('readDocument key allowlist', () => {
+  beforeEach(() => {
+    __resetVaultMode();
+    __resetWith({
+      '_system/structure.json': '{"spaces":[]}', // sniffs the vault as provenance
+      'generated/wiki/readable.md': '---\ntitle: Readable\n---\n# Readable\n\nBody.',
+      'raw/upload.md': 'un-curated raw upload',
+    });
+  });
+
+  it('reads a real document in scope', async () => {
+    const doc = await readDocument({ doc_id: 'generated/wiki/readable.md' }, 'shared');
+    expect(doc.title).toBe('Readable');
+    expect(doc.body).toContain('Body.');
+  });
+
+  const blocked = [
+    '_system/structure.json',
+    '_system/usage-log.jsonl',
+    'raw/upload.md',
+    '_themes/evil.css',
+  ];
+  for (const key of blocked) {
+    it(`denies non-document key ${key} in every scope mode`, async () => {
+      for (const mode of ['shared', 'user', 'both'] as ScopeMode[]) {
+        await expect(readDocument({ doc_id: key }, mode)).rejects.toThrow(/denied/);
+      }
+    });
+  }
 });

@@ -9,6 +9,8 @@ import {
   resolveScope,
   type Scope,
 } from '@/lib/scope';
+import { isDocumentKey } from '@/lib/vault-paths';
+import { ensureVaultMode } from '@/lib/vault-mode';
 
 /**
  * Three tools exposed to the Ask-Wiki agent. Each is a direct in-process
@@ -189,15 +191,22 @@ export type ReadDocumentResult = {
  * (or merely curious) model trying to read `users/<other>/...` is rejected
  * before any S3 call. Throws on disallowed-scope or missing-key; the agent
  * loop catches and reports as tool_result error.
+ *
+ * Also enforces the document-key allowlist that `GET /api/docs/{id}` applies
+ * (plan 002): scope inference alone classifies `_system/…` and `raw/…` keys as
+ * shared, so without `isDocumentKey` a prompt-injected model could read vault
+ * system state, un-curated raw uploads, or `_themes/*.css` through this tool
+ * even though the HTTP read path rejects those same keys.
  */
 export async function readDocument(
   input: ReadDocumentInput,
   scopeMode: ScopeMode,
   userId?: string,
 ): Promise<ReadDocumentResult> {
-  if (!isInAllowedScope(input.doc_id, scopeMode, userId)) {
+  await ensureVaultMode(); // isDocumentKey is vault-mode-dependent
+  if (!isDocumentKey(input.doc_id) || !isInAllowedScope(input.doc_id, scopeMode, userId)) {
     throw new Error(
-      `read_document denied: "${input.doc_id}" is outside the active scope (${scopeMode}${userId ? `:${userId}` : ''}). Use search_vault to find documents you can read.`,
+      `read_document denied: "${input.doc_id}" is not a readable document in the active scope (${scopeMode}${userId ? `:${userId}` : ''}). Use search_vault to find documents you can read.`,
     );
   }
   const raw = await getObject(input.doc_id);
