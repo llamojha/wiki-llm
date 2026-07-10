@@ -76,10 +76,14 @@ function hasListedExtension(rel: string): boolean {
   return DOC_LIST_EXTENSIONS.some((ext) => rel.endsWith(ext));
 }
 
-/** List document keys (`.md`/`.html`) under the vault prefix, relative to prefix. */
-export async function listObjects(subPrefix = ''): Promise<string[]> {
-  trace('LIST', subPrefix || '<root>');
-  if (useMock) return mock.listObjects(subPrefix);
+/**
+ * Shared paginated ListObjectsV2 walk. Each public list function is this walk
+ * plus a key filter — the filter is the only thing that differs between them.
+ */
+async function listKeys(
+  subPrefix: string,
+  keep: (rel: string) => boolean,
+): Promise<string[]> {
   const searchPrefix = subPrefix
     ? `${prefix}/${subPrefix}`.replace(/^\//, '')
     : prefix;
@@ -100,12 +104,19 @@ export async function listObjects(subPrefix = ''): Promise<string[]> {
       const rel = key.startsWith(prefix)
         ? key.slice(prefix.length).replace(/^\//, '')
         : key;
-      if (hasListedExtension(rel)) keys.push(rel);
+      if (keep(rel)) keys.push(rel);
     }
     token = res.NextContinuationToken;
   } while (token);
 
   return keys;
+}
+
+/** List document keys (`.md`/`.html`) under the vault prefix, relative to prefix. */
+export async function listObjects(subPrefix = ''): Promise<string[]> {
+  trace('LIST', subPrefix || '<root>');
+  if (useMock) return mock.listObjects(subPrefix);
+  return listKeys(subPrefix, hasListedExtension);
 }
 
 /**
@@ -120,32 +131,7 @@ export async function listObjects(subPrefix = ''): Promise<string[]> {
 export async function listAllKeys(subPrefix = ''): Promise<string[]> {
   trace('LIST all', subPrefix || '<root>');
   if (useMock) return mock.listAllKeys(subPrefix);
-  const searchPrefix = subPrefix
-    ? `${prefix}/${subPrefix}`.replace(/^\//, '')
-    : prefix;
-
-  const keys: string[] = [];
-  let token: string | undefined;
-
-  do {
-    const res = await client().send(
-      new ListObjectsV2Command({
-        Bucket: bucket,
-        Prefix: searchPrefix,
-        ContinuationToken: token,
-      }),
-    );
-    for (const obj of res.Contents ?? []) {
-      const key = obj.Key ?? '';
-      const rel = key.startsWith(prefix)
-        ? key.slice(prefix.length).replace(/^\//, '')
-        : key;
-      if (rel) keys.push(rel);
-    }
-    token = res.NextContinuationToken;
-  } while (token);
-
-  return keys;
+  return listKeys(subPrefix, (rel) => Boolean(rel));
 }
 
 /**
@@ -161,32 +147,7 @@ export async function listAllKeys(subPrefix = ''): Promise<string[]> {
 export async function listCssObjects(subPrefix = ''): Promise<string[]> {
   trace('LIST css', subPrefix || '<root>');
   if (useMock) return mock.listCssObjects(subPrefix);
-  const searchPrefix = subPrefix
-    ? `${prefix}/${subPrefix}`.replace(/^\//, '')
-    : prefix;
-
-  const keys: string[] = [];
-  let token: string | undefined;
-
-  do {
-    const res = await client().send(
-      new ListObjectsV2Command({
-        Bucket: bucket,
-        Prefix: searchPrefix,
-        ContinuationToken: token,
-      }),
-    );
-    for (const obj of res.Contents ?? []) {
-      const key = obj.Key ?? '';
-      const rel = key.startsWith(prefix)
-        ? key.slice(prefix.length).replace(/^\//, '')
-        : key;
-      if (rel.endsWith('.css')) keys.push(rel);
-    }
-    token = res.NextContinuationToken;
-  } while (token);
-
-  return keys;
+  return listKeys(subPrefix, (rel) => rel.endsWith('.css'));
 }
 
 /** Fetch a single object by relative key. Returns UTF-8 content. */

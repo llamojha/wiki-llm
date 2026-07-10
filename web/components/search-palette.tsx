@@ -45,7 +45,7 @@ export function SearchPalette({ open, onClose, onOpenDoc, scope }: SearchPalette
         .finally(() => setLoading(false));
     }, 150);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [q]);
+  }, [q, scope]);
 
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); setSel((s) => Math.min(s + 1, results.length - 1)); }

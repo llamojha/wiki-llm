@@ -181,7 +181,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
-  }, [showToast]);
+  }, [showToast, flags.imageProxy]);
 
   const openDoc = useCallback(
     (id: string) => {
@@ -212,7 +212,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
         .catch(() => showToast('Failed to load document'))
         .finally(() => setDocLoading(false));
     },
-    [showToast],
+    [showToast, flags.imageProxy],
   );
 
   const onNewPage = () => {
