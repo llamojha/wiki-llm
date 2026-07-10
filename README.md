@@ -105,7 +105,7 @@ AWS credentials are picked up from the standard chain (`~/.aws/credentials`, ins
 
 ### Feature flags
 
-The ask-wiki agent (`FEATURE_AGENT`) ships **on** by default; every other feature (`FEATURE_UPLOAD`, `FEATURE_CURATE`, `FEATURE_REINDEX`, `FEATURE_EDITOR`, `FEATURE_SEARCH`, `FEATURE_STAR`, `FEATURE_PUBLISHING`) defaults **off** and is opted in per deployment by setting its `FEATURE_*` var (any value except `off`/`false`/`0`/`no`/`disabled`). Flags gate both the UI and the API routes. See [`docs/feature-flags.md`](docs/feature-flags.md).
+The ask-wiki agent (`FEATURE_AGENT`) ships **on** by default; every other feature (`FEATURE_UPLOAD`, `FEATURE_CURATE`, `FEATURE_REINDEX`, `FEATURE_EDITOR`, `FEATURE_SEARCH`, `FEATURE_STAR`, `FEATURE_PUBLISHING`, `FEATURE_IMAGE_PROXY`) defaults **off** and is opted in per deployment by setting its `FEATURE_*` var (any value except `off`/`false`/`0`/`no`/`disabled`). Flags gate both the UI and the API routes. See [`docs/feature-flags.md`](docs/feature-flags.md).
 
 ### Verification
 

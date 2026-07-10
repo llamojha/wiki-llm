@@ -17,6 +17,7 @@ The vault is the S3 location that holds your Markdown. One vault = one bucket
 | `VAULT_PREFIX` | no | `""` (bucket root) | Key prefix inside the bucket, e.g. `team-vault`. No leading/trailing slash. |
 | `VAULT_REGION` | no | `us-east-1` | AWS region of the bucket. |
 | `VAULT_ID` | no | `default` | Display id/name of the vault — shown as the top-bar pill and in `/api/vaults`. The pill is hidden while the value is unset/`default`. |
+| `VAULT_MODE` | no | sniffed | How the portal recognizes and organizes documents: `folders` (zero-config: top-level folders are the spaces), `provenance` (spaces declared in `_system/structure.json`, content under `generated/`/`authored/`), or `managed` (folders-shaped keys, tree assembled from frontmatter `parent_id`). Usually leave unset — the mode is sniffed from the bucket (managed marker → `structure.json` → generated/authored content → `folders`); set it only to pin the mode explicitly. |
 
 ### Audit & usage logs
 
@@ -62,6 +63,7 @@ Used by the ask-wiki agent (`FEATURE_AGENT`) and the ingest/curation pipeline.
 | `BEDROCK_MODEL` | no | `eu.amazon.nova-2-lite-v1:0` | Model id or cross-region inference profile for the ask-wiki agent. |
 | `BEDROCK_REGION` | no | `eu-central-1` | Region for Bedrock calls. |
 | `INGEST_MODEL` | no | `eu.amazon.nova-2-lite-v1:0` | Model used by the inline ingest path. |
+| `CHAT_RATE_LIMIT` | no | `20` | Max `POST /api/chat` requests per minute per principal (session subject when the auth gate is on, else client IP). Every chat request invokes Bedrock, so this is the cost backstop. `0`/`off` disables. In-memory fixed window — per-instance best-effort on serverless. |
 
 > The defaults assume an EU deployment using the `eu.` cross-region inference
 > profile. For a US deployment set `BEDROCK_MODEL=us.amazon.nova-2-lite-v1:0`
@@ -136,11 +138,11 @@ proxy / ALB OIDC / VPN in front, per [`SECURITY.md`](../SECURITY.md)). When on,
 it answers a single binary question — *may this person enter the portal at
 all?* — via any OpenID Connect provider. **Keycloak and AWS Cognito are both
 first-class and verified.** It is not multi-user identity (that is a later
-phase); everyone who passes the allowlist sees the same vault.
+phase); everyone who signs in sees the same vault.
 
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
-| `AUTH_MODE` | no | `none` | `none` (open portal — unchanged behavior), or `oidc` (built-in gate). `proxy` is reserved for a future trusted-header mode. |
+| `AUTH_MODE` | no | `none` | `none` (open portal — unchanged behavior), or `oidc` (built-in gate). `proxy` is reserved for a future trusted-header mode — its `AUTH_PROXY_SHARED_SECRET` is parsed but **not yet enforced**; do not rely on it. |
 | `OIDC_ISSUER` | in `oidc` | — | Issuer URL. Keycloak: `https://<host>/realms/<realm>`. Cognito: `https://cognito-idp.<region>.amazonaws.com/<userPoolId>`. Discovery is read from `<issuer>/.well-known/openid-configuration`. |
 | `OIDC_CLIENT_ID` | in `oidc` | — | OIDC client (app client) id. |
 | `OIDC_CLIENT_SECRET` | in `oidc` | — | Client secret (confidential client). |

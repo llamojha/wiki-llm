@@ -30,3 +30,5 @@ data:
   # FEATURE_SEARCH: "on"
   # FEATURE_STAR: "on"
   # FEATURE_PUBLISHING: "on"
+  # External-image proxy for HTML documents (server-side outbound fetches).
+  # FEATURE_IMAGE_PROXY: "on"

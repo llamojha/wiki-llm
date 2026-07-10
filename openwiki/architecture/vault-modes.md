@@ -1,6 +1,6 @@
-# Vault modes: provenance vs folders
+# Vault modes: provenance, folders, managed
 
-## Why two modes exist
+## Why multiple modes exist
 
 The original design required a declared-spaces manifest
 (`_system/structure.json`) before any content could be recognized — good for
@@ -10,7 +10,7 @@ folder-first vault effort, `specs/folder-first-vault.md`, `plans/021`). Rather
 than replace the original layout, the portal now supports both and resolves
 which one it's looking at per deployment.
 
-`web/lib/vault-mode.ts` documents the two modes and their resolution order:
+`web/lib/vault-mode.ts` documents the three modes and their resolution order:
 
 - **`provenance`** — the original layout. Documents live under `generated/`,
   `authored/`, or the per-user `users/<id>/…` mirrors; spaces are declared in
@@ -19,13 +19,21 @@ which one it's looking at per deployment.
 - **`folders`** — the zero-config on-ramp. Any `.md`/`.html` under the vault
   (outside `_system/`) is a document, and the top-level folders *are* the
   spaces.
+- **`managed`** — the metadata-derived evolution (`plans/027`,
+  `specs/managed-mode.md`). Recognizes the same keys as `folders`, but the
+  page tree comes from a frontmatter `parent_id` edge (falling back to the
+  key path when absent), so re-parenting a page is a one-file metadata edit
+  rather than an object move.
 
 Resolution order (highest wins):
-1. Explicit `VAULT_MODE=folders|provenance` env var.
-2. Sniff — `provenance` if `_system/structure.json` exists, or any
-   `generated/`/`authored/` document is present, or a `users/<id>/(generated|authored)/`
-   key exists (covers the old personal-editor-only vault shape, which has no
-   root structure.json or shared docs but is still provenance). Otherwise
+1. Explicit `VAULT_MODE=folders|provenance|managed` env var.
+2. Sniff — `managed` if the `_system/managed.json` marker exists (managed
+   recognizes the same keys as folders, so only this explicit marker —
+   written by reconcile/migration — distinguishes them); else `provenance`
+   if `_system/structure.json` exists, or any `generated/`/`authored/`
+   document is present, or a `users/<id>/(generated|authored)/` key exists
+   (covers the old personal-editor-only vault shape, which has no root
+   structure.json or shared docs but is still provenance). Otherwise
    `folders`.
 3. Default `folders`.
 
@@ -83,13 +91,13 @@ manifests, and logs, never user-visible documents.
   (`plans/026`) is that provenance lives in frontmatter, not in magic paths,
   to keep folders mode's promise of "any folder of Markdown just works"
   intact.
-- Managed mode — a third mode with a metadata-derived tree instead of either
-  folder scanning or a structure.json manifest — is adjudicated at the
-  decision level (`specs/folder-first-vault.md` §8,
-  `specs/storage-v2-proposal.md`) but not implemented; `plans/027` tracks the
-  implementation and calls for a dedicated `specs/managed-mode.md` (not yet
-  written) before any code. Don't assume a third `VaultMode` value exists in
-  code today.
+- Managed mode — the third mode with a metadata-derived tree instead of
+  either folder scanning or a structure.json manifest — **is implemented**
+  (`plans/027`, design record `specs/managed-mode.md`). The tree is
+  assembled from frontmatter `parent_id` (`web/lib/managed-tree.ts`), with
+  `POST /api/docs/reparent` editing the edge and
+  `POST /api/managed/reconcile` rebuilding page records. A vault is promoted
+  by the `_system/managed.json` marker.
 
 ## Source references
 

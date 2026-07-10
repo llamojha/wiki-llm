@@ -64,7 +64,9 @@ Uploading Markdown/source files into the vault, and managing the spaces
   is reserved (cannot be renamed or deleted).
 - **UI when off:** upload buttons in the sidebar, document toolbar, home view,
   and the Upload/Folders tabs of the library modal disappear.
-- **Routes gated:** `POST /api/upload`, and `GET/POST/PATCH/DELETE /api/spaces`.
+- **Routes gated:** `POST /api/upload`, `POST/PATCH/DELETE /api/spaces`, and
+  `POST/PATCH/DELETE /api/folders` (folders-mode folder management — the GETs
+  are read paths and stay available).
 - **Turn off when:** the vault is populated and organized out-of-band (CI, the
   ingest CLI, direct S3 sync) and the portal should be read-only for sources.
 
@@ -76,7 +78,9 @@ running in the curate Lambda.
 - **UI when off:** curation controls in the sidebar and library modal
   disappear.
 - **Routes gated:** `POST /api/curate/start`, `GET /api/curate/status`,
-  `POST /api/curate/finalize`, `POST /api/curate/cancel`.
+  `POST /api/curate/finalize`, `POST /api/curate/cancel`, and
+  `POST /api/synthesize` (cross-cluster synthesis pass; auto-trigger via
+  `FEATURE_CURATE_AUTOSYNTH`).
 - **Turn off when:** you haven't deployed the curate Lambda
   (`CURATE_LAMBDA_ARN` unset) or don't want LLM-generated content.
 - **Depends on:** `CURATE_LAMBDA_ARN`, `CURATE_LAMBDA_REGION`,
@@ -88,7 +92,9 @@ Rebuilding the vault's generated `index.md` / search metadata from S3.
 
 - **UI when off:** the re-index button in the sidebar and library modal
   disappears.
-- **Routes gated:** `POST /api/reindex`.
+- **Routes gated:** `POST /api/reindex`, and `POST /api/managed/reconcile`
+  (managed-mode page-record reconciliation — the same "rebuild derived state
+  from S3" trust level).
 - **Turn off when:** indexes are maintained by the ingest pipeline only and
   you don't want portal users triggering S3 writes.
 
@@ -99,7 +105,8 @@ Creating, editing, and deleting wiki pages from the portal.
 - **UI when off:** "New page" (sidebar) and "Edit" buttons (document toolbar,
   generated-doc reader) disappear.
 - **Routes gated:** `POST /api/docs`, `PUT /api/docs/{id}`,
-  `DELETE /api/docs/{id}`.
+  `DELETE /api/docs/{id}`, and `POST /api/docs/reparent` (managed-mode
+  re-parenting — a frontmatter edit, so it carries editor trust).
 - **Turn off when:** publishing a read-only wiki, or content changes must go
   through git/the ingest pipeline instead of the portal.
 
@@ -135,6 +142,23 @@ agent persona — see [`specs/personal-persona-agent.md`](../specs/personal-pers
   correctly is a hard prerequisite before either phase ships — see the open
   question in the Phase 9 spec about whether persona chat needs its own
   dedicated flag separate from static publishing.
+
+### `FEATURE_IMAGE_PROXY` — External-image proxy for HTML documents
+
+Server-side proxy that fetches external `<img>` targets on the reader's
+behalf so imported HTML documents render without the browser making
+outbound requests (plan 028). When off, the vault-links transform strips
+external images entirely.
+
+- **UI when off:** no dedicated UI — external images in HTML documents are
+  stripped at render time instead of proxied.
+- **Routes gated:** `GET /api/image-proxy`.
+- **Turn off when:** you don't want the server making outbound HTTP fetches
+  at all (strictest posture; this is why it defaults off).
+- **Security:** the route requires a session (when the auth gate is on) and
+  applies SSRF protections — private/loopback/CGNAT IP blocking with DNS
+  pre-validation, per-hop redirect validation, image-only content types
+  (no SVG), a 5 MB size cap, and a 5 s timeout.
 
 ## Recipes
 
