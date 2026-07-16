@@ -357,7 +357,7 @@ The vault layout, scope plumbing, and per-user isolation primitives are already 
 #### Still deferred for true multi-tenant SaaS
 
 - Multi-tenant S3 layout (`tenants/<tenant>/users/<user>/`)
-- Auth: Keycloak / OIDC / SAML
+- Per-user/per-group authorization *within* the app — differentiated access by Keycloak group/role, not just login gating. See "Auth — current state vs. Phase 6 scope" below.
 - Search backend swap to OpenSearch or Meilisearch
 - RDS Postgres, EKS workers / SQS consumers
 - Admin dashboard, billing, audit logs, tenant isolation
@@ -366,6 +366,36 @@ The vault layout, scope plumbing, and per-user isolation primitives are already 
 - Event-driven ingest: S3 PutObject event on `*/raw/` → triggers ingest automatically (Lambda or background worker). Eliminates need for manual CLI runs or portal trigger buttons. Includes retry logic, dead-letter queue, and status reporting back to the portal.
 - Vault structure schema (`structure.json`) improvements: UI for managing spaces (create/rename/reorder/delete), drag-and-drop file moves between spaces, per-space permissions, schema versioning and migration, validation on upload/write to enforce declared structure
 - Per-user `structure.json`: today the space list is global. Each user gets their own space declarations once we have real multi-user. `personal` is currently a reserved space name that's only meaningful in user scope.
+
+#### Auth — current state vs. Phase 6 scope
+
+Plans 024/029 shipped a built-in OIDC gate (Keycloak/Cognito, `AUTH_MODE=oidc`)
+ahead of Phase 6. This updates the original "Auth: Keycloak / OIDC / SAML"
+deferred item above — worth being precise about what shipped and what didn't:
+
+- The built-in gate answers one binary question: *can this person
+  authenticate at all?* Anyone who passes IdP login gets the same portal,
+  same permissions as everyone else — there is no per-user/group
+  differentiation inside the app today.
+- An app-level allowlist (`AUTH_ALLOWED_EMAILS`/`AUTH_ALLOWED_SUBJECTS`) was
+  drafted alongside the gate but **deliberately removed before shipping**: it
+  double-gated the same admit/deny decision the identity provider (or an
+  upstream authenticating proxy) already makes. Access control for who gets a
+  session is delegated entirely to the IdP — control it by controlling who
+  can obtain a token there (e.g. Keycloak client/group scoping).
+- **External edge auth is a fully supported, separate pattern from the
+  built-in gate** — an ALB `authenticate-oidc` action (or any authenticating
+  reverse proxy) in front of the container, backed by Keycloak, with
+  `AUTH_MODE` left unset on the app itself. The portal never sees an
+  unauthenticated request and does no auth of its own; this is the pattern
+  used for Fargate deployments that already have Keycloak fronting an ALB.
+- **What's still genuinely Phase 6 work:** differentiated access *within* the
+  app once a request is past whichever login gate is in front of it — e.g.
+  restricting which vault content or features a given Keycloak group can see,
+  or routing a session to its own `users/<id>/` personal space based on
+  identity rather than the single build-time `VAULT_USER_ID`. Neither the
+  built-in gate nor an external ALB/Keycloak setup does this today; both only
+  decide "in or out," not "in as whom, with what access."
 
 **Acceptance:** see `specs/phase-6-saas.md`
 
