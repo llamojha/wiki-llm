@@ -100,7 +100,9 @@ docker compose -f infra/docker-compose.yml up
 
 Configuration reference: [`docs/configuration.md`](docs/configuration.md).
 Theming (drop-in CSS theme plugins in `web/themes/`): [`docs/theming.md`](docs/theming.md).
-Deployment guides (Docker, Kubernetes, ECS Fargate): [`docs/deploy/`](docs/deploy/).
+Deployment guides (Vercel, Docker, Kubernetes, ECS Fargate): [`docs/deploy/`](docs/deploy/).
+Running two instances (private wiki + public showcase) from this one repo:
+[`docs/deploy/vercel.md`](docs/deploy/vercel.md).
 
 ## Feature flags
 
