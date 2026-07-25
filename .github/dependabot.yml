@@ -21,6 +21,16 @@ updates:
         update-types: [version-update:semver-major]
       - dependency-name: react-dom
         update-types: [version-update:semver-major]
+      # TS 7 is the native Go port: it drops the JS compiler API that
+      # Next.js and typescript-eslint load. Revisit when typescript-eslint
+      # supports TS >= 7.1 (typescript-eslint#10940).
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      # ESLint 10 changed the rule context API; eslint-plugin-react (via
+      # eslint-config-next 16.2) crashes on it. Revisit when
+      # eslint-config-next ships ESLint 10 support.
+      - dependency-name: eslint
+        update-types: [version-update:semver-major]
 
   # Curate Lambda (own package.json, deployed out-of-band)
   - package-ecosystem: npm
@@ -30,6 +40,11 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+    # Same TS 7 reasoning as the root workspace above — ts-jest loads the
+    # JS compiler API that TS 7 no longer ships.
+    ignore:
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
 
   # Archived FastAPI backend — CI still runs its tests, so keep it patched,
   # but monthly to limit noise on archived code.
