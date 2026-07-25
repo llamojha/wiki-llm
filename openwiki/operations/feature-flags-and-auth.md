@@ -2,10 +2,10 @@
 
 ## Feature flags
 
-`web/lib/flags.ts` is the single source of truth for eight toggleable
+`web/lib/flags.ts` is the single source of truth for nine toggleable
 features (`agent`, `upload`, `curate`, `reindex`, `editor`, `search`,
-`star`, `publishing`), each controlled by its own `FEATURE_*` env var, read
-once at module load.
+`star`, `publishing`, `imageProxy`), each controlled by its own `FEATURE_*`
+env var, read once at module load.
 
 Resolution per flag: if the env var is set, it wins — ON unless its value is
 one of the falsy tokens (`off`/`false`/`0`/`no`/`disabled`). If the env var

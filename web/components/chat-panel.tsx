@@ -184,6 +184,79 @@ export function ChatPanel({ open, onClose, onOpenDoc, onDraftFromChat, contextDo
     );
   }, []);
 
+  const handleEvent = useCallback(
+    (ev: { type: string; [k: string]: unknown }, msgId: string) => {
+      switch (ev.type) {
+        case 'text': {
+          const delta = String(ev.delta ?? '');
+          // Authoritative buffer (Fix #3 — sync read after stream ends).
+          textBufRef.current.set(msgId, (textBufRef.current.get(msgId) ?? '') + delta);
+          patchMessage(msgId, (m) => ({ text: m.text + delta }));
+          // Text starts flowing → clear any stale activity indicator.
+          if (activityRef.current.has(msgId)) {
+            activityRef.current.delete(msgId);
+            forceTick((n) => n + 1);
+          }
+          break;
+        }
+        case 'tool_use': {
+          // Fix #8 — surface live activity. Map tool name + (partial) input
+          // to a human-readable indicator.
+          const name = String(ev.name ?? '');
+          const input = (ev.input ?? {}) as Record<string, unknown>;
+          let label = name;
+          if (name === 'search_vault' && input.query) label = `searching for "${String(input.query)}"…`;
+          else if (name === 'read_document' && input.doc_id) label = `reading ${String(input.doc_id).split('/').pop()}…`;
+          else if (name === 'propose_page') label = 'drafting a new page…';
+          activityRef.current.set(msgId, label);
+          forceTick((n) => n + 1);
+          break;
+        }
+        case 'cite':
+          patchMessage(msgId, (m) => ({
+            cites: [
+              ...m.cites,
+              { id: String(ev.id ?? ''), title: String(ev.title ?? ''), section: String(ev.section ?? '') },
+            ],
+          }));
+          break;
+        case 'propose_page':
+          patchMessage(msgId, {
+            proposal: {
+              slug: String(ev.slug ?? ''),
+              title: String(ev.title ?? ''),
+              body: String(ev.body ?? ''),
+            },
+          });
+          break;
+        case 'refuse':
+          patchMessage(msgId, {
+            refuse: {
+              canForce: Boolean(ev.canForce),
+              message: String(ev.message ?? ''),
+            },
+          });
+          break;
+        case 'warning':
+          patchMessage(msgId, {
+            warning: {
+              reason: String(ev.reason ?? ''),
+              message: String(ev.message ?? ''),
+            },
+          });
+          break;
+        case 'error':
+          patchMessage(msgId, { error: String(ev.detail ?? 'agent error'), streaming: false });
+          break;
+        case 'done':
+          // Streaming flag is cleared once renderMarkdown completes below.
+          break;
+        // tool_use / tool_result are informational; ignore for now.
+      }
+    },
+    [patchMessage],
+  );
+
   const send = useCallback(
     async (text: string, opts?: { forceUnsourcedGeneration?: boolean; questionOverride?: string }) => {
       const trimmed = text.trim();
@@ -287,80 +360,7 @@ export function ChatPanel({ open, onClose, onOpenDoc, onDraftFromChat, contextDo
         patchMessage(assistantMsg.id, { streaming: false });
       }
     },
-    [scopeMode, contextDoc, patchMessage, messages],
-  );
-
-  const handleEvent = useCallback(
-    (ev: { type: string; [k: string]: unknown }, msgId: string) => {
-      switch (ev.type) {
-        case 'text': {
-          const delta = String(ev.delta ?? '');
-          // Authoritative buffer (Fix #3 — sync read after stream ends).
-          textBufRef.current.set(msgId, (textBufRef.current.get(msgId) ?? '') + delta);
-          patchMessage(msgId, (m) => ({ text: m.text + delta }));
-          // Text starts flowing → clear any stale activity indicator.
-          if (activityRef.current.has(msgId)) {
-            activityRef.current.delete(msgId);
-            forceTick((n) => n + 1);
-          }
-          break;
-        }
-        case 'tool_use': {
-          // Fix #8 — surface live activity. Map tool name + (partial) input
-          // to a human-readable indicator.
-          const name = String(ev.name ?? '');
-          const input = (ev.input ?? {}) as Record<string, unknown>;
-          let label = name;
-          if (name === 'search_vault' && input.query) label = `searching for "${String(input.query)}"…`;
-          else if (name === 'read_document' && input.doc_id) label = `reading ${String(input.doc_id).split('/').pop()}…`;
-          else if (name === 'propose_page') label = 'drafting a new page…';
-          activityRef.current.set(msgId, label);
-          forceTick((n) => n + 1);
-          break;
-        }
-        case 'cite':
-          patchMessage(msgId, (m) => ({
-            cites: [
-              ...m.cites,
-              { id: String(ev.id ?? ''), title: String(ev.title ?? ''), section: String(ev.section ?? '') },
-            ],
-          }));
-          break;
-        case 'propose_page':
-          patchMessage(msgId, {
-            proposal: {
-              slug: String(ev.slug ?? ''),
-              title: String(ev.title ?? ''),
-              body: String(ev.body ?? ''),
-            },
-          });
-          break;
-        case 'refuse':
-          patchMessage(msgId, {
-            refuse: {
-              canForce: Boolean(ev.canForce),
-              message: String(ev.message ?? ''),
-            },
-          });
-          break;
-        case 'warning':
-          patchMessage(msgId, {
-            warning: {
-              reason: String(ev.reason ?? ''),
-              message: String(ev.message ?? ''),
-            },
-          });
-          break;
-        case 'error':
-          patchMessage(msgId, { error: String(ev.detail ?? 'agent error'), streaming: false });
-          break;
-        case 'done':
-          // Streaming flag is cleared once renderMarkdown completes below.
-          break;
-        // tool_use / tool_result are informational; ignore for now.
-      }
-    },
-    [patchMessage],
+    [scopeMode, contextDoc, patchMessage, messages, handleEvent],
   );
 
   // Cross-component "ask" event from elsewhere in the app (e.g. home view).

@@ -66,7 +66,8 @@ ENV FEATURE_AGENT=on \
     FEATURE_EDITOR=off \
     FEATURE_SEARCH=off \
     FEATURE_STAR=off \
-    FEATURE_PUBLISHING=off
+    FEATURE_PUBLISHING=off \
+    FEATURE_IMAGE_PROXY=off
 
 COPY --from=builder /app/web/.next/standalone ./
 COPY --from=builder /app/web/.next/static ./web/.next/static

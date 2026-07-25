@@ -119,13 +119,14 @@ Hiding the button alone is not control — the route guard is the enforcement.
 | Env var | Feature | Routes gated |
 |---|---|---|
 | `FEATURE_AGENT` | Ask-Wiki chat | `POST /api/chat` |
-| `FEATURE_UPLOAD` | File upload + folder management | `POST /api/upload`, `POST/PATCH/DELETE /api/spaces` (GET is a read path, ungated) |
-| `FEATURE_CURATE` | AI ingest/curate | `/api/curate/*` |
-| `FEATURE_REINDEX` | Re-index | `POST /api/reindex` |
-| `FEATURE_EDITOR` | Page CRUD | `POST/PUT/DELETE /api/docs` |
+| `FEATURE_UPLOAD` | File upload + folder management | `POST /api/upload`, `POST/PATCH/DELETE /api/spaces` and `POST/PATCH/DELETE /api/folders` (GETs are read paths, ungated behind auth) |
+| `FEATURE_CURATE` | AI ingest/curate | `/api/curate/*`, `POST /api/synthesize` |
+| `FEATURE_REINDEX` | Re-index | `POST /api/reindex`, `POST /api/managed/reconcile` |
+| `FEATURE_EDITOR` | Page CRUD | `POST/PUT/DELETE /api/docs`, `POST /api/docs/reparent` |
 | `FEATURE_SEARCH` | Search palette | `GET /api/search` |
 | `FEATURE_STAR` | Star/favorite | `PATCH /api/star` |
 | `FEATURE_PUBLISHING` | Personal site / HTML publishing | none yet (Phase 8) |
+| `FEATURE_IMAGE_PROXY` | External-image proxy for HTML docs | `GET /api/image-proxy` |
 
 Document read paths (`GET /api/docs`, tree, raw) are never gated — the portal
 stays browsable with every feature off.

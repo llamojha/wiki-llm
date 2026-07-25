@@ -45,6 +45,15 @@ describe('validateProxyUrl — SSRF protection', () => {
     expect(validateProxyUrl('http://169.254.169.254/latest/meta-data')).toContain('Private IP');
   });
 
+  it('rejects CGNAT 100.64.0.0/10 IPs (cloud-internal)', () => {
+    expect(validateProxyUrl('http://100.64.0.1/img.png')).toContain('Private IP');
+    expect(validateProxyUrl('http://100.100.100.100/img.png')).toContain('Private IP');
+    expect(validateProxyUrl('http://100.127.255.255/img.png')).toContain('Private IP');
+    // Neighbors outside the /10 stay reachable.
+    expect(validateProxyUrl('http://100.63.255.255/img.png')).toBeNull();
+    expect(validateProxyUrl('http://100.128.0.0/img.png')).toBeNull();
+  });
+
   it('rejects localhost hostname', () => {
     expect(validateProxyUrl('http://localhost/img.png')).toContain('Disallowed hostname');
     expect(validateProxyUrl('http://localhost:3000/img.png')).toContain('Disallowed hostname');

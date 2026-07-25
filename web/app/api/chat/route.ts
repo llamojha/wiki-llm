@@ -11,6 +11,7 @@ import { ensureVaultMode, vaultMode } from '@/lib/vault-mode';
 import { logChatInteraction } from '@/lib/usage-log';
 import { flagGuard } from '@/lib/flags';
 import { requireSession } from '@/lib/auth-guard';
+import { chatRateLimitGuard } from '@/lib/rate-limit';
 
 /**
  * Phase 5 — Ask-Wiki agent endpoint. Streams NDJSON events.
@@ -50,6 +51,10 @@ export async function POST(req: Request) {
 
   const blocked = flagGuard('agent');
   if (blocked) return blocked;
+
+  // Cost backstop: every request below this line invokes Bedrock.
+  const limited = await chatRateLimitGuard(req);
+  if (limited) return limited;
 
   const body = (await req.json().catch(() => ({}))) as ChatRequestBody;
 

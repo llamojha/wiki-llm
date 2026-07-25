@@ -6,14 +6,12 @@ import { regenerateMasterIndex, regenerateSpaceIndex } from '@/lib/index-gen';
 import { upsertSearchEntry } from '@/lib/search';
 import { appendLog } from '@/lib/log-append';
 import { ensureSpaceInStructure } from '@/lib/vault-structure';
-import { PERSONAL_SPACE } from '@/lib/vault-paths';
+import { PERSONAL_SPACE, normalizeFolderPath } from '@/lib/vault-paths';
 import { ensureVaultMode, vaultMode } from '@/lib/vault-mode';
 import { flagGuard, isEnabled } from '@/lib/flags';
 import { requireSession } from '@/lib/auth-guard';
 
 const SPACE_RE = /^[a-z0-9][a-z0-9-]*$/;
-// A subfolder is a chain of space-shaped segments (`guides`, `guides/setup`).
-const FOLDER_SEGMENT_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 /** Max accepted upload size in bytes. Override with UPLOAD_MAX_BYTES. */
 const UPLOAD_MAX_BYTES = (() => {
@@ -24,26 +22,6 @@ const UPLOAD_MAX_BYTES = (() => {
 function sanitizeFilename(name: string): string {
   // Strip path separators, keep only the basename, ensure .md extension
   return name.replace(/[/\\]/g, '').replace(/[^a-zA-Z0-9._-]/g, '-');
-}
-
-/**
- * Normalize an optional subfolder path supplied with an upload.
- *
- * Returns a clean relative path with no leading/trailing slashes
- * (e.g. `"guides/setup"`), or `''` when no folder was given. Returns `null`
- * when the path is malformed so the caller can reject with a 400 rather than
- * writing to a surprising key. Each segment must match the same shape as a
- * space name, which keeps S3 keys lowercase and rejects `..` traversal.
- */
-function normalizeFolder(raw: string | null): string | null {
-  if (!raw) return '';
-  const trimmed = raw.trim().replace(/^\/+|\/+$/g, '');
-  if (!trimmed) return '';
-  const segments = trimmed.split('/').filter(Boolean);
-  for (const seg of segments) {
-    if (!FOLDER_SEGMENT_RE.test(seg)) return null;
-  }
-  return segments.join('/');
 }
 
 /**
@@ -88,7 +66,7 @@ export async function POST(req: Request) {
   const destination = ((form.get('destination') as string | null) ?? 'raw') as 'raw' | 'authored';
   const scopeName = ((form.get('scope') as string | null) ?? 'shared') as Scope;
   const userId = (form.get('userId') as string | null) ?? undefined;
-  const folder = normalizeFolder(form.get('folder') as string | null);
+  const folder = normalizeFolderPath(form.get('folder') as string | null);
 
   if (!file) {
     return NextResponse.json({ detail: 'file is required' }, { status: 400 });

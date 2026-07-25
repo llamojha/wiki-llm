@@ -13,9 +13,11 @@ vault.
 - **Portal** (`web/`) — a Next.js 16.2 app (App Router, Route Handlers) that
   browses, searches, edits, and chats over a vault. One deployment = one S3
   bucket + prefix ("one vault, one bucket, one prefix").
-- **Two vault modes** — `provenance` (spaces declared in
-  `_system/structure.json`, AI-curated content under `generated/`/`authored/`)
-  and `folders` (zero-config: any folder under the bucket root is a space).
+- **Three vault modes** — `provenance` (spaces declared in
+  `_system/structure.json`, AI-curated content under `generated/`/`authored/`),
+  `folders` (zero-config: any folder under the bucket root is a space), and
+  `managed` (folders-shaped keys, tree assembled from frontmatter `parent_id`
+  so re-parenting is a metadata edit, not an object move).
   See [Vault modes](./architecture/vault-modes.md).
 - **AI curation** (`infra/lambda/curate/`) — a Lambda pipeline that turns raw
   uploaded sources into structured wiki pages via Bedrock, with an optional
@@ -80,12 +82,12 @@ rather than deleted outright.
   the architecture and why things are shaped the way they are.
 - `api/` (archived FastAPI backend) and `legacy/` (frozen `wiki.py` CLI) are
   reference-only, not active surface — don't revive either unprompted.
-- Managed mode (a third vault mode, metadata-derived tree) is designed at
-  the decision level (`specs/folder-first-vault.md` §8,
-  `specs/storage-v2-proposal.md`) and tracked for implementation in
-  `plans/027`, which itself calls for writing `specs/managed-mode.md` before
-  any code — that spec does not exist yet. Don't document managed mode as
-  shipped.
+- Managed mode (the third vault mode, metadata-derived tree) **shipped** via
+  `plans/027`: `specs/managed-mode.md` is the design record, and the code
+  lives in `web/lib/managed-*.ts` plus `POST /api/managed/reconcile` (gated
+  by `FEATURE_REINDEX`) and `POST /api/docs/reparent` (gated by
+  `FEATURE_EDITOR`). A vault is promoted by the `_system/managed.json`
+  marker; managed recognizes the same keys as folders mode.
 - Two Kiro skills exist for keeping documentation current:
   `.kiro/skills/docs-sync/` audits the hand-maintained docs above against
   the code (fixes drift, doesn't generate new pages); this `openwiki/` tree
