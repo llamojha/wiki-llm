@@ -59,6 +59,8 @@ export type UseLibraryStateArgs = {
   initialTab?: LibraryTab;
   spaces: string[];
   flags: FeatureFlags;
+  /** Vault is in `folders`/`managed` mode — no provenance roots or spaces. */
+  foldersMode?: boolean;
   onUploaded: () => void;
   onClose: () => void;
   showToast: (msg: string) => void;
@@ -77,6 +79,7 @@ export function useLibraryState({
   initialTab,
   spaces,
   flags,
+  foldersMode = false,
   onUploaded,
   onClose,
   showToast,
@@ -222,8 +225,15 @@ export function useLibraryState({
   }, [open, initialTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch pending count when space/scope changes.
+  //
+  // Folders mode is skipped entirely: "pending" there is scoped to a *source*
+  // folder the Library has no picker for (plan 026 shipped the API, not the UI),
+  // and `/api/raw` no longer treats an absent source as the vault root. Asking
+  // without one would only ever report 0, and the provenance branch's forced
+  // `space = 'wiki'` below would hijack the folder selector on a vault that has
+  // no `wiki` space.
   useEffect(() => {
-    if (!open) return;
+    if (!open || foldersMode) return;
     if (tab === 'pending' && space !== 'wiki') {
       setSpace('wiki');
       return;
@@ -235,7 +245,7 @@ export function useLibraryState({
       .catch(() => { if (!ctrl.signal.aborted) setPendingCount(0); });
     return () => ctrl.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, space, tab, scope]);
+  }, [open, space, tab, scope, foldersMode]);
 
   // Escape to close — but not while an inline folder edit is open.
   useEffect(() => {
@@ -592,6 +602,7 @@ export function useLibraryState({
     addFiles, removeFile, onDrop, onDragEnter, onDragLeave, onDragOver, onPick,
     allDone, anyActive, finishUpload,
     // pending
+    foldersMode,
     pendingCount, pendingLimit, setPendingLimit, pendingJobTotal, pendingStream,
     pendingRunning, pendingDone, pendingNow, pendingPhase, pendingFinalizing,
     startPendingStream, cancelPending,

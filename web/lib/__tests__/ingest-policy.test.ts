@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isIngestError, resolveFoldersIngest } from '@/lib/ingest-policy';
+import { isIngestError, resolveFoldersIngest, resolvePendingSource } from '@/lib/ingest-policy';
 
 /**
  * Folders-mode curate routing (plan 026): validate + normalize the
@@ -52,5 +52,40 @@ describe('resolveFoldersIngest', () => {
     expect(isIngestError(resolveFoldersIngest('../etc', 'wiki'))).toBe(true);
     expect(isIngestError(resolveFoldersIngest('inbox', 'Bad Space'))).toBe(true);
     expect(isIngestError(resolveFoldersIngest('inbox', 'UPPER'))).toBe(true);
+  });
+});
+
+/**
+ * Source resolution for the folders-mode *pending count*. The distinction that
+ * matters is absent (`null`, caller never chose) vs explicitly empty (`''`,
+ * caller deliberately picked the vault root). Conflating them made `/api/raw`
+ * list the entire vault and report every page as un-curated raw input.
+ */
+describe('resolvePendingSource', () => {
+  it('rejects an absent source rather than defaulting to the vault root', () => {
+    const resolved = resolvePendingSource(null);
+    expect(isIngestError(resolved)).toBe(true);
+    if (!isIngestError(resolved)) return;
+    expect(resolved.error).toContain('source folder is required');
+  });
+
+  it('treats an explicitly empty source as the vault root', () => {
+    const resolved = resolvePendingSource('');
+    expect(isIngestError(resolved)).toBe(false);
+    if (isIngestError(resolved)) return;
+    expect(resolved).toEqual({ source: '', sourcePrefix: '' });
+  });
+
+  it('normalizes a nested source folder into a listable prefix', () => {
+    expect(resolvePendingSource('inbox')).toEqual({ source: 'inbox', sourcePrefix: 'inbox/' });
+    expect(resolvePendingSource('/inbox/drafts/')).toEqual({
+      source: 'inbox/drafts',
+      sourcePrefix: 'inbox/drafts/',
+    });
+  });
+
+  it('rejects malformed segments', () => {
+    expect(isIngestError(resolvePendingSource('../etc'))).toBe(true);
+    expect(isIngestError(resolvePendingSource('Bad Folder'))).toBe(true);
   });
 });

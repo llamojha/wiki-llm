@@ -36,7 +36,7 @@ type UploadModalProps = {
  * folder selector shared by Upload/Pending/Re-index.
  */
 export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, showToast, flags, s3Location, foldersMode }: UploadModalProps) {
-  const lib = useLibraryState({ open, initialTab, spaces, flags, onUploaded, onClose, showToast });
+  const lib = useLibraryState({ open, initialTab, spaces, flags, foldersMode, onUploaded, onClose, showToast });
 
   if (!open) return null;
 

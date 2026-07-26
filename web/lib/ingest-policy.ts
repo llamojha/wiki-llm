@@ -69,6 +69,30 @@ export function resolveFoldersIngest(
   };
 }
 
+/** A resolved source folder to count pending curate inputs under. */
+export type PendingSource = { source: string; sourcePrefix: string };
+
+/**
+ * Resolve the source folder for a folders-mode *pending count*.
+ *
+ * An **absent** `source` is not the vault root — it means the caller never
+ * chose one. Treating it as the root makes `listObjects('')` return every
+ * document in the vault, so the Library reports the whole wiki as un-curated
+ * raw input ("98 raw files in `raw/`" on a vault that has no `raw/` at all).
+ * Only an explicitly empty `?source=` selects the root, which
+ * `resolveFoldersIngest` does allow for a deliberate whole-vault curate.
+ */
+export function resolvePendingSource(sourceRaw: string | null): PendingSource | IngestError {
+  if (sourceRaw === null) {
+    return { error: 'source folder is required to count pending files' };
+  }
+  const source = normalizeFolderPath(sourceRaw);
+  if (source === null) {
+    return { error: 'source folder segments must be lowercase alphanumeric with hyphens only' };
+  }
+  return { source, sourcePrefix: source ? `${source}/` : '' };
+}
+
 function findIngestSpace(spaces: SpaceEntry[]): string | null {
   const explicit = spaces.find((space) => space.generated === true);
   if (explicit) return explicit.name;

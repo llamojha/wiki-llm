@@ -31,9 +31,17 @@ type CurateStatus = {
   lastProcessedAt: string | null;
 };
 
-function useCurateStatus(scope: Scope): CurateStatus | null {
+/**
+ * Curate status for the provenance `raw/` → `generated/wiki/` pipeline.
+ *
+ * Skipped in folders mode: there is no `wiki` space to query, and pending there
+ * is relative to a source folder this card has no notion of. Querying anyway
+ * used to report every document in the vault as pending curation.
+ */
+function useCurateStatus(scope: Scope, foldersMode: boolean): CurateStatus | null {
   const [status, setStatus] = useState<CurateStatus | null>(null);
   useEffect(() => {
+    if (foldersMode) return;
     const ctrl = new AbortController();
     const scopeQuery = scope === 'user' ? '&scope=user' : '&scope=shared';
     fetch(withBasePath(`/api/raw?space=${CURATE_SPACE}${scopeQuery}`), { signal: ctrl.signal })
@@ -47,7 +55,7 @@ function useCurateStatus(scope: Scope): CurateStatus | null {
       })
       .catch(() => { /* aborted or offline — leave status as-is */ });
     return () => ctrl.abort();
-  }, [scope]);
+  }, [scope, foldersMode]);
   return status;
 }
 
@@ -116,7 +124,7 @@ export function Sidebar({ scope, setScope, foldersMode, activeId, onOpen, onNewP
   const fullTree = apiTree && apiTree.length > 0 ? apiTreeToLocal(apiTree) : [];
   const tree = filterByScope(fullTree, scope);
   const [openFolders, setOpenFolders] = useState<Set<string>>(DEFAULT_OPEN_FOLDERS);
-  const curateStatus = useCurateStatus(scope);
+  const curateStatus = useCurateStatus(scope, Boolean(foldersMode));
   const toggleFolder = (id: string) => {
     setOpenFolders((prev) => {
       const next = new Set(prev);
@@ -199,7 +207,13 @@ export function Sidebar({ scope, setScope, foldersMode, activeId, onOpen, onNewP
         )}
         <div className="index-card-actions">
           {flags.curate && (
-            <button className="index-card-btn" onClick={onProcessPending} title="Curate raw files in S3">
+            <button
+              className="index-card-btn"
+              onClick={onProcessPending}
+              title={foldersMode
+                ? 'AI curation — needs a source and destination folder'
+                : 'Curate raw files in S3'}
+            >
               {ICONS.spark} Process pending
             </button>
           )}
