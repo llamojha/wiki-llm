@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { isInAllowedScope, readDocument, type ScopeMode } from '@/lib/agent-tools';
+import { isInAllowedScope, readDocument, searchVault, type ScopeMode } from '@/lib/agent-tools';
+import { invalidateSearchIndex } from '@/lib/search';
 import { __resetWith } from '@/lib/s3-mock';
 import { __resetVaultMode } from '@/lib/vault-mode';
 
@@ -172,5 +173,75 @@ describe('readDocument pinned space', () => {
     await expect(
       readDocument({ doc_id: 'users/default/authored/wiki/mine.md' }, 'shared', undefined, 'wiki'),
     ).rejects.toThrow(/denied/);
+  });
+});
+
+/**
+ * Managed mode files pages under `pages/<space>/…` while the tree — and so the
+ * context pill — offers the bare space. Frontmatter `space` is the canonical
+ * grouping there, so a page filed under a space its key doesn't reflect is
+ * still in that space and must stay readable when it's pinned.
+ */
+describe('readDocument pinned space (managed mode)', () => {
+  beforeEach(() => {
+    __resetVaultMode();
+    __resetWith({
+      // The marker is what makes the sniff resolve managed (mock S3 re-sniffs
+      // on every ensureVaultMode, so __setVaultMode alone would not survive).
+      '_system/managed.json': '{"version":1}',
+      'pages/wiki/canonical.md': '---\ntitle: Canonical\n---\n# Canonical\n\nBody.',
+      'pages/notes/refiled.md': '---\ntitle: Refiled\nspace: wiki\n---\n# Refiled\n\nBody.',
+      'pages/notes/other.md': '---\ntitle: Other\n---\n# Other\n\nBody.',
+    });
+  });
+  afterEach(() => __resetVaultMode());
+
+  it('reads a canonical pages/<space>/ document', async () => {
+    const doc = await readDocument({ doc_id: 'pages/wiki/canonical.md' }, 'both', undefined, 'wiki');
+    expect(doc.title).toBe('Canonical');
+  });
+
+  it('honors frontmatter space over the key path', async () => {
+    const doc = await readDocument({ doc_id: 'pages/notes/refiled.md' }, 'both', undefined, 'wiki');
+    expect(doc.title).toBe('Refiled');
+  });
+
+  it('still denies a page that is in neither by key nor by frontmatter', async () => {
+    await expect(
+      readDocument({ doc_id: 'pages/notes/other.md' }, 'both', undefined, 'wiki'),
+    ).rejects.toThrow(/outside the pinned space/);
+  });
+});
+
+/**
+ * The scope and space filters run *after* the ranker, so the fetch must be
+ * unbounded — a capped fetch lets globally-higher-ranked out-of-space hits
+ * starve the filter, and the agent reports no sources for documents that exist.
+ */
+describe('searchVault filter starvation', () => {
+  beforeEach(() => {
+    __resetVaultMode();
+    const seed: Record<string, string> = {};
+    // 40 strong matches outside the pinned space, one inside it.
+    for (let i = 0; i < 40; i++) {
+      seed[`notes/widget-${i}.md`] = '---\ntitle: Widget Report\n---\n\nWidget report body.';
+    }
+    seed['wiki/widget.md'] = '---\ntitle: Widget Report\n---\n\nWidget report body.';
+    __resetWith(seed);
+    invalidateSearchIndex();
+  });
+  afterEach(() => {
+    __resetVaultMode();
+    invalidateSearchIndex();
+  });
+
+  it('finds the in-space document behind many higher-ranked outside hits', async () => {
+    const hits = await searchVault({ query: 'widget report', limit: 8 }, 'both', undefined, 'wiki');
+    expect(hits.map((h) => h.id)).toEqual(['wiki/widget.md']);
+  });
+
+  it('is unfiltered without a pinned space', async () => {
+    const hits = await searchVault({ query: 'widget report', limit: 8 }, 'both');
+    expect(hits).toHaveLength(8);
   });
 });

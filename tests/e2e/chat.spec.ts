@@ -80,4 +80,15 @@ test.describe('ask-wiki chat', () => {
     expect(bodies[0].contextSpace).toBe('wiki');
     expect(bodies[0].contextDocId).toBeUndefined();
   });
+
+  test('rejects a malformed contextSpace with 400, not a 500', async ({ request }) => {
+    // The body is cast, not parsed, so both a bad *type* and a bad *shape* have
+    // to land on the documented 400 rather than throwing inside the normalizer.
+    for (const contextSpace of [{}, 42, '../escape']) {
+      const res = await request.post('/api/chat', {
+        data: { message: 'hello', contextSpace },
+      });
+      expect(res.status(), `contextSpace=${JSON.stringify(contextSpace)}`).toBe(400);
+    }
+  });
 });

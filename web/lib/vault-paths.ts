@@ -12,6 +12,13 @@ export const GENERATED_ROOT = 'generated';
 export const AUTHORED_ROOT = 'authored';
 export const SYSTEM_ROOT = '_system';
 export const PERSONAL_SPACE = 'personal';
+/**
+ * Canonical managed-mode store prefix — the portal writes pages to
+ * `pages/<space>/<slug>.md`, but reading does not require it (out-of-band files
+ * are adopted wherever they land). Lives here rather than in `managed-pages.ts`
+ * so key classification can strip it without importing that module.
+ */
+export const PAGES_ROOT = 'pages';
 
 export const PROVENANCE_ROOTS = new Set([
   RAW_PREFIX.replace(/\/$/, ''),
@@ -159,10 +166,14 @@ export function isDocumentKey(key: string): boolean {
  *   per user, so `wiki` matches `generated/wiki/…`, `authored/wiki/…`, and the
  *   `users/<id>/…` mirrors of both. Cross-user isolation is NOT this function's
  *   job — `isInAllowedScope` owns that gate and both are applied together.
- * - **folders / managed**: the key path *is* the tree path, so the space is a
- *   plain path prefix (and may itself be nested, e.g. `guides/setup`). Managed
- *   mode builds its tree from frontmatter `parent_id` rather than the key path,
- *   so there a space filter follows storage layout, not the rendered tree.
+ * - **folders**: the key path *is* the tree path, so the space is a plain path
+ *   prefix (and may itself be nested, e.g. `guides/setup`).
+ * - **managed**: same, except a canonical `pages/` store prefix is stripped
+ *   first — the portal writes `pages/<space>/<slug>.md` while the tree offers
+ *   `<space>`, so matching the raw key would exclude every page the portal
+ *   itself created. A page whose frontmatter `space` diverges from its key is
+ *   *not* matched here (this predicate is pure); `readDocument` re-checks the
+ *   parsed frontmatter, which is the canonical metadata, once it has the file.
  *
  * An empty space name means "no narrowing" and matches every key.
  */
@@ -170,7 +181,11 @@ export function isKeyInSpace(key: string, space: string): boolean {
   const name = space.replace(/^\/+|\/+$/g, '');
   if (!name) return true;
 
-  if (vaultMode() === 'folders' || vaultMode() === 'managed') {
+  if (vaultMode() === 'managed') {
+    const stored = key.startsWith(`${PAGES_ROOT}/`) ? key.slice(PAGES_ROOT.length + 1) : key;
+    return stored.startsWith(`${name}/`);
+  }
+  if (vaultMode() === 'folders') {
     return key.startsWith(`${name}/`);
   }
 

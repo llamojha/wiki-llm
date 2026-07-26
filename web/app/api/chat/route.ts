@@ -80,6 +80,12 @@ export async function POST(req: Request) {
   // A pinned space narrows the conversation within the active scope. Validate
   // it as a folder path (same segment rules as every other write/browse path)
   // so a malformed value can't reach the key predicates as a regex-ish string.
+  // The body is a cast, not a parse, so the type check comes first — a truthy
+  // non-string (`{"contextSpace": {}}`) would otherwise reach `.trim()` inside
+  // the normalizer and 500 instead of returning this 400.
+  if (body.contextSpace !== undefined && typeof body.contextSpace !== 'string') {
+    return NextResponse.json({ detail: 'contextSpace must be a string' }, { status: 400 });
+  }
   const contextSpace = normalizeFolderPath(body.contextSpace);
   if (contextSpace === null) {
     return NextResponse.json({ detail: 'contextSpace is not a valid folder path' }, { status: 400 });
