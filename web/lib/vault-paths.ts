@@ -151,6 +151,35 @@ export function isDocumentKey(key: string): boolean {
     || Boolean(key.match(/^users\/[^/]+\/authored\//));
 }
 
+/**
+ * Whether a document key lives inside the named space. Mode-aware, mirroring
+ * how each mode lays spaces out on S3:
+ *
+ * - **provenance**: a space is partitioned across provenance roots and mirrored
+ *   per user, so `wiki` matches `generated/wiki/…`, `authored/wiki/…`, and the
+ *   `users/<id>/…` mirrors of both. Cross-user isolation is NOT this function's
+ *   job — `isInAllowedScope` owns that gate and both are applied together.
+ * - **folders / managed**: the key path *is* the tree path, so the space is a
+ *   plain path prefix (and may itself be nested, e.g. `guides/setup`). Managed
+ *   mode builds its tree from frontmatter `parent_id` rather than the key path,
+ *   so there a space filter follows storage layout, not the rendered tree.
+ *
+ * An empty space name means "no narrowing" and matches every key.
+ */
+export function isKeyInSpace(key: string, space: string): boolean {
+  const name = space.replace(/^\/+|\/+$/g, '');
+  if (!name) return true;
+
+  if (vaultMode() === 'folders' || vaultMode() === 'managed') {
+    return key.startsWith(`${name}/`);
+  }
+
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(
+    `^(users/[^/]+/)?(${GENERATED_ROOT}|${AUTHORED_ROOT})/${escaped}/`,
+  ).test(key);
+}
+
 export function sourceTypeFromKey(key: string): 'generated' | 'authored' | 'personal' {
   // Folders/managed mode have no provenance roots — everything is user content.
   // Frontmatter `source_type`/`origin` still wins at the read site.

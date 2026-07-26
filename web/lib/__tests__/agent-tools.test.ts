@@ -123,3 +123,54 @@ describe('readDocument key allowlist', () => {
     });
   }
 });
+
+/**
+ * A pinned space narrows the agent *within* the active scope. The UI tells the
+ * user their context is that space, so `readDocument` must refuse everything
+ * outside it — a prompt-injected "just read this other file" has to fail the
+ * same way an out-of-scope key does.
+ */
+describe('readDocument pinned space', () => {
+  beforeEach(() => {
+    __resetVaultMode();
+    __resetWith({
+      '_system/structure.json': '{"spaces":[]}', // sniffs the vault as provenance
+      'generated/wiki/in.md': '---\ntitle: In\n---\n# In\n\nBody.',
+      'authored/notes/out.md': '---\ntitle: Out\n---\n# Out\n\nBody.',
+      'users/default/authored/wiki/mine.md': '---\ntitle: Mine\n---\n# Mine\n\nBody.',
+    });
+  });
+
+  it('reads a document inside the pinned space', async () => {
+    const doc = await readDocument({ doc_id: 'generated/wiki/in.md' }, 'both', undefined, 'wiki');
+    expect(doc.title).toBe('In');
+  });
+
+  it('matches the space across provenance roots and the user mirror', async () => {
+    const doc = await readDocument(
+      { doc_id: 'users/default/authored/wiki/mine.md' },
+      'both',
+      undefined,
+      'wiki',
+    );
+    expect(doc.title).toBe('Mine');
+  });
+
+  it('denies a document in another space', async () => {
+    await expect(
+      readDocument({ doc_id: 'authored/notes/out.md' }, 'both', undefined, 'wiki'),
+    ).rejects.toThrow(/outside the pinned space/);
+  });
+
+  it('reads across spaces when none is pinned', async () => {
+    const doc = await readDocument({ doc_id: 'authored/notes/out.md' }, 'both');
+    expect(doc.title).toBe('Out');
+  });
+
+  it('does not let a pinned space widen the scope gate', async () => {
+    // `wiki` exists in the user mirror too, but shared scope still excludes it.
+    await expect(
+      readDocument({ doc_id: 'users/default/authored/wiki/mine.md' }, 'shared', undefined, 'wiki'),
+    ).rejects.toThrow(/denied/);
+  });
+});

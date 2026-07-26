@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import type { Message } from '@aws-sdk/client-bedrock-runtime';
 
 import { runAgent, type AgentEvent } from '@/lib/agent';
+import { filterCatalogToSpace } from '@/lib/agent-prompts';
+import { normalizeFolderPath } from '@/lib/vault-paths';
 import { getObject } from '@/lib/s3';
 import { resolveScope } from '@/lib/scope';
 import { resolveScopeOr400 } from '@/lib/http-scope';
@@ -23,6 +25,7 @@ import { chatRateLimitGuard } from '@/lib/rate-limit';
  *     scopeMode?: 'shared' | 'user' | 'both',  // default 'both'
  *     userId?: string,
  *     contextDocId?: string,
+ *     contextSpace?: string,   // pin the conversation to one space/folder
  *     forceUnsourcedGeneration?: boolean
  *   }
  *
@@ -42,6 +45,7 @@ type ChatRequestBody = {
   scopeMode?: ScopeMode;
   userId?: string;
   contextDocId?: string;
+  contextSpace?: string;
   forceUnsourcedGeneration?: boolean;
 };
 
@@ -73,10 +77,20 @@ export async function POST(req: Request) {
     if (check instanceof NextResponse) return check;
   }
 
+  // A pinned space narrows the conversation within the active scope. Validate
+  // it as a folder path (same segment rules as every other write/browse path)
+  // so a malformed value can't reach the key predicates as a regex-ish string.
+  const contextSpace = normalizeFolderPath(body.contextSpace);
+  if (contextSpace === null) {
+    return NextResponse.json({ detail: 'contextSpace is not a valid folder path' }, { status: 400 });
+  }
+
   // Resolve catalog: load index.md for the relevant scope(s). Best-effort —
   // an empty catalog still allows the agent to function (it just can't
   // use index-first; it'll fall back to search_vault).
-  const catalog = await loadCatalog(scopeMode, userId);
+  const catalog = contextSpace
+    ? filterCatalogToSpace(await loadCatalog(scopeMode, userId), contextSpace)
+    : await loadCatalog(scopeMode, userId);
 
   // Pick a primary scope for usage logging. For `both`, log against the
   // user's scope since that's where any generated page would land.
@@ -106,6 +120,7 @@ export async function POST(req: Request) {
           userId,
           catalog,
           contextDocId: body.contextDocId,
+          contextSpace: contextSpace || undefined,
           forceUnsourcedGeneration: body.forceUnsourcedGeneration,
           abortSignal: req.signal,
         })) {

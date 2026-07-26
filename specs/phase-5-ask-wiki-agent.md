@@ -109,6 +109,25 @@ The chat panel exposes a **scope selector** in the context bar with three option
 
 **Future (Phase 6 multi-tenant):** "accessible scopes" become a permission-derived set rather than fixed. The tool signatures already carry scope filters, so this is additive.
 
+### Context selector — narrowing within the scope
+
+Below the scope row the panel exposes a **context selector**: `All`, `This doc`
+(only while a document is open), and one pill per space/top-level folder. It
+narrows *within* the active scope and never widens it.
+
+| Pick | Request body | Effect |
+|---|---|---|
+| `All` | neither field | whole active scope |
+| `This doc` (default when a doc is open) | `contextDocId` | prompt names the open doc; reads stay scope-wide |
+| a space | `contextSpace` | `search_vault` returns only that space, `read_document` refuses outside it, and the catalog in the system prompt is filtered to it |
+
+A pinned space is enforced server-side, not merely hinted: the UI tells the user
+their context is that space, so a prompt-injected read around the boundary has
+to fail the way an out-of-scope key does. `isKeyInSpace` (`lib/vault-paths.ts`)
+owns membership and is mode-aware — provenance mode matches
+`generated|authored/<space>/` plus the `users/<id>/` mirrors; folders/managed
+mode treats the space as a plain path prefix.
+
 ### Generation triggering — two coexisting paths
 
 Two ways the user can produce a markdown page from the agent.

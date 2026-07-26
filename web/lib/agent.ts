@@ -73,6 +73,13 @@ export type RunAgentOpts = {
    * title similarity.
    */
   contextDocId?: string;
+  /**
+   * Space (folder) the user pinned as the chat context. When present, every
+   * `search_vault` result and `read_document` call is restricted to that
+   * space, and the system prompt says so. Composes with `scopeMode` — it
+   * narrows within the active scope, never widens it.
+   */
+  contextSpace?: string;
   forceUnsourcedGeneration?: boolean;
   /**
    * Propagated to the Bedrock SDK so the server-side Converse call is
@@ -122,6 +129,7 @@ export async function* runAgent(opts: RunAgentOpts): AsyncGenerator<AgentEvent> 
     opts.contextDocId,
     opts.scopeMode,
     opts.userId,
+    opts.contextSpace,
   );
 
   const systemText = buildSystemPrompt({
@@ -129,6 +137,7 @@ export async function* runAgent(opts: RunAgentOpts): AsyncGenerator<AgentEvent> 
     scopeMode: opts.scopeMode,
     contextDocTitle: contextDocInfo?.title,
     contextDocId: contextDocInfo?.id,
+    contextSpace: opts.contextSpace,
     forceUnsourcedGeneration: opts.forceUnsourcedGeneration,
   });
   const system: SystemContentBlock[] = [{ text: systemText }];
@@ -477,12 +486,14 @@ async function dispatchTool(
         },
         opts.scopeMode,
         opts.userId,
+        opts.contextSpace,
       );
     case 'read_document':
       return await readDocument(
         { doc_id: String(input.doc_id ?? '') },
         opts.scopeMode,
         opts.userId,
+        opts.contextSpace,
       );
     case 'propose_page':
       return proposePage({
@@ -528,10 +539,11 @@ async function resolveContextDoc(
   contextDocId: string | undefined,
   scopeMode: ScopeMode,
   userId: string | undefined,
+  space: string | undefined,
 ): Promise<{ id: string; title: string } | null> {
   if (!contextDocId) return null;
   try {
-    const doc = await readDocument({ doc_id: contextDocId }, scopeMode, userId);
+    const doc = await readDocument({ doc_id: contextDocId }, scopeMode, userId, space);
     return { id: doc.id, title: doc.title };
   } catch {
     return null;

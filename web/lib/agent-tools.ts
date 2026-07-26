@@ -9,7 +9,7 @@ import {
   resolveScope,
   type Scope,
 } from '@/lib/scope';
-import { isDocumentKey } from '@/lib/vault-paths';
+import { isDocumentKey, isKeyInSpace } from '@/lib/vault-paths';
 import { ensureVaultMode } from '@/lib/vault-mode';
 
 /**
@@ -130,16 +130,22 @@ export type SearchVaultResult = {
  * startsWith check on `generated/` would match BOTH `generated/wiki/foo.md`
  * (shared) AND `users/<id>/generated/wiki/foo.md` (user) — a real leak we
  * shipped and caught in the v1 postmortem.
+ *
+ * `space` narrows further to a single space/folder the user pinned as the chat
+ * context. It composes with — never replaces — the scope gate.
  */
 export async function searchVault(
   input: SearchVaultInput,
   scopeMode: ScopeMode,
   userId?: string,
+  space?: string,
 ): Promise<SearchVaultResult[]> {
+  await ensureVaultMode(); // isKeyInSpace is vault-mode-dependent
   const limit = Math.min(Math.max(input.limit ?? 8, 1), 25);
   const hits = await search(input.query, limit * 2);
   return hits
     .filter((h) => isInAllowedScope(h.id, scopeMode, userId))
+    .filter((h) => !space || isKeyInSpace(h.id, space))
     .slice(0, limit)
     .map((h) => ({
       id: h.id,
@@ -202,11 +208,19 @@ export async function readDocument(
   input: ReadDocumentInput,
   scopeMode: ScopeMode,
   userId?: string,
+  space?: string,
 ): Promise<ReadDocumentResult> {
-  await ensureVaultMode(); // isDocumentKey is vault-mode-dependent
+  await ensureVaultMode(); // isDocumentKey/isKeyInSpace are vault-mode-dependent
   if (!isDocumentKey(input.doc_id) || !isInAllowedScope(input.doc_id, scopeMode, userId)) {
     throw new Error(
       `read_document denied: "${input.doc_id}" is not a readable document in the active scope (${scopeMode}${userId ? `:${userId}` : ''}). Use search_vault to find documents you can read.`,
+    );
+  }
+  // A pinned space is a hard boundary, not a hint: the UI tells the user their
+  // context is that space, so the agent must not read around it.
+  if (space && !isKeyInSpace(input.doc_id, space)) {
+    throw new Error(
+      `read_document denied: "${input.doc_id}" is outside the pinned space "${space}". Only documents in that space are readable in this conversation.`,
     );
   }
   const raw = await getObject(input.doc_id);

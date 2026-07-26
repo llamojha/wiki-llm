@@ -52,4 +52,32 @@ test.describe('ask-wiki chat', () => {
     // Citation rendered.
     await expect(page.locator('.chat-body')).toContainText('On-Call Runbook');
   });
+
+  test('pins the conversation to a space and sends it as contextSpace', async ({ page }) => {
+    const bodies: Record<string, unknown>[] = [];
+    await page.route('**/api/chat', async (route) => {
+      bodies.push(JSON.parse(route.request().postData() ?? '{}'));
+      await route.fulfill({
+        status: 200,
+        headers: { 'Content-Type': 'application/x-ndjson' },
+        body: JSON.stringify({ type: 'text', delta: 'ok' }) + '\n' + JSON.stringify({ type: 'done' }) + '\n',
+      });
+    });
+
+    await gotoHome(page);
+    await page.locator('button.chat-fab').click();
+    await expect(page.locator('.chat-panel')).toBeVisible();
+
+    const context = page.locator('.chat-context').nth(1);
+    await context.locator('.space-pill', { hasText: 'Wiki' }).click();
+    await expect(page.locator('.chat-input')).toContainText('context: space: Wiki');
+
+    await page.locator('.chat-input textarea').fill('What is in the wiki?');
+    await page.locator('.chat-input button.btn.primary', { hasText: /Send/ }).click();
+    await expect(page.locator('.chat-body')).toContainText('ok', { timeout: 10_000 });
+
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0].contextSpace).toBe('wiki');
+    expect(bodies[0].contextDocId).toBeUndefined();
+  });
 });

@@ -10,7 +10,7 @@ import { type Doc, type LiveDoc, type SanitizedHtml, type Scope } from '@/lib/ty
 import { setDocumentTheme, THEME_STORAGE_KEY, type Theme, type ThemeInfo } from '@/lib/theme';
 import type { FeatureFlags } from '@/lib/flags';
 import { ChatFab } from './chat-fab';
-import { ChatPanel } from './chat-panel';
+import { ChatPanel, type ChatSpace } from './chat-panel';
 import { DocReader } from './doc-reader';
 import { Editor } from './editor';
 import { HomeView } from './home-view';
@@ -29,6 +29,34 @@ function countTreeDocs(nodes: ApiTreeNode[]): number {
     else if (n.type === 'folder') count += countTreeDocs(n.children);
   }
   return count;
+}
+
+/**
+ * Spaces the chat panel can pin its context to, read off the sidebar tree.
+ *
+ * Top-level folders are the spaces. The synthetic `folder:__user` node is not
+ * one — its *children* are the user's spaces, and they carry the same names as
+ * the shared ones (`wiki`, …), so both sides collapse into a single name that
+ * the server's key predicate matches in whichever scope is active.
+ */
+function spacesFromTree(nodes: ApiTreeNode[]): ChatSpace[] {
+  const byName = new Map<string, ChatSpace>();
+  const add = (id: string, label: string) => {
+    const name = id.replace(/^folder:/, '').replace(/^__user\//, '');
+    if (name.startsWith('__') || byName.has(name)) return;
+    byName.set(name, { name, label });
+  };
+  for (const node of nodes) {
+    if (node.type !== 'folder') continue;
+    if (node.id === 'folder:__user') {
+      for (const child of node.children) {
+        if (child.type === 'folder') add(child.id, child.name);
+      }
+      continue;
+    }
+    add(node.id, node.name);
+  }
+  return [...byName.values()];
 }
 
 const DEFAULT_PROMPTS = [
@@ -355,6 +383,7 @@ export function AppShell({ initialTree, initialDocId, flags, themes, defaultThem
           onOpenDoc={openDoc}
           onDraftFromChat={handleDraftFromChat}
           contextDoc={doc}
+          spaces={spacesFromTree(tree)}
         />
       )}
 
