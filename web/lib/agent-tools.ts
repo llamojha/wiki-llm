@@ -2,6 +2,7 @@ import matter from 'gray-matter';
 import type { Tool } from '@aws-sdk/client-bedrock-runtime';
 
 import { getObject } from '@/lib/s3';
+import { fmString } from '@/lib/frontmatter';
 import { htmlText, htmlTitle } from '@/lib/html';
 import { search } from '@/lib/search';
 import {
@@ -9,8 +10,8 @@ import {
   resolveScope,
   type Scope,
 } from '@/lib/scope';
-import { isDocumentKey } from '@/lib/vault-paths';
-import { ensureVaultMode } from '@/lib/vault-mode';
+import { isDocumentKey, isKeyInSpace } from '@/lib/vault-paths';
+import { ensureVaultMode, vaultMode } from '@/lib/vault-mode';
 
 /**
  * Three tools exposed to the Ask-Wiki agent. Each is a direct in-process
@@ -130,16 +131,27 @@ export type SearchVaultResult = {
  * startsWith check on `generated/` would match BOTH `generated/wiki/foo.md`
  * (shared) AND `users/<id>/generated/wiki/foo.md` (user) — a real leak we
  * shipped and caught in the v1 postmortem.
+ *
+ * `space` narrows further to a single space/folder the user pinned as the chat
+ * context. It composes with — never replaces — the scope gate.
  */
 export async function searchVault(
   input: SearchVaultInput,
   scopeMode: ScopeMode,
   userId?: string,
+  space?: string,
 ): Promise<SearchVaultResult[]> {
+  await ensureVaultMode(); // isKeyInSpace is vault-mode-dependent
   const limit = Math.min(Math.max(input.limit ?? 8, 1), 25);
-  const hits = await search(input.query, limit * 2);
+  // Rank the WHOLE index, then filter, then cut to `limit`. Truncating first
+  // starves the filters: enough higher-ranked hits outside the scope or the
+  // pinned space and this returns nothing, which the agent reports as a
+  // no-sources refusal for documents that do exist. The index is in memory, so
+  // the only cost is ranking rows we were going to drop anyway.
+  const hits = await search(input.query, Number.POSITIVE_INFINITY);
   return hits
     .filter((h) => isInAllowedScope(h.id, scopeMode, userId))
+    .filter((h) => !space || isKeyInSpace(h.id, space))
     .slice(0, limit)
     .map((h) => ({
       id: h.id,
@@ -202,19 +214,37 @@ export async function readDocument(
   input: ReadDocumentInput,
   scopeMode: ScopeMode,
   userId?: string,
+  space?: string,
 ): Promise<ReadDocumentResult> {
-  await ensureVaultMode(); // isDocumentKey is vault-mode-dependent
+  await ensureVaultMode(); // isDocumentKey/isKeyInSpace are vault-mode-dependent
   if (!isDocumentKey(input.doc_id) || !isInAllowedScope(input.doc_id, scopeMode, userId)) {
     throw new Error(
       `read_document denied: "${input.doc_id}" is not a readable document in the active scope (${scopeMode}${userId ? `:${userId}` : ''}). Use search_vault to find documents you can read.`,
     );
   }
+  // A pinned space is a hard boundary, not a hint: the UI tells the user their
+  // context is that space, so the agent must not read around it.
+  //
+  // Managed mode defers the verdict until after the read: there, frontmatter
+  // `space` is the canonical grouping (the key only supplies its default), so a
+  // page filed under a space its key doesn't reflect is still legitimately in
+  // that space and appears there in the tree the user picked from.
+  const outsideSpace = Boolean(space) && !isKeyInSpace(input.doc_id, space!);
+  const denySpace = () => {
+    throw new Error(
+      `read_document denied: "${input.doc_id}" is outside the pinned space "${space}". Only documents in that space are readable in this conversation.`,
+    );
+  };
+  if (outsideSpace && vaultMode() !== 'managed') denySpace();
+
   const raw = await getObject(input.doc_id);
   const scope = inferScopeFromKey(input.doc_id).scope;
 
   // HTML documents: hand the agent extracted plain text (Nova doesn't need tags,
   // and they waste tokens). High char cap — the agent wants the full document.
   if (input.doc_id.endsWith('.html')) {
+    // No frontmatter to appeal to — the key is all managed mode has here.
+    if (outsideSpace) denySpace();
     return {
       id: input.doc_id,
       title: htmlTitle(raw) ?? keyToTitle(input.doc_id),
@@ -225,6 +255,7 @@ export async function readDocument(
   }
 
   const { data, content } = matter(raw);
+  if (outsideSpace && fmString(data.space) !== space) denySpace();
   const fallbackTitle = keyToTitle(input.doc_id);
   const title = typeof data.title === 'string' && data.title.trim() ? data.title : fallbackTitle;
   const section = extractFirstHeading(content) ?? 'Source';

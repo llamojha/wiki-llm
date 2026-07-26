@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { __resetVaultMode, __setVaultMode } from '@/lib/vault-mode';
-import { displayPathForKey, isDocumentKey, sourceTypeFromKey } from '@/lib/vault-paths';
+import {
+  displayPathForKey,
+  isDocumentKey,
+  isKeyInSpace,
+  sourceTypeFromKey,
+} from '@/lib/vault-paths';
 
 /**
  * Folders-mode recognition: any `.md`/`.html` outside `_system/` is a document,
@@ -63,6 +68,24 @@ describe('folders mode', () => {
       expect(displayPathForKey('notes/sub/day.md')).toBe('notes / sub / day');
       expect(displayPathForKey('root.md')).toBe('root');
       expect(displayPathForKey('page.html')).toBe('page');
+    });
+  });
+
+  describe('isKeyInSpace', () => {
+    it('matches a top-level folder as a plain path prefix', () => {
+      expect(isKeyInSpace('notes/a.md', 'notes')).toBe(true);
+      expect(isKeyInSpace('notes/sub/a.md', 'notes')).toBe(true);
+      expect(isKeyInSpace('projects/a.md', 'notes')).toBe(false);
+    });
+
+    it('supports a nested space path', () => {
+      expect(isKeyInSpace('projects/deep/a.md', 'projects/deep')).toBe(true);
+      expect(isKeyInSpace('projects/other/a.md', 'projects/deep')).toBe(false);
+    });
+
+    it('rejects prefix look-alikes and root-level docs', () => {
+      expect(isKeyInSpace('notes-archive/a.md', 'notes')).toBe(false);
+      expect(isKeyInSpace('notes.md', 'notes')).toBe(false);
     });
   });
 });

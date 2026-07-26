@@ -12,10 +12,10 @@ import { type Origin } from '@/lib/origin';
 import {
   generatePageId,
   isRealPageId,
-  PAGES_ROOT,
   slugForKey,
   spacePathForKey,
 } from '@/lib/managed-pages';
+import { PAGES_ROOT } from '@/lib/vault-paths';
 
 /**
  * Reconcile / backfill for managed mode (plan 027, specs/managed-mode.md §8).

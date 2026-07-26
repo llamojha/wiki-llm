@@ -1,4 +1,5 @@
 import type { ScopeMode } from '@/lib/agent-tools';
+import { isKeyInSpace } from '@/lib/vault-paths';
 
 const CATALOG_CHAR_BUDGET = 30_000;
 
@@ -15,6 +16,12 @@ export type BuildSystemPromptOpts = {
   contextDocTitle?: string;
   /** Relative S3 key of the open doc — pair with contextDocTitle so the agent can call read_document directly. */
   contextDocId?: string;
+  /**
+   * Space (folder) the user pinned as the chat context. The tools enforce it;
+   * this line tells the model *why* everything outside it is invisible so it
+   * says "not in this space" instead of hallucinating around the boundary.
+   */
+  contextSpace?: string;
   /**
    * When true, the user has explicitly opted into unsourced generation via
    * the "Draft anyway" button. The agent must skip search, draft from prior
@@ -95,10 +102,19 @@ If you did not call read_document for a piece of information, you cannot cite it
         ? `Currently-open document: **${opts.contextDocTitle}** (the user may be asking about this specifically).`
         : '';
 
-  const scopeContext = `## Scope context
+  const contextSpaceLine = opts.contextSpace
+    ? `Pinned space: **${opts.contextSpace}** — the user narrowed this conversation to that space. search_vault returns only documents inside it and read_document refuses everything else, so if the answer isn't there, say it isn't in this space rather than guessing.`
+    : '';
 
-Active scope: **${opts.scopeMode}** — your searches and reads cover ${scopeLabel}.
-${contextDocLine}`.trim();
+  const scopeContext =
+    '## Scope context\n\n' +
+    [
+      `Active scope: **${opts.scopeMode}** — your searches and reads cover ${scopeLabel}.`,
+      contextSpaceLine,
+      contextDocLine,
+    ]
+      .filter(Boolean)
+      .join('\n');
 
   const examples = opts.forceUnsourcedGeneration ? '' : EXAMPLES;
 
@@ -157,6 +173,29 @@ User: Tell me about quantum dolphin theory.
 You:
 - call \`search_vault({ query: "quantum dolphin theory" })\` — returns no relevant hits
 - respond: "I couldn't find anything in your vault on this topic." and stop. Do NOT invent. Do NOT call propose_page. The client will offer the user a Draft anyway button if they want unsourced generation.`;
+
+/**
+ * Narrow a catalog to one space. Catalog doc lines are `- <key> — <title> —
+ * <summary>` (see `lib/index-gen.ts::buildLine`, and the folders-mode catalog
+ * the chat route builds from the search index); lines that don't parse as a doc
+ * line — section headers such as `### Shared library`, separators, blanks — are
+ * dropped, since the surviving entries are all from one space and the headers
+ * would otherwise label empty sections.
+ *
+ * Filtering the catalog matters as much as filtering the tools: the catalog is
+ * what the model reads *before* calling anything, so leaving out-of-space
+ * entries in it just invites read_document calls the tools then refuse.
+ */
+export function filterCatalogToSpace(catalog: string, space: string): string {
+  if (!space) return catalog;
+  return catalog
+    .split('\n')
+    .filter((line) => {
+      const key = line.match(/^- (.+?) — /)?.[1];
+      return key ? isKeyInSpace(key, space) : false;
+    })
+    .join('\n');
+}
 
 function truncateCatalog(catalog: string): string {
   if (catalog.length <= CATALOG_CHAR_BUDGET) return catalog;

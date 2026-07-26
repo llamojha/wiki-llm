@@ -22,6 +22,14 @@ import { DEFAULT_USER_ID } from '@/lib/vault-paths';
 
 type ScopeMode = 'shared' | 'user' | 'both';
 
+/**
+ * Explicit context pick. `null` means "auto": the open document when there is
+ * one, the whole scope otherwise. `{ kind: 'scope' }` opts out of the open
+ * document; `{ kind: 'space' }` pins the conversation to one space/folder,
+ * which the server enforces on every search and read.
+ */
+type PinnedContext = null | { kind: 'scope' } | { kind: 'space'; name: string };
+
 type PageProposal = { slug: string; title: string; body: string };
 
 type RefuseInfo = { canForce: boolean; message: string };
@@ -48,6 +56,8 @@ type Message = {
 
 export type ChatPanelDraft = { title: string; body: string };
 
+export type ChatSpace = { name: string; label: string };
+
 type ChatPanelProps = {
   open: boolean;
   onClose: () => void;
@@ -55,6 +65,8 @@ type ChatPanelProps = {
   /** Post-hoc Save: open the Editor pre-filled with this draft. */
   onDraftFromChat: (draft: ChatPanelDraft) => void;
   contextDoc?: Doc;
+  /** Spaces/top-level folders the user can pin the conversation to. */
+  spaces?: ChatSpace[];
 };
 
 const ASK_EVENT = 'wikillm:ask';
@@ -139,10 +151,14 @@ function buildPostHocDraft(msg: Message): ChatPanelDraft {
   return { title, body: lines.join('\n') };
 }
 
-export function ChatPanel({ open, onClose, onOpenDoc, onDraftFromChat, contextDoc }: ChatPanelProps) {
+export function ChatPanel({ open, onClose, onOpenDoc, onDraftFromChat, contextDoc, spaces = [] }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>(() => [introMessage()]);
   const [input, setInput] = useState('');
   const [scopeMode, setScopeMode] = useState<ScopeMode>('both');
+  // What the conversation is pointed at *within* the active scope. `null` is
+  // the historical default — follow whatever doc the reader has open, and fall
+  // back to the whole scope when none is. An explicit pick overrides that.
+  const [pinned, setPinned] = useState<PinnedContext>(null);
   const [thinking, setThinking] = useState(false);
   const [saving, setSaving] = useState<Set<string>>(new Set());
   const [errorToast, setErrorToast] = useState<string | null>(null);
@@ -257,6 +273,15 @@ export function ChatPanel({ open, onClose, onOpenDoc, onDraftFromChat, contextDo
     [patchMessage],
   );
 
+  // The effective context, derived once from the pick + what's open.
+  const pinnedSpace = pinned?.kind === 'space' ? pinned.name : null;
+  const activeDoc = !pinned && contextDoc && 'kind' in contextDoc ? contextDoc : null;
+  const contextLabel = pinnedSpace
+    ? `space: ${spaces.find((s) => s.name === pinnedSpace)?.label ?? pinnedSpace}`
+    : activeDoc
+      ? 'current doc'
+      : SCOPE_LABEL[scopeMode];
+
   const send = useCallback(
     async (text: string, opts?: { forceUnsourcedGeneration?: boolean; questionOverride?: string }) => {
       const trimmed = text.trim();
@@ -297,7 +322,8 @@ export function ChatPanel({ open, onClose, onOpenDoc, onDraftFromChat, contextDo
             scopeMode,
             ...(history.length ? { history } : {}),
             ...(scopeMode !== 'shared' ? { userId: DEFAULT_USER_ID } : {}),
-            ...(contextDoc && 'kind' in contextDoc ? { contextDocId: contextDoc.id } : {}),
+            ...(activeDoc ? { contextDocId: activeDoc.id } : {}),
+            ...(pinnedSpace ? { contextSpace: pinnedSpace } : {}),
             ...(opts?.forceUnsourcedGeneration ? { forceUnsourcedGeneration: true } : {}),
           }),
           signal: ctrl.signal,
@@ -360,7 +386,7 @@ export function ChatPanel({ open, onClose, onOpenDoc, onDraftFromChat, contextDo
         patchMessage(assistantMsg.id, { streaming: false });
       }
     },
-    [scopeMode, contextDoc, patchMessage, messages, handleEvent],
+    [scopeMode, activeDoc, pinnedSpace, patchMessage, messages, handleEvent],
   );
 
   // Cross-component "ask" event from elsewhere in the app (e.g. home view).
@@ -462,8 +488,46 @@ export function ChatPanel({ open, onClose, onOpenDoc, onDraftFromChat, contextDo
         </div>
         <span style={{ flex: 1 }}></span>
         <span style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 10.5 }}>
-          {contextDoc ? 'context: current doc' : SCOPE_LABEL[scopeMode]}
+          {contextLabel}
         </span>
+      </div>
+
+      <div className="chat-context" style={{ marginTop: 6, alignItems: 'flex-start' }}>
+        <span style={{ color: 'var(--fg-3)', paddingTop: 3 }}>context</span>
+        <div className="space-select" style={{ gap: 4 }}>
+          <button
+            className={'space-pill' + (pinned?.kind === 'scope' || (!pinned && !contextDoc) ? ' on' : '')}
+            disabled={thinking}
+            onClick={() => setPinned({ kind: 'scope' })}
+            title="Search everything in the active scope"
+          >
+            {ICONS.globe}
+            <span>All</span>
+          </button>
+          {contextDoc && (
+            <button
+              className={'space-pill' + (!pinned ? ' on' : '')}
+              disabled={thinking}
+              onClick={() => setPinned(null)}
+              title="Answer about the document you have open"
+            >
+              {ICONS.doc}
+              <span>This doc</span>
+            </button>
+          )}
+          {spaces.map((s) => (
+            <button
+              key={s.name}
+              className={'space-pill' + (pinnedSpace === s.name ? ' on' : '')}
+              disabled={thinking}
+              onClick={() => setPinned({ kind: 'space', name: s.name })}
+              title={`Restrict searches and reads to the ${s.label} space`}
+            >
+              {ICONS.folder}
+              <span>{s.label}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="chat-body" ref={bodyRef}>
@@ -592,7 +656,7 @@ export function ChatPanel({ open, onClose, onOpenDoc, onDraftFromChat, contextDo
           <div className="chat-input-actions">
             <button className="btn ghost icon-only" title="Attach context">{ICONS.attach}</button>
             <span style={{ fontSize: 10.5, color: 'var(--fg-3)', fontFamily: 'var(--font-mono)' }}>
-              {contextDoc ? 'context: current doc' : `context: ${SCOPE_LABEL[scopeMode]}`}
+              {`context: ${contextLabel}`}
             </span>
             <span className="grow"></span>
             <button className="btn primary" onClick={() => send(input)} disabled={!input.trim() || thinking}>
@@ -629,7 +693,7 @@ function introMessage(): Message {
     id: 'intro',
     role: 'assistant',
     text:
-      "Hi — I'm the Canopy assistant. Ask me anything about your vault. I'll search, cite my sources, and refuse if I can't find what you're asking about.\n\nUse the scope toggle above to control whether I read from shared content, your personal wiki, or both.",
+      "Hi — I'm the Canopy assistant. Ask me anything about your vault. I'll search, cite my sources, and refuse if I can't find what you're asking about.\n\nUse the scope toggle above to control whether I read from shared content, your personal wiki, or both, and the context row to point me at everything, the page you have open, or a single space.",
     cites: [],
     html: undefined,
   };

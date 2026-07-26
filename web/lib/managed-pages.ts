@@ -2,7 +2,7 @@ import matter from 'gray-matter';
 
 import { fmString } from '@/lib/frontmatter';
 import { DEFAULT_ORIGIN, readOrigin, type Origin } from '@/lib/origin';
-import { FOLDER_SEGMENT_RE } from '@/lib/vault-paths';
+import { FOLDER_SEGMENT_RE, PAGES_ROOT } from '@/lib/vault-paths';
 
 /**
  * Managed-mode page frontmatter (plan 027, specs/managed-mode.md §4).
@@ -14,9 +14,6 @@ import { FOLDER_SEGMENT_RE } from '@/lib/vault-paths';
  * is *adopted* with a deterministic fallback id derived from its key (§7), so it
  * renders stably until a reconcile pass (§8) backfills real frontmatter.
  */
-
-/** Canonical `pages/` store prefix (the portal writes here; not required to read). */
-export const PAGES_ROOT = 'pages';
 
 export type PageStatus = 'published' | 'draft';
 

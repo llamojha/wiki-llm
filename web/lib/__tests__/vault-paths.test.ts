@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { displayPathForKey, isDocumentKey, isHtmlKey, sourceTypeFromKey } from '@/lib/vault-paths';
+import {
+  displayPathForKey,
+  isDocumentKey,
+  isHtmlKey,
+  isKeyInSpace,
+  sourceTypeFromKey,
+} from '@/lib/vault-paths';
 
 /**
  * Path classification underpins routing, search indexing, and display. These
@@ -83,5 +89,42 @@ describe('displayPathForKey', () => {
   it('special-cases the personal prefix (default user)', () => {
     // personalPrefix() resolves to the default user's authored/personal/.
     expect(displayPathForKey('users/default/authored/personal/notes/day.md')).toBe('notes / day');
+  });
+});
+
+/**
+ * Space membership backs the chat panel's "pin this conversation to a space"
+ * control. In provenance mode a space is spread across `generated/` and
+ * `authored/` and mirrored under `users/<id>/`, so all four shapes must match
+ * the same name — while a *different* space with a shared prefix must not.
+ */
+describe('isKeyInSpace (provenance mode)', () => {
+  it('matches all four provenance shapes of one space', () => {
+    for (const key of [
+      'generated/wiki/a.md',
+      'authored/wiki/a.md',
+      'users/alice/generated/wiki/a.md',
+      'users/alice/authored/wiki/a.md',
+    ]) {
+      expect(isKeyInSpace(key, 'wiki')).toBe(true);
+    }
+  });
+
+  it('matches nested documents inside the space', () => {
+    expect(isKeyInSpace('generated/wiki/runbooks/oncall.md', 'wiki')).toBe(true);
+  });
+
+  it('rejects other spaces, including prefix look-alikes', () => {
+    expect(isKeyInSpace('generated/notes/a.md', 'wiki')).toBe(false);
+    expect(isKeyInSpace('generated/wiki-archive/a.md', 'wiki')).toBe(false);
+  });
+
+  it('does not match the space name outside a provenance root', () => {
+    expect(isKeyInSpace('raw/wiki/a.md', 'wiki')).toBe(false);
+    expect(isKeyInSpace('_system/indexes/wiki.md', 'wiki')).toBe(false);
+  });
+
+  it('treats an empty space name as no narrowing', () => {
+    expect(isKeyInSpace('generated/notes/a.md', '')).toBe(true);
   });
 });

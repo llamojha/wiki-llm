@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { __resetVaultMode, __setVaultMode } from '@/lib/vault-mode';
-import { displayPathForKey, isDocumentKey, sourceTypeFromKey } from '@/lib/vault-paths';
+import {
+  displayPathForKey,
+  isDocumentKey,
+  isKeyInSpace,
+  sourceTypeFromKey,
+} from '@/lib/vault-paths';
 
 /**
  * Managed-mode recognition (plan 027, specs/managed-mode.md §5). Managed
@@ -56,6 +61,24 @@ describe('managed mode', () => {
     it('uses the key as the display path with no root stripping', () => {
       expect(displayPathForKey('pages/wiki/lambda.md')).toBe('pages / wiki / lambda');
       expect(displayPathForKey('root.md')).toBe('root');
+    });
+  });
+
+  describe('isKeyInSpace', () => {
+    it('matches canonical pages/<space>/… keys by their space', () => {
+      // The tree offers `wiki`; the portal stores `pages/wiki/…`. Matching the
+      // raw key would exclude every page the portal itself created.
+      expect(isKeyInSpace('pages/wiki/lambda.md', 'wiki')).toBe(true);
+      expect(isKeyInSpace('pages/wiki/platform/deep.md', 'wiki')).toBe(true);
+      expect(isKeyInSpace('pages/notes/a.md', 'wiki')).toBe(false);
+    });
+
+    it('matches out-of-band files that skipped the pages/ root', () => {
+      expect(isKeyInSpace('wiki/adopted.md', 'wiki')).toBe(true);
+    });
+
+    it('does not treat the store root itself as a space', () => {
+      expect(isKeyInSpace('pages/wiki/a.md', 'pages')).toBe(false);
     });
   });
 });
