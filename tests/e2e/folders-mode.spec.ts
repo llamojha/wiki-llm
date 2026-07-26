@@ -71,4 +71,51 @@ test.describe('folders mode', () => {
     const results = (await res.json()) as Array<{ id: string }>;
     expect(results.some((r) => r.id === 'notes/hello.md')).toBeTruthy();
   });
+
+  test('rejects a raw upload — the key would be unreachable', async ({ request }) => {
+    // `isDocumentKey` excludes the `raw/` prefix in folders mode, so such a file
+    // is absent from the tree, search, and the read route — and folders-mode
+    // curate filters its own source listing through the same predicate, so it
+    // can never be picked up either. Writing it would strand the upload.
+    const res = await request.post('/api/upload', {
+      multipart: {
+        file: { name: 'stray.md', mimeType: 'text/markdown', buffer: Buffer.from('# Stray') },
+        destination: 'raw',
+        space: 'notes',
+      },
+    });
+    expect(res.status()).toBe(400);
+    expect((await res.json()).detail).toContain('not supported in folders mode');
+
+    // And nothing was written under raw/.
+    const pending = await request.get('/api/raw?source=');
+    const keys = (await pending.json()).keys as string[];
+    expect(keys.some((k) => k.startsWith('raw/'))).toBe(false);
+  });
+
+  test('pending count without a source folder does not claim the whole vault', async ({ request }) => {
+    // Regression: an absent `source` was normalized to `''` (the vault root),
+    // so this listed every document and the Library reported the entire wiki as
+    // un-curated "raw files in raw/" — on a vault with no `raw/` prefix at all.
+    const res = await request.get('/api/raw?space=wiki&scope=shared');
+    expect(res.ok()).toBeTruthy();
+    const body = (await res.json()) as { count: number; keys: string[]; detail?: string };
+    expect(body.count).toBe(0);
+    expect(body.keys).toEqual([]);
+    expect(body.detail).toContain('source folder is required');
+  });
+
+  test('pending count with an explicit source folder counts only that folder', async ({ request }) => {
+    const res = await request.get('/api/raw?source=notes');
+    expect(res.ok()).toBeTruthy();
+    const body = (await res.json()) as { count: number; keys: string[]; total: number };
+    expect(body.keys).toEqual(['notes/hello.md']);
+    expect(body.total).toBe(1);
+
+    // An explicitly empty source still means the vault root — a deliberate
+    // whole-vault curate stays possible.
+    const rootRes = await request.get('/api/raw?source=');
+    const rootBody = (await rootRes.json()) as { keys: string[] };
+    expect(rootBody.keys.sort()).toEqual(['guides/setup.md', 'notes/hello.md']);
+  });
 });

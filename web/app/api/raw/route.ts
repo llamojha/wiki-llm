@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import { requireSession } from '@/lib/auth-guard';
 import { getObject, listObjects } from '@/lib/s3';
-import { getIngestPolicy } from '@/lib/ingest-policy';
+import { getIngestPolicy, isIngestError, resolvePendingSource } from '@/lib/ingest-policy';
 import { type Scope } from '@/lib/scope';
 import { resolveScopeOr400 } from '@/lib/http-scope';
 import { resolvePending, type ProcessedManifest } from '@/lib/curate-pending';
 import { ensureVaultMode, vaultMode } from '@/lib/vault-mode';
-import { isDocumentKey, normalizeFolderPath } from '@/lib/vault-paths';
+import { isDocumentKey } from '@/lib/vault-paths';
 
 const SPACE_RE = /^[a-z0-9][a-z0-9-]*$/;
 
@@ -40,14 +40,14 @@ export async function GET(req: Request) {
   // structure.json space; a destination is not needed to count pending inputs.
   await ensureVaultMode();
   if (vaultMode() === 'folders' || vaultMode() === 'managed') {
-    const source = normalizeFolderPath(searchParams.get('source'));
-    if (source === null) {
-      return NextResponse.json({ source: null, count: 0, keys: [], total: 0, detail: 'invalid source folder' });
+    const resolved = resolvePendingSource(searchParams.get('source'));
+    if (isIngestError(resolved)) {
+      return NextResponse.json({ source: null, count: 0, keys: [], total: 0, detail: resolved.error });
     }
+    const { source, sourcePrefix } = resolved;
     const scope = resolveScopeOr400({ scope: 'shared' });
     if (scope instanceof NextResponse) return scope;
     const manifest = await getManifest(scope.systemKey, 'shared');
-    const sourcePrefix = source ? `${source}/` : '';
     const keys = (await listObjects(sourcePrefix)).filter(isDocumentKey);
     const pending = await resolvePending(keys, manifest);
     let lastProcessedAt: string | null = null;

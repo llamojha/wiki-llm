@@ -20,8 +20,34 @@ export function PendingTab({ lib, onClose }: PendingTabProps) {
   const {
     pendingCount, pendingStream, pendingRunning, pendingDone, pendingNow,
     pendingPhase, pendingFinalizing, pendingJobTotal, pendingLimit, setPendingLimit,
-    startPendingStream, cancelPending, space,
+    startPendingStream, cancelPending, space, foldersMode,
   } = lib;
+
+  // Folders mode has no `raw/` staging prefix and no `generated/wiki/` output
+  // space — curation reads a caller-chosen source folder and writes to a
+  // caller-chosen destination (plan 026). The Library has no picker for either
+  // yet, and `/api/curate/start` rejects a request without a destination, so
+  // there is nothing this tab can honestly offer here. Say so instead of
+  // describing provenance paths that do not exist in this vault.
+  if (foldersMode) {
+    return (
+      <div className="upload-list pending-stream">
+        <div className="pending-empty">
+          <div className="upload-drop-icon" style={{ margin: '0 auto 12px' }}>{ICONS.spark}</div>
+          <div className="upload-drop-title">Not available in this vault</div>
+          <div className="upload-drop-sub">
+            This vault is in folders mode, where curation reads a <strong>source</strong> folder
+            and writes pages into a <strong>destination</strong> folder. The Library has no
+            picker for those yet — drive it directly with{' '}
+            <code>POST /api/curate/start</code>, passing <code>source</code> and{' '}
+            <code>destination</code>.
+            <br /><br />
+            Files you uploaded as pages are already final. Nothing here is waiting on you.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>

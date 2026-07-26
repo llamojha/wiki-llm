@@ -22,7 +22,7 @@ export function UploadTab({ lib, onClose, destPath }: UploadTabProps) {
   const {
     files, dragActive, inputRef, onDrop, onDragOver, onDragEnter, onDragLeave,
     onPick, addFiles, removeFile, cliOpen, setCliOpen, allDone, anyActive,
-    finishUpload, destination, space,
+    finishUpload, destination, space, foldersMode,
   } = lib;
 
   return (
@@ -94,7 +94,13 @@ export function UploadTab({ lib, onClose, destPath }: UploadTabProps) {
           <div className="cli-body">
             <div className="cli-snippet"><span className="cmt"># one file → the resolved destination above</span>{'\n'}aws s3 cp ./your-file.md &quot;{destPath}&quot;</div>
             <div className="cli-snippet"><span className="cmt"># …or a whole folder of Markdown (then run Re-index to make it searchable)</span>{'\n'}aws s3 sync ./docs/ &quot;{destPath}&quot; --exclude &quot;*&quot; --include &quot;*.md&quot;</div>
-            <div className="cli-snippet"><span className="cmt"># project CLI — uploads {destination === 'raw' ? '+ runs AI ingest' : 'only'}</span>{'\n'}pnpm ingest -- add ./your-file.md --space {space || '<folder>'}{destination === 'authored' ? ' --no-ingest' : ''}</div>
+            {/* `ingest add` always writes to `raw/`, which folders/managed mode
+                excludes from the document tree — the file would be unreachable.
+                The two `aws s3` lines above already target the real destination,
+                so offer only those here. */}
+            {!foldersMode && (
+              <div className="cli-snippet"><span className="cmt"># project CLI — uploads {destination === 'raw' ? '+ runs AI ingest' : 'only'}</span>{'\n'}pnpm ingest -- add ./your-file.md --space {space || '<folder>'}{destination === 'authored' ? ' --no-ingest' : ''}</div>
+            )}
           </div>
         )}
       </div>

@@ -90,6 +90,14 @@ design record for this.
   branches — `renderSourcePage` (`source-card.ts`) only emits an `origin:`
   frontmatter line when explicitly passed one, so provenance-mode output is
   unaffected by the folders-mode addition.
+- **Folders mode has no Library UI.** Plan 026 shipped the API contract, not
+  the pickers: nothing in the Library sends `source`/`destination`, so
+  `POST /api/curate/start` rejects a request from the Pending tab and the tab
+  renders an explicit "not available in this vault" state instead. Drive
+  folders-mode curation through the route directly. `GET /api/raw` treats an
+  **absent** `source` as an error rather than the vault root — conflating the
+  two made the Library report every document in the vault as un-curated raw
+  input (`resolvePendingSource` in `web/lib/ingest-policy.ts`).
 - `CURATE_LAMBDA_ARN` unset disables the feature cleanly
   (`FEATURE_CURATE=off` is the documented way to turn it off if the Lambda
   isn't deployed) rather than the route failing unpredictably.
