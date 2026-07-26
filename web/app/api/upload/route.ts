@@ -87,6 +87,21 @@ export async function POST(req: Request) {
     );
   }
 
+  // In folders/managed mode a `raw/` upload is unreachable by every path, even
+  // with curate on: `isDocumentKey` excludes the `raw/` prefix, so the file is
+  // absent from the tree, search, and the read route — and folders-mode curate
+  // filters its own source listing through the same predicate, so `raw/` can
+  // never be picked up as a curate input either. Reject it instead of writing a
+  // file nothing can ever reach. The UI offers only `authored` in these modes;
+  // this guard is the enforcement.
+  await ensureVaultMode();
+  if (destination === 'raw' && (vaultMode() === 'folders' || vaultMode() === 'managed')) {
+    return NextResponse.json(
+      { detail: `raw destination is not supported in ${vaultMode()} mode — upload as a page instead` },
+      { status: 400 },
+    );
+  }
+
   if (folder === null) {
     return NextResponse.json(
       { detail: 'folder segments must be lowercase alphanumeric with hyphens only' },
@@ -130,7 +145,7 @@ export async function POST(req: Request) {
 
   const scope = resolveScopeOr400({ scope: scopeName, userId });
   if (scope instanceof NextResponse) return scope;
-  await ensureVaultMode();
+  // Mode already resolved by the raw-destination guard above.
   const folders = vaultMode() === 'folders' || vaultMode() === 'managed';
   const filename = sanitizeFilename(file.name);
   const folderPrefix = folder ? `${folder}/` : '';

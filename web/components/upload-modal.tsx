@@ -48,10 +48,16 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
 
   // Full S3 destination for the current selection — shared by the inline
   // preview here and the upload tab's CLI instructions so they never drift.
+  // Folders/managed mode writes straight to `<folder>/<subfolder>/` — there is
+  // no `authored/` provenance prefix and no `users/` mirror (one implicit
+  // scope), so the preview must not show either or it names a key the upload
+  // route will never write.
   const destPath =
     s3Location +
-    (scope === 'user' ? `users/${DEFAULT_USER_ID}/` : '') +
-    (destination === 'raw' ? 'raw/' : `authored/${space || '<folder>'}/`) +
+    (!foldersMode && scope === 'user' ? `users/${DEFAULT_USER_ID}/` : '') +
+    (foldersMode
+      ? `${space || '<folder>'}/`
+      : destination === 'raw' ? 'raw/' : `authored/${space || '<folder>'}/`) +
     (cleanSeg(folder) ? `${cleanSeg(folder)}/` : '');
 
   return (
@@ -159,8 +165,11 @@ export function UploadModal({ open, initialTab, spaces, onClose, onUploaded, sho
               <>
                 {/* Destination toggle only matters when curate is on. Without it,
                     raw uploads can never be processed, so authored is the only
-                    choice and the toggle is hidden. */}
-                {flags.curate && (
+                    choice and the toggle is hidden. Folders/managed mode hides it
+                    too: `raw/` keys are excluded by `isDocumentKey`, so they are
+                    unreachable by the tree, search, the read route, and even
+                    folders-mode curate — `/api/upload` rejects them outright. */}
+                {flags.curate && !foldersMode && (
                   <div className="upload-meta-row">
                     <label>Destination</label>
                     <div className="seg">

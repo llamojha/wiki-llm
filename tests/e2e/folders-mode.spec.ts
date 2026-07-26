@@ -72,6 +72,27 @@ test.describe('folders mode', () => {
     expect(results.some((r) => r.id === 'notes/hello.md')).toBeTruthy();
   });
 
+  test('rejects a raw upload — the key would be unreachable', async ({ request }) => {
+    // `isDocumentKey` excludes the `raw/` prefix in folders mode, so such a file
+    // is absent from the tree, search, and the read route — and folders-mode
+    // curate filters its own source listing through the same predicate, so it
+    // can never be picked up either. Writing it would strand the upload.
+    const res = await request.post('/api/upload', {
+      multipart: {
+        file: { name: 'stray.md', mimeType: 'text/markdown', buffer: Buffer.from('# Stray') },
+        destination: 'raw',
+        space: 'notes',
+      },
+    });
+    expect(res.status()).toBe(400);
+    expect((await res.json()).detail).toContain('not supported in folders mode');
+
+    // And nothing was written under raw/.
+    const pending = await request.get('/api/raw?source=');
+    const keys = (await pending.json()).keys as string[];
+    expect(keys.some((k) => k.startsWith('raw/'))).toBe(false);
+  });
+
   test('pending count without a source folder does not claim the whole vault', async ({ request }) => {
     // Regression: an absent `source` was normalized to `''` (the vault root),
     // so this listed every document and the Library reported the entire wiki as

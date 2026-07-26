@@ -96,8 +96,14 @@ export function useLibraryState({
   const [space, setSpace] = useState(defaultSpace(spaces));
   // `raw` means "process with AI later" — that pipeline is the curate feature.
   // With curate off there's nothing to process raw files, so authored is the
-  // only sensible default.
-  const [destination, setDestination] = useState<Destination>(flags.curate ? 'raw' : 'authored');
+  // only sensible default. Folders/managed mode also forces `authored`: a
+  // `raw/` key there is excluded by `isDocumentKey`, so it is invisible to the
+  // tree, search, and the read route *and* unreachable by folders-mode curate,
+  // which filters its source listing through that same predicate. `/api/upload`
+  // rejects `raw` in these modes; this keeps the UI from offering it.
+  const [destination, setDestination] = useState<Destination>(
+    flags.curate && !foldersMode ? 'raw' : 'authored',
+  );
   const [folder, setFolder] = useState('');
   const [cliOpen, setCliOpen] = useState(false);
   const [files, setFiles] = useState<UploadFile[]>([]);
