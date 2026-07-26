@@ -42,9 +42,9 @@ Canopy's built-in auth gate uses any OIDC provider. AWS Cognito is first-class.
 - **Hosted UI domain:** `canopy-preview.auth.eu-central-1.amazoncognito.com`
 - **Issuer:** `https://cognito-idp.eu-central-1.amazonaws.com/eu-central-1_KkuawzQ4p`
 - **Callbacks registered:**
-  - `https://wiki-llm-web-git-preview-llamojhas-projects.vercel.app/api/auth/callback/cognito`
-  - `https://wiki.amllamojha.com/api/auth/callback/cognito`
-  - `http://localhost:3000/api/auth/callback/cognito`
+  - `https://wiki-llm-web-git-preview-llamojhas-projects.vercel.app/api/auth/callback`
+  - `https://wiki.amllamojha.com/api/auth/callback`
+  - `http://localhost:3000/api/auth/callback`
 - **Sign-out URLs:** same three origins (root)
 
 ### Env vars for auth (set in Vercel for both Preview + Production):

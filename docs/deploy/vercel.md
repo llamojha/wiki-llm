@@ -84,8 +84,12 @@ read-mostly showcase needs only:
   (`PutObject` is still required — chat usage events are written under
   `_system/usage/`)
 - `s3:ListBucket` on `arn:aws:s3:::<demo-bucket>`
-- `bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream` on the model
-  or inference profile in use
+- `bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream` on **both** the
+  inference profile **and** the underlying foundation models it routes to. A
+  cross-region `us.`/`eu.` profile invokes the destination regions'
+  foundation-model ARNs, so granting the profile ARN alone fails with
+  `AccessDenied`. Copy the resource shape from
+  [`infra/ecs/task-role-policy.example.json`](../../infra/ecs/task-role-policy.example.json)
 
 Omit `s3:DeleteObject` and the curate-Lambda `lambda:InvokeFunction` unless the
 instance actually enables those features. Verify the scoping after creating the
@@ -119,11 +123,19 @@ pointing a public domain at one:
 ## Auth callbacks
 
 With `AUTH_MODE=oidc`, every origin the app is served from must be registered
-with the identity provider as a callback and sign-out URL:
+with the identity provider — once as a callback URL, and separately as a
+sign-out URL:
 
-```
-https://<domain>/api/auth/callback/<provider>
-```
+| Register as | Value |
+|---|---|
+| Callback URL | `https://<domain><basePath>/api/auth/callback` |
+| Sign-out URL | `https://<domain><basePath>/` |
+
+There is **no provider segment** on the callback path. `callbackUrl()` in
+`web/lib/auth-url.ts` builds exactly `<origin><basePath>/api/auth/callback`, and
+`web/app/api/auth/callback/route.ts` is the only handler — appending
+`/cognito` (or any other provider name) points the IdP at a 404 and sign-in
+fails with a `redirect_uri` mismatch.
 
 That includes Vercel's generated preview URLs if you sign in on previews.
 Preview URLs are per-deployment, so prefer a **stable branch alias** (e.g. the
