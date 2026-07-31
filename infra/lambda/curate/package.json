@@ -10,13 +10,13 @@
     "refolder": "tsx scripts/refolder-sources.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.1095.0",
-    "@aws-sdk/client-lambda": "^3.1095.0",
-    "@aws-sdk/client-s3": "^3.1095.0"
+    "@aws-sdk/client-bedrock-runtime": "^3.1097.0",
+    "@aws-sdk/client-lambda": "^3.1097.0",
+    "@aws-sdk/client-s3": "^3.1097.0"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.162",
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.1.2",
     "esbuild": "^0.28.1",
     "jest": "^30.4.2",
     "@jest/globals": "^30.4.1",
